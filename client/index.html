@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Persona Debate Orchestrator</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Persona Debate Orchestrator</h1>
+    <p class="muted">Local-first persona manager and round-table debate runner</p>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="personas">Personas</button>
+    <button class="tab-btn" data-tab="new-debate">New Debate</button>
+    <button class="tab-btn" data-tab="viewer">Debate Viewer</button>
+  </nav>
+
+  <main>
+    <section id="tab-personas" class="tab-section active">
+      <div class="grid two">
+        <div class="panel">
+          <h2>Persona List <span class="tip" tabindex="0">?<span class="tip-flyout">Search, filter by tag, then use actions on each card to edit, duplicate, delete, or add to debate.</span></span></h2>
+          <div class="row">
+            <input id="persona-search" type="text" placeholder="Search by id, name, description">
+            <input id="persona-tag-filter" type="text" placeholder="Filter by tag">
+            <button id="refresh-personas" type="button">Refresh</button>
+          </div>
+          <div id="persona-errors" class="error"></div>
+          <div id="persona-list" class="list"></div>
+        </div>
+
+        <div class="panel">
+          <h2 id="persona-form-title">Create Persona <span class="tip" tabindex="0">?<span class="tip-flyout">`id`, `displayName`, `description`, and `systemPrompt` are required. Id must be a slug.</span></span></h2>
+          <form id="persona-form" class="stack">
+            <label>Id (slug) <span class="tip" tabindex="0">?<span class="tip-flyout">Lowercase letters, numbers, and dashes only. Example: policy-analyst.</span></span><input name="id" required placeholder="policy-analyst"></label>
+            <label>Display Name <span class="tip" tabindex="0">?<span class="tip-flyout">Human-readable name shown in debate turns.</span></span><input name="displayName" required></label>
+            <label>Role/Title<input name="role"></label>
+            <label>Description<input name="description" required></label>
+            <label>System Prompt <span class="tip" tabindex="0">?<span class="tip-flyout">Primary instruction for this persona. Keep it specific and behavior-focused.</span></span><textarea name="systemPrompt" rows="6" required></textarea></label>
+            <label>Speaking Tone<input name="tone" placeholder="calm, direct"></label>
+            <label>Speaking Verbosity<input name="verbosity" placeholder="concise"></label>
+            <label>Speaking Quirks (comma-separated)<input name="quirks"></label>
+            <label>Expertise Tags (comma-separated)<input name="expertiseTags"></label>
+            <label>Bias/Values (comma-separated or text)<textarea name="biasValues" rows="2"></textarea></label>
+            <label>Debate Behavior<textarea name="debateBehavior" rows="3" placeholder="Steelman first, ask one clarifying question."></textarea></label>
+            <div class="row">
+              <button type="submit">Save Persona</button>
+              <button id="persona-reset" type="button">Reset</button>
+            </div>
+          </form>
+          <h3>Preview</h3>
+          <pre id="persona-preview" class="preview"></pre>
+          <div id="persona-status" class="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-new-debate" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Debate Setup <span class="tip" tabindex="0">?<span class="tip-flyout">Configure the topic, choose participants in order, then run. Turns execute sequentially.</span></span></h2>
+          <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The debate question all personas will respond to each round.</span></span><input id="debate-topic" type="text" placeholder="Should cities ban private cars downtown?" required></label>
+          <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional background context"></textarea></label>
+          <div class="grid two">
+            <label>Rounds <span class="tip" tabindex="0">?<span class="tip-flyout">Number of speaking rounds per persona. Higher values cost more tokens/time.</span></span><input id="debate-rounds" type="number" min="1" max="8" value="3"></label>
+            <label>Max Words / Turn <span class="tip" tabindex="0">?<span class="tip-flyout">Hard target for brevity in each generated turn.</span></span><input id="debate-max-words" type="number" min="40" max="400" value="120"></label>
+            <label>Temperature<input id="debate-temperature" type="number" min="0" max="2" step="0.1" value="0.7"></label>
+            <label>Model<input id="debate-model" type="text" value="gpt-4.1-mini"></label>
+          </div>
+          <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
+          <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
+
+          <h3>Available Saved Personas</h3>
+          <div id="available-personas" class="list"></div>
+
+          <h3>Add Ad-hoc Persona <span class="tip" tabindex="0">?<span class="tip-flyout">Use this for one-off participants. Enable “Save persona” to persist into data/personas.</span></span></h3>
+          <div class="stack">
+            <label>Display Name<input id="adhoc-displayName" type="text"></label>
+            <label>Description<input id="adhoc-description" type="text"></label>
+            <label>System Prompt<textarea id="adhoc-systemPrompt" rows="4"></textarea></label>
+            <label>Role<input id="adhoc-role" type="text"></label>
+            <label>Tone<input id="adhoc-tone" type="text"></label>
+            <label>Verbosity<input id="adhoc-verbosity" type="text"></label>
+            <label>Quirks (comma-separated)<input id="adhoc-quirks" type="text"></label>
+            <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
+            <label>Bias/Values<input id="adhoc-bias" type="text"></label>
+            <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
+            <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
+            <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>
+            <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
+          </div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Selected Personas (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
+          <div id="selected-personas" class="list"></div>
+          <button id="run-debate" type="button">Run Debate</button>
+          <div id="debate-run-status" class="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-viewer" class="tab-section">
+      <div class="panel stack">
+        <h2>Debate Viewer <span class="tip" tabindex="0">?<span class="tip-flyout">Live progress appears while queued/running. Use download to save transcript markdown.</span></span></h2>
+        <div class="row">
+          <label>Debate Id<input id="viewer-debate-id" type="text" placeholder="auto-filled when running"></label>
+          <button id="load-debate" type="button">Load</button>
+          <a id="download-transcript" href="#" target="_blank" rel="noopener">Download Transcript</a>
+        </div>
+        <div id="viewer-progress" class="status"></div>
+        <pre id="viewer-transcript" class="transcript"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
