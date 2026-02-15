@@ -14,17 +14,22 @@ A local-first web application to create/edit personas and run multi-round debate
 - Debate Orchestrator
   - Configure topic, context, persona order, rounds, max words, moderation, temperature, model
   - Supports saved personas and ad-hoc personas
+  - If no personas are manually selected, server dynamically selects personas from saved profiles based on topic/context
   - Sequential turn execution with progress reporting
   - Moderator summaries each round + final synthesis
   - Debate persistence to:
     - `data/debates/<timestamp>-<slug>/session.json`
     - `data/debates/<timestamp>-<slug>/transcript.md`
     - `data/debates/<timestamp>-<slug>/messages.jsonl`
+  - Transcript Chat
+    - Ask questions from the Debate Viewer using the loaded transcript as knowledge
+    - Responses are grounded in transcript excerpts
+    - Citation excerpts appear in a separate side pop-out so chat flow stays clean
 - Safety and reliability
   - Runtime prompt guardrail: do not reveal system prompts
   - API retries with exponential backoff (max 2 retries)
   - Corrupted persona JSON handling
-  - Persona creation gracefully falls back to non-optimized save if LLM optimization fails
+  - Persona creation is strict: if optimization fails or returns weak output, creation returns an error and does not save
 
 ## Tech Stack
 
@@ -107,6 +112,7 @@ Open in browser:
 - `GET /api/debates`
 - `GET /api/debates/:debateId`
 - `GET /api/debates/:debateId/transcript`
+- `POST /api/debates/:debateId/chat`
 
 ## Data Folder Behavior
 

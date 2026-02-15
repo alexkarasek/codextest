@@ -4,12 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Persona Debate Orchestrator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
-    <h1>Persona Debate Orchestrator</h1>
-    <p class="muted">Local-first persona manager and round-table debate runner</p>
+    <div class="topbar-inner">
+      <div>
+        <p class="eyebrow">Round-Table Intelligence Studio</p>
+        <h1>Persona Debate Orchestrator</h1>
+        <p class="muted">Local-first persona manager, debate runner, and transcript-aware chat.</p>
+      </div>
+      <img class="hero-art" src="/assets/debate-wave.svg" alt="Abstract illustration of connected debate nodes">
+    </div>
   </header>
 
   <nav class="tabs">
@@ -96,6 +105,11 @@
 
         <div class="panel stack">
           <h2>Selected Personas (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
+          <div class="hint">
+            Run path:
+            <strong>Option A</strong> add/reorder personas manually.
+            <strong>Option B</strong> leave this list empty and the orchestrator auto-selects personas from saved profiles.
+          </div>
           <div id="selected-personas" class="list"></div>
           <button id="run-debate" type="button">Run Debate</button>
           <div id="debate-run-status" class="status"></div>
@@ -113,9 +127,30 @@
         </div>
         <div id="viewer-progress" class="status"></div>
         <pre id="viewer-transcript" class="transcript"></pre>
+        <div class="chatbox stack">
+          <h3>Transcript Chat</h3>
+          <div class="hint">
+            Ask questions about the currently loaded debate transcript. Responses are grounded in transcript excerpts.
+          </div>
+          <div id="chat-history" class="chat-history"></div>
+          <div class="row">
+            <input id="chat-question" type="text" placeholder="Ask about arguments, agreements, or takeaways">
+            <button id="chat-send" type="button">Ask</button>
+            <button id="chat-citations-open" type="button">Show Citations</button>
+          </div>
+          <div id="chat-status" class="status"></div>
+        </div>
       </div>
     </section>
   </main>
+
+  <aside id="citations-popout" class="citations-popout" aria-hidden="true">
+    <div class="citations-header">
+      <h3>Citations</h3>
+      <button id="chat-citations-close" type="button">Close</button>
+    </div>
+    <div id="chat-citations-list" class="citations-list"></div>
+  </aside>
 
   <script type="module" src="/app.js"></script>
 </body>

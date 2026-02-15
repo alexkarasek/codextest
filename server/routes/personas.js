@@ -73,12 +73,8 @@ router.post("/", async (req, res) => {
     // expected when not found
   }
 
-  let finalPersona = basePersona;
-  let optimization = {
-    applied: false,
-    message: "Saved without optimization."
-  };
-
+  let finalPersona;
+  let optimization;
   try {
     const { personas: existingPersonas } = await listPersonas();
     const optimized = await optimizePersonaForDebate({
@@ -93,10 +89,8 @@ router.post("/", async (req, res) => {
     };
     optimization = optimized.optimization;
   } catch (error) {
-    optimization = {
-      applied: false,
-      message: `Saved without optimization: ${error.message}`
-    };
+    sendError(res, 502, "OPTIMIZATION_FAILED", `Persona optimization failed: ${error.message}`);
+    return;
   }
 
   await savePersona(finalPersona, { withMarkdown: true });

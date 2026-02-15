@@ -3,7 +3,10 @@ const state = {
   selectedPersonas: [],
   editingPersonaId: null,
   pollingDebateId: null,
-  pollIntervalId: null
+  pollIntervalId: null,
+  activeDebateId: null,
+  chatByDebate: {},
+  lastCitationsByDebate: {}
 };
 
 function byId(id) {
@@ -17,8 +20,23 @@ function parseCsv(input) {
     .filter(Boolean);
 }
 
+function safeNumberInput(raw, fallback, { min = -Infinity, max = Infinity, integer = false } = {}) {
+  let n = Number(raw);
+  if (!Number.isFinite(n)) n = fallback;
+  if (integer) n = Math.round(n);
+  if (n < min) n = min;
+  if (n > max) n = max;
+  return n;
+}
+
 function apiErrorMessage(payload, fallback = "Request failed") {
-  return payload?.error?.message || fallback;
+  const message = payload?.error?.message || fallback;
+  const details = Array.isArray(payload?.error?.details)
+    ? payload.error.details
+        .map((d) => `${d.path || "payload"}: ${d.message}`)
+        .join("; ")
+    : "";
+  return details ? `${message} ${details}` : message;
 }
 
 async function apiGet(url) {
@@ -41,6 +59,125 @@ async function apiSend(url, method, body) {
     throw new Error(apiErrorMessage(payload));
   }
   return payload.data;
+}
+
+function getActiveChatHistory() {
+  if (!state.activeDebateId) return [];
+  if (!state.chatByDebate[state.activeDebateId]) {
+    state.chatByDebate[state.activeDebateId] = [];
+  }
+  return state.chatByDebate[state.activeDebateId];
+}
+
+function getActiveCitations() {
+  if (!state.activeDebateId) return [];
+  return state.lastCitationsByDebate[state.activeDebateId] || [];
+}
+
+function renderCitationsPopout() {
+  const list = byId("chat-citations-list");
+  const citations = getActiveCitations();
+  list.innerHTML = "";
+
+  if (!state.activeDebateId) {
+    list.textContent = "Load a debate first.";
+    return;
+  }
+
+  if (!citations.length) {
+    list.textContent = "No citations yet. Ask a transcript question first.";
+    return;
+  }
+
+  citations.forEach((citation) => {
+    const card = document.createElement("div");
+    card.className = "citation-card";
+    card.textContent = `Excerpt ${citation.id}\n\n${citation.excerpt}`;
+    list.appendChild(card);
+  });
+}
+
+function openCitationsPopout() {
+  const popout = byId("citations-popout");
+  popout.classList.add("open");
+  popout.setAttribute("aria-hidden", "false");
+  renderCitationsPopout();
+}
+
+function closeCitationsPopout() {
+  const popout = byId("citations-popout");
+  popout.classList.remove("open");
+  popout.setAttribute("aria-hidden", "true");
+}
+
+function renderChatHistory() {
+  const container = byId("chat-history");
+  const history = getActiveChatHistory();
+  container.innerHTML = "";
+
+  if (!state.activeDebateId) {
+    container.textContent = "Load a debate first.";
+    return;
+  }
+
+  if (!history.length) {
+    container.textContent = "No chat messages yet.";
+    return;
+  }
+
+  history.forEach((msg) => {
+    const el = document.createElement("div");
+    el.className = `chat-msg ${msg.role}`;
+    el.textContent = `${msg.role === "user" ? "You" : "Assistant"}: ${msg.content}`;
+    container.appendChild(el);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+async function askTranscriptChat() {
+  const questionEl = byId("chat-question");
+  const statusEl = byId("chat-status");
+  const question = questionEl.value.trim();
+
+  if (!state.activeDebateId) {
+    statusEl.textContent = "Load a debate first.";
+    return;
+  }
+  if (!question) return;
+
+  const history = getActiveChatHistory();
+  history.push({ role: "user", content: question });
+  renderChatHistory();
+  questionEl.value = "";
+  statusEl.textContent = "Asking transcript chat...";
+
+  try {
+    const data = await apiSend(
+      `/api/debates/${encodeURIComponent(state.activeDebateId)}/chat`,
+      "POST",
+      {
+        question,
+        history: history.slice(-8)
+      }
+    );
+    const answer = String(data.answer || "").trim();
+    state.lastCitationsByDebate[state.activeDebateId] = Array.isArray(data.citations)
+      ? data.citations
+      : [];
+    history.push({ role: "assistant", content: answer || "(No answer returned)" });
+    renderChatHistory();
+    renderCitationsPopout();
+    statusEl.textContent = `Answered using ${data.usedExcerpts || 0} transcript excerpts.`;
+  } catch (error) {
+    const msg = String(error.message || "");
+    if (msg.includes("Route POST") && msg.includes("/chat")) {
+      statusEl.textContent =
+        "Chat endpoint not available on the running server. Restart with `npm start` and retry.";
+      return;
+    }
+    statusEl.textContent = `Chat failed: ${error.message}`;
+  }
 }
 
 function switchTab(tabName) {
@@ -349,12 +486,36 @@ function clearAdHocForm() {
 async function loadDebate(debateId) {
   const data = await apiGet(`/api/debates/${encodeURIComponent(debateId)}`);
   const session = data.session;
+  state.activeDebateId = debateId;
+  if (!state.chatByDebate[debateId]) {
+    state.chatByDebate[debateId] = [];
+  }
+  if (!state.lastCitationsByDebate[debateId]) {
+    state.lastCitationsByDebate[debateId] = [];
+  }
+
+  try {
+    const chatData = await apiGet(`/api/debates/${encodeURIComponent(debateId)}/chat`);
+    state.chatByDebate[debateId] = Array.isArray(chatData.history) ? chatData.history : [];
+    state.lastCitationsByDebate[debateId] = Array.isArray(chatData.citations)
+      ? chatData.citations
+      : [];
+  } catch {
+    // Ignore missing/unavailable chat history and keep local state.
+  }
+
   byId("viewer-debate-id").value = debateId;
   byId("download-transcript").href = `/api/debates/${encodeURIComponent(debateId)}/transcript`;
   byId("viewer-progress").textContent = `${session.status.toUpperCase()} | Round ${
     session.progress?.round || 0
   } | ${session.progress?.currentSpeaker || "-"} | ${session.progress?.message || ""}`;
+  if (session.personaSelection?.mode) {
+    byId("viewer-progress").textContent += ` | selection=${session.personaSelection.mode}`;
+  }
   byId("viewer-transcript").textContent = data.transcript || "";
+  renderChatHistory();
+  renderCitationsPopout();
+  byId("chat-status").textContent = "Transcript chat ready.";
   byId("debate-run-status").textContent = `Debate ${debateId}: ${session.status}`;
 
   if (session.status === "completed" || session.status === "failed") {
@@ -396,7 +557,14 @@ function wireEvents() {
         byId("persona-status").textContent = "Persona updated.";
       } else {
         const data = await apiSend("/api/personas", "POST", persona);
-        const message = data.optimization?.message || "Persona created.";
+        const details = data.optimization
+          ? `changedFields=${data.optimization.changedFields || 0}, strictRewrite=${Boolean(
+              data.optimization.strictRewrite
+            )}`
+          : "";
+        const message = `${data.optimization?.message || "Persona created."}${
+          details ? ` (${details})` : ""
+        }`;
         byId("persona-status").textContent = message;
       }
       resetPersonaForm();
@@ -442,21 +610,21 @@ function wireEvents() {
       window.alert("Topic is required.");
       return;
     }
-    if (!state.selectedPersonas.length) {
-      window.alert("Select at least one persona.");
-      return;
-    }
 
     const payload = {
       topic,
       context: byId("debate-context").value.trim(),
-      selectedPersonas: state.selectedPersonas,
+      selectedPersonas: Array.isArray(state.selectedPersonas) ? state.selectedPersonas : [],
       settings: {
-        rounds: Number(byId("debate-rounds").value || 3),
-        maxWordsPerTurn: Number(byId("debate-max-words").value || 120),
+        rounds: safeNumberInput(byId("debate-rounds").value, 3, { min: 1, max: 8, integer: true }),
+        maxWordsPerTurn: safeNumberInput(byId("debate-max-words").value, 120, {
+          min: 40,
+          max: 400,
+          integer: true
+        }),
         moderationStyle: byId("debate-moderation-style").value.trim() || "neutral",
         model: byId("debate-model").value.trim() || "gpt-4.1-mini",
-        temperature: Number(byId("debate-temperature").value || 0.7),
+        temperature: safeNumberInput(byId("debate-temperature").value, 0.7, { min: 0, max: 2 }),
         includeModerator: byId("debate-include-moderator").checked
       }
     };
@@ -466,7 +634,8 @@ function wireEvents() {
     try {
       const data = await apiSend("/api/debates", "POST", payload);
       const debateId = data.debateId;
-      byId("debate-run-status").textContent = `Debate queued: ${debateId}`;
+      const mode = data.personaSelection?.mode || "manual";
+      byId("debate-run-status").textContent = `Debate queued: ${debateId} (selection: ${mode})`;
       byId("viewer-debate-id").value = debateId;
       switchTab("viewer");
       await loadDebate(debateId);
@@ -490,11 +659,22 @@ function wireEvents() {
       byId("viewer-progress").textContent = error.message;
     }
   });
+
+  byId("chat-send").addEventListener("click", askTranscriptChat);
+  byId("chat-citations-open").addEventListener("click", openCitationsPopout);
+  byId("chat-citations-close").addEventListener("click", closeCitationsPopout);
+  byId("chat-question").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      askTranscriptChat();
+    }
+  });
 }
 
 async function init() {
   wireEvents();
   renderPersonaPreview();
+  renderChatHistory();
   await loadPersonas();
 }
 
