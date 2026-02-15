@@ -87,6 +87,106 @@ Open in browser:
 
 - `http://localhost:3000`
 
+## Run with Docker
+
+### Option A: `docker run`
+
+1. Build image:
+
+```bash
+docker build -t persona-debate-app:latest .
+```
+
+2. Run container:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/settings.local.json:/app/settings.local.json:ro" \
+  -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  persona-debate-app:latest
+```
+
+Notes:
+- You can provide API key either via `settings.local.json` or `OPENAI_API_KEY`.
+- `./data` is mounted so personas/debates persist on host disk.
+
+### Dev container with hot reload (`Dockerfile.dev`)
+
+```bash
+docker build -f Dockerfile.dev -t persona-debate-app:dev .
+docker run --rm -it -p 3000:3000 \
+  -v "$(pwd)/server:/app/server" \
+  -v "$(pwd)/client:/app/client" \
+  -v "$(pwd)/lib:/app/lib" \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/settings.local.json:/app/settings.local.json:ro" \
+  -e OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  persona-debate-app:dev
+```
+
+This runs `npm run dev` inside the container (nodemon auto-reload).
+
+### Option B: `docker compose`
+
+```bash
+docker compose up --build
+```
+
+This uses `docker-compose.yml` and mounts:
+- `./data -> /app/data`
+- `./settings.local.json -> /app/settings.local.json` (read-only)
+
+Stop:
+
+```bash
+docker compose down
+```
+
+## Cloud Deployment Notes
+
+- Container listens on `PORT` (default `3000`).
+- Set `OPENAI_API_KEY` as a platform secret.
+- Mount persistent storage for `/app/data` if you want debate/persona persistence across restarts.
+- If your platform does not support file mounts (ephemeral filesystem), exported data will be lost on redeploy/restart.
+
+## Publish to Docker Hub
+
+1. Log in:
+
+```bash
+docker login
+```
+
+2. Build with OCI metadata labels:
+
+```bash
+docker build \
+  --build-arg IMAGE_SOURCE="https://github.com/<you>/<repo>" \
+  --build-arg IMAGE_DOCUMENTATION="https://github.com/<you>/<repo>#readme" \
+  --build-arg IMAGE_REVISION="$(git rev-parse --short HEAD)" \
+  --build-arg IMAGE_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t <dockerhub-username>/persona-debate-app:latest .
+```
+
+3. Push:
+
+```bash
+docker push <dockerhub-username>/persona-debate-app:latest
+```
+
+4. Optional version tag:
+
+```bash
+docker tag <dockerhub-username>/persona-debate-app:latest <dockerhub-username>/persona-debate-app:v1
+docker push <dockerhub-username>/persona-debate-app:v1
+```
+
+5. Publish detailed instructions in Docker Hub UI:
+- Open your Docker Hub repository.
+- Go to Description/README editor.
+- Paste contents of `DOCKERHUB_README.md`.
+
 ## Folder Structure
 
 - `server/` Express server and API routes
@@ -119,6 +219,7 @@ Open in browser:
 - Personas are saved as both JSON and Markdown.
 - Debate runs create timestamped folders under `data/debates`.
 - `messages.jsonl` stores request/response logs for debugging each LLM turn.
+- `chat.jsonl` stores persisted transcript-chat follow-up messages per debate.
 
 ## Manual Test Plan
 

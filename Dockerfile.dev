@@ -1,0 +1,20 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm install
+
+COPY server ./server
+COPY client ./client
+COPY lib ./lib
+COPY data ./data
+COPY settings.example.json ./settings.example.json
+
+ENV NODE_ENV=development
+ENV PORT=3000
+ENV CHOKIDAR_USEPOLLING=true
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
