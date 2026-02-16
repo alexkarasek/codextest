@@ -21,9 +21,15 @@ const state = {
   adminOverview: null,
   adminPersonas: null,
   adminChats: null,
+  adminUsage: null,
   adminMatrixDimension: "channel",
   adminFilter: null,
   adminMetricFocus: null,
+  governanceChat: {
+    sessions: [],
+    activeChatId: null,
+    historyByChat: {}
+  },
   knowledgePacks: [],
   personaFormKnowledgePackIds: [],
   selectedKnowledgePackIds: [],
@@ -179,6 +185,7 @@ async function apiSend(url, method, body) {
 }
 
 function showAuthGate(statusMessage = "") {
+  closeSystemMenu();
   byId("auth-gate").classList.remove("hidden");
   byId("bootstrap-status").textContent = "";
   byId("auth-status").textContent = statusMessage || "";
@@ -188,6 +195,45 @@ function showAuthGate(statusMessage = "") {
 
 function hideAuthGate() {
   byId("auth-gate").classList.add("hidden");
+}
+
+function openSystemMenu() {
+  const pop = byId("system-menu-popout");
+  const btn = byId("system-menu-toggle");
+  pop.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+}
+
+function closeSystemMenu() {
+  const pop = byId("system-menu-popout");
+  const btn = byId("system-menu-toggle");
+  if (!pop || !btn) return;
+  pop.classList.add("hidden");
+  btn.setAttribute("aria-expanded", "false");
+}
+
+function toggleSystemMenu() {
+  const pop = byId("system-menu-popout");
+  if (pop.classList.contains("hidden")) {
+    openSystemMenu();
+  } else {
+    closeSystemMenu();
+  }
+}
+
+function renderAuthChrome() {
+  const chip = byId("auth-user-chip");
+  const logoutBtn = byId("auth-quick-logout");
+  if (!chip || !logoutBtn) return;
+  if (state.auth.authenticated && state.auth.user) {
+    chip.textContent = `${state.auth.user.username} (${state.auth.user.role})`;
+    logoutBtn.disabled = false;
+    byId("auth-open-login").textContent = "Switch User";
+  } else {
+    chip.textContent = "Guest";
+    logoutBtn.disabled = true;
+    byId("auth-open-login").textContent = "Login";
+  }
 }
 
 function parsePermissionsInput(input) {
@@ -207,12 +253,15 @@ async function loadAuthState() {
     state.auth.user = data.user || null;
     if (!state.auth.authenticated) {
       showAuthGate(data.bootstrapRequired ? "Create the first admin account." : "Please log in.");
+      renderAuthChrome();
       return false;
     }
     hideAuthGate();
+    renderAuthChrome();
     return true;
   } catch (error) {
     showAuthGate(`Auth check failed: ${error.message}`);
+    renderAuthChrome();
     return false;
   }
 }
@@ -254,6 +303,8 @@ async function logout() {
   state.auth.authenticated = false;
   state.auth.user = null;
   showAuthGate("Logged out.");
+  renderAuthChrome();
+  closeSystemMenu();
 }
 
 async function refreshAfterAuth() {
@@ -311,6 +362,129 @@ function openCitationsPopout() {
 
 function closeCitationsPopout() {
   const popout = byId("citations-popout");
+  popout.classList.remove("open");
+  popout.setAttribute("aria-hidden", "true");
+}
+
+function currentHelpGuide() {
+  if (state.mainTab === "governance") {
+    return {
+      title: "Governance Guide",
+      points: [
+        "Use Matrix Dimension (Channel/Model/Persona/User) to pivot metrics.",
+        "Click a row or metric cell to drill into filtered views.",
+        "Use History Explorer links to inspect full conversation history.",
+        "Use Governance Admin Chat for natural-language Q&A over internal governance data."
+      ]
+    };
+  }
+  if (state.mainTab === "config") {
+    if (state.configView === "personas") {
+      return {
+        title: "Personas Guide",
+        points: [
+          "Create personas with system prompts; optional fields can be inferred.",
+          "Attach persona-specific knowledge packs for specialized responses.",
+          "Use Add to Debate to include personas in formal debate setup."
+        ]
+      };
+    }
+    if (state.configView === "knowledge") {
+      return {
+        title: "Knowledge Studio Guide",
+        points: [
+          "Upload txt/pdf/image/doc files to create reusable knowledge packs.",
+          "Attach packs globally in debates or per-persona in profile settings.",
+          "Use tags and descriptions to keep packs searchable."
+        ]
+      };
+    }
+    if (state.configView === "rai") {
+      return {
+        title: "Responsible AI Guide",
+        points: [
+          "Tune red/yellow keyword packs and sentiment threshold.",
+          "Save policy to apply risk chips and governance signals.",
+          "Use governance charts to monitor stoplight and sentiment trends."
+        ]
+      };
+    }
+    if (state.configView === "security") {
+      return {
+        title: "Users & Access Guide",
+        points: [
+          "Create users with role-based permissions.",
+          "Generate API keys for Postman/Copilot integrations.",
+          "Track usage by user from the usage summary panel."
+        ]
+      };
+    }
+  }
+  if (state.mainTab === "chats") {
+    if (state.chatsView === "simple") {
+      return {
+        title: "Simple Chat Guide",
+        points: [
+          "Create a session, optionally attach knowledge packs, then send messages.",
+          "Load past sessions from Saved Sessions to continue work.",
+          "Use History Explorer for cross-session monitoring and flags."
+        ]
+      };
+    }
+    if (state.groupWorkspace === "live") {
+      return {
+        title: "Group Chat Guide",
+        points: [
+          "Select personas and create a session before sending messages.",
+          "Use Engagement Mode to tune interaction style.",
+          "Create a new session when changing personas/settings significantly."
+        ]
+      };
+    }
+    if (state.groupWorkspace === "debate-setup") {
+      return {
+        title: "Debate Setup Guide",
+        points: [
+          "Define topic/context, optionally discover sources and generate personas.",
+          "Attach global knowledge packs and configure rounds/model settings.",
+          "Run debate to stream transcript and moderator synthesis."
+        ]
+      };
+    }
+    return {
+      title: "History Explorer Guide",
+      points: [
+        "Choose conversation type and browse saved history list.",
+        "Open any session to inspect transcript/summary and risk flags.",
+        "Debate type enables transcript Q&A and transcript download."
+      ]
+    };
+  }
+  return {
+    title: "Platform Guide",
+    points: [
+      "Use Chats for operation, Governance for monitoring, Admin & Config for setup.",
+      "All data is local-first and persisted in repository data folders."
+    ]
+  };
+}
+
+function openHelpPopout() {
+  closeSystemMenu();
+  const popout = byId("help-popout");
+  const title = byId("help-title");
+  const body = byId("help-body");
+  const guide = currentHelpGuide();
+  title.textContent = guide.title;
+  body.innerHTML = guide.points
+    .map((p) => `<div class="citation-card">${p}</div>`)
+    .join("");
+  popout.classList.add("open");
+  popout.setAttribute("aria-hidden", "false");
+}
+
+function closeHelpPopout() {
+  const popout = byId("help-popout");
   popout.classList.remove("open");
   popout.setAttribute("aria-hidden", "true");
 }
@@ -1603,6 +1777,7 @@ function useManualTopicForGeneration() {
 function renderAdminSummaryCards() {
   const el = byId("admin-summary-cards");
   const totals = state.adminOverview?.totals || {};
+  const usageUsers = state.adminUsage?.byUser || [];
   const cards = [
     { label: "Conversations", value: totals.totalConversations ?? ((totals.debates || 0) + (totals.chats || 0)) },
     { label: "Debates", value: totals.debates ?? 0 },
@@ -1617,6 +1792,7 @@ function renderAdminSummaryCards() {
     { label: "Risk Green", value: Number(totals.stoplightGreen || 0).toLocaleString() },
     { label: "Sentiment +", value: Number(totals.sentimentPositive || 0).toLocaleString() },
     { label: "Sentiment -", value: Number(totals.sentimentNegative || 0).toLocaleString() },
+    { label: "Active Users", value: Number(usageUsers.length || 0).toLocaleString() },
     {
       label: "Est. Cost (USD)",
       value:
@@ -1647,6 +1823,16 @@ function getPersonaNameMaps() {
   return { idToName, nameToId };
 }
 
+function buildUsageUserRows() {
+  const usageRows = state.adminUsage?.byUser || [];
+  return usageRows.map((row) => ({
+    key: row.userId || "anonymous",
+    label: row.username || row.userId || "anonymous",
+    requests: Number(row.requests || 0),
+    lastSeenAt: row.lastSeenAt || null
+  }));
+}
+
 function buildAdminMatrixRows() {
   const debates = state.adminOverview?.debates || [];
   const chats = state.adminChats?.chats || state.adminOverview?.chats || [];
@@ -1656,7 +1842,8 @@ function buildAdminMatrixRows() {
   const rowsByDimension = {
     channel: [],
     model: [],
-    persona: []
+    persona: [],
+    user: []
   };
 
   const channelMap = new Map();
@@ -1676,6 +1863,7 @@ function buildAdminMatrixRows() {
       }
     ])
   );
+  const userMap = new Map();
 
   function ensureMetricRow(map, key, label) {
     if (!map.has(key)) {
@@ -1700,6 +1888,8 @@ function buildAdminMatrixRows() {
     const cost = typeof debate.estimatedCostUsd === "number" ? debate.estimatedCostUsd : 0;
     const channelRow = ensureMetricRow(channelMap, "debate", "Debate");
     const modelRow = ensureMetricRow(modelMap, model, model);
+    const username = String(debate.createdByUsername || "unknown");
+    const userRow = ensureMetricRow(userMap, username.toLowerCase(), username);
     channelRow.conversations += 1;
     channelRow.tokens += tokens;
     channelRow.cost += cost;
@@ -1708,6 +1898,10 @@ function buildAdminMatrixRows() {
     modelRow.tokens += tokens;
     modelRow.cost += cost;
     modelRow.messages += turns;
+    userRow.conversations += 1;
+    userRow.tokens += tokens;
+    userRow.cost += cost;
+    userRow.messages += turns;
 
     (debate.participants || []).forEach((name) => {
       const pid = nameToId.get(String(name).toLowerCase());
@@ -1731,6 +1925,8 @@ function buildAdminMatrixRows() {
     const grounded = Number(chat.responsibleAi?.groundedReplyCount || 0);
     const channelRow = ensureMetricRow(channelMap, kind, label);
     const modelRow = ensureMetricRow(modelMap, model, model);
+    const username = String(chat.createdByUsername || "unknown");
+    const userRow = ensureMetricRow(userMap, username.toLowerCase(), username);
 
     channelRow.conversations += 1;
     channelRow.tokens += tokens;
@@ -1745,6 +1941,12 @@ function buildAdminMatrixRows() {
     modelRow.messages += messages;
     modelRow.scopeRefusals += scopeRefusals;
     modelRow.grounded += grounded;
+    userRow.conversations += 1;
+    userRow.tokens += tokens;
+    userRow.cost += cost;
+    userRow.messages += messages;
+    userRow.scopeRefusals += scopeRefusals;
+    userRow.grounded += grounded;
 
     (chat.participants || []).forEach((name) => {
       const pid = nameToId.get(String(name).toLowerCase());
@@ -1761,6 +1963,7 @@ function buildAdminMatrixRows() {
 
   rowsByDimension.channel = [...channelMap.values()].sort((a, b) => b.conversations - a.conversations);
   rowsByDimension.model = [...modelMap.values()].sort((a, b) => b.tokens - a.tokens);
+  rowsByDimension.user = [...userMap.values()].sort((a, b) => b.conversations - a.conversations);
   rowsByDimension.persona = [...personaMap.values()]
     .filter((row) => row.conversations > 0 || row.messages > 0)
     .sort((a, b) => b.conversations - a.conversations || String(a.label).localeCompare(String(b.label)));
@@ -1879,6 +2082,10 @@ function renderAdminMatrix() {
       if (metricFocus === "scopeRefusals" || metricFocus === "grounded") return "chats";
       return state.adminView;
     }
+    if (filter.dimension === "user") {
+      if (metricFocus === "scopeRefusals" || metricFocus === "grounded") return "chats";
+      return state.adminView;
+    }
     return state.adminView;
   }
 
@@ -1964,6 +2171,7 @@ function renderAdminCharts() {
   const signals = aggregateSignals(records);
   const channelRows = buildAdminMatrixRows().channel || [];
   const modelRows = (buildAdminMatrixRows().model || []).slice(0, 6);
+  const userRows = (buildAdminMatrixRows().user || []).slice(0, 8);
 
   chartsEl.innerHTML = [
     renderVizCard(
@@ -1984,10 +2192,153 @@ function renderAdminCharts() {
       { label: "Positive", value: signals.positive },
       { label: "Neutral", value: signals.neutral },
       { label: "Negative", value: signals.negative }
-    ])
+    ]),
+    renderVizCard("Top Users by Conversations", userRows.map((row) => ({
+      label: row.label,
+      value: row.conversations
+    })))
   ].join("");
 
   statusEl.textContent = `Charts reflect ${records.length} filtered conversation(s).`;
+}
+
+function renderGovernanceChatHistory() {
+  const container = byId("gov-chat-history");
+  if (!container) return;
+  container.innerHTML = "";
+  const chatId = state.governanceChat.activeChatId;
+  if (!chatId) {
+    container.textContent = "No governance chat loaded.";
+    return;
+  }
+  const history = state.governanceChat.historyByChat[chatId] || [];
+  if (!history.length) {
+    container.textContent = "No messages yet.";
+    return;
+  }
+  history.forEach((msg) => {
+    const roleClass = msg.role === "user" ? "user" : msg.role === "orchestrator" ? "system" : "assistant";
+    const title = msg.role === "user" ? "You" : msg.role === "orchestrator" ? "Orchestrator" : (msg.displayName || "Governance Admin");
+    renderExchangeMessage(container, {
+      roleClass,
+      title,
+      content: msg.content || ""
+    });
+  });
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderGovernanceChatSessions() {
+  const container = byId("gov-chat-session-list");
+  if (!container) return;
+  container.innerHTML = "";
+  const sessions = state.governanceChat.sessions || [];
+  if (!sessions.length) {
+    container.textContent = "No governance admin chat sessions yet.";
+    return;
+  }
+  sessions.forEach((session) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${session.title || "Governance Admin Chat"}</div>
+      <div class="muted">${session.chatId}</div>
+      <div>Messages: ${session.messageCount || 0}</div>
+      <div>Created: ${session.createdAt || "n/a"}</div>
+    `;
+    const row = document.createElement("div");
+    row.className = "row";
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.textContent = "Load Chat";
+    loadBtn.addEventListener("click", () => loadGovernanceChatSession(session.chatId));
+    row.appendChild(loadBtn);
+    card.appendChild(row);
+    container.appendChild(card);
+  });
+}
+
+async function loadGovernanceChatSessions() {
+  const status = byId("gov-chat-create-status");
+  if (!status) return;
+  try {
+    const data = await apiGet("/api/admin/governance-chat");
+    state.governanceChat.sessions = Array.isArray(data.chats) ? data.chats : [];
+    renderGovernanceChatSessions();
+  } catch (error) {
+    status.textContent = `Failed to load governance chats: ${error.message}`;
+  }
+}
+
+async function createGovernanceChatSession() {
+  const status = byId("gov-chat-create-status");
+  status.textContent = "Creating governance admin chat...";
+  try {
+    const data = await apiSend("/api/admin/governance-chat/session", "POST", {});
+    status.textContent = `Created governance chat ${data.chatId}`;
+    await loadGovernanceChatSessions();
+    await loadGovernanceChatSession(data.chatId);
+  } catch (error) {
+    status.textContent = `Create failed: ${error.message}`;
+  }
+}
+
+async function loadGovernanceChatSession(chatId) {
+  const id = String(chatId || "").trim();
+  const status = byId("gov-chat-status");
+  if (!id) {
+    status.textContent = "Chat id is required.";
+    return;
+  }
+  status.textContent = `Loading ${id}...`;
+  try {
+    const data = await apiGet(`/api/admin/governance-chat/${encodeURIComponent(id)}`);
+    state.governanceChat.activeChatId = id;
+    state.governanceChat.historyByChat[id] = Array.isArray(data.messages) ? data.messages : [];
+    byId("gov-chat-id").value = id;
+    renderGovernanceChatHistory();
+    status.textContent = `Loaded governance chat ${id}`;
+  } catch (error) {
+    status.textContent = `Failed to load governance chat: ${error.message}`;
+  }
+}
+
+async function sendGovernanceChatMessage() {
+  const status = byId("gov-chat-status");
+  const input = byId("gov-chat-message");
+  const chatId = state.governanceChat.activeChatId || byId("gov-chat-id").value.trim();
+  const message = input.value.trim();
+  if (!chatId) {
+    status.textContent = "Create or load a governance chat first.";
+    return;
+  }
+  if (!message) return;
+
+  if (!state.governanceChat.historyByChat[chatId]) state.governanceChat.historyByChat[chatId] = [];
+  state.governanceChat.historyByChat[chatId].push({ role: "user", content: message });
+  state.governanceChat.activeChatId = chatId;
+  renderGovernanceChatHistory();
+  input.value = "";
+  status.textContent = "Thinking...";
+
+  try {
+    const data = await apiSend(`/api/admin/governance-chat/${encodeURIComponent(chatId)}/messages`, "POST", {
+      message
+    });
+    if (data.orchestration?.content) {
+      state.governanceChat.historyByChat[chatId].push({
+        role: "orchestrator",
+        content: data.orchestration.content
+      });
+    }
+    const responses = Array.isArray(data.responses) ? data.responses : [];
+    state.governanceChat.historyByChat[chatId].push(...responses);
+    renderGovernanceChatHistory();
+    status.textContent = `Received ${responses.length} response(s).`;
+    await loadGovernanceChatSessions();
+  } catch (error) {
+    status.textContent = `Governance chat failed: ${error.message}`;
+  }
 }
 
 function getMetricValue(item, metric) {
@@ -2057,6 +2408,9 @@ function applyDebateFilter(debates) {
   if (filter.dimension === "channel") {
     return filter.key === "debate" ? debates : [];
   }
+  if (filter.dimension === "user") {
+    return debates.filter((d) => String(d.createdByUsername || "unknown").toLowerCase() === String(filter.key));
+  }
   return debates;
 }
 
@@ -2073,6 +2427,9 @@ function applyChatFilter(chats) {
     if (filter.key === "group") return chats.filter((c) => c.kind === "group");
     if (filter.key === "simple") return chats.filter((c) => c.kind === "simple");
     return [];
+  }
+  if (filter.dimension === "user") {
+    return chats.filter((c) => String(c.createdByUsername || "unknown").toLowerCase() === String(filter.key));
   }
   return chats;
 }
@@ -2098,6 +2455,7 @@ function renderAdminDebatesList() {
       <div class="admin-item-sub">Participants: ${debate.participants.join(", ") || "n/a"}</div>
       <div class="admin-item-sub">Topic: ${debate.topicSummary || "n/a"}</div>
       <div class="admin-item-sub">Outcomes: ${debate.outcomes || "n/a"}</div>
+      <div class="admin-item-sub">Created by: ${debate.createdByUsername || "unknown"}</div>
       <div class="admin-item-sub">Tokens: ${Number(debate.tokenUsage?.totalTokens || 0).toLocaleString()} | Est. Cost: ${
         typeof debate.estimatedCostUsd === "number" ? `$${debate.estimatedCostUsd.toFixed(6)}` : "n/a"
       }</div>
@@ -2133,6 +2491,15 @@ function renderAdminPersonasList() {
           return true;
         }
         if (filter.dimension === "model") {
+          const debates = applyDebateFilter(state.adminOverview?.debates || []);
+          const chats = applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []);
+          const usedNames = new Set([
+            ...debates.flatMap((d) => d.participants || []),
+            ...chats.flatMap((c) => c.participants || [])
+          ]);
+          return usedNames.has(persona.displayName);
+        }
+        if (filter.dimension === "user") {
           const debates = applyDebateFilter(state.adminOverview?.debates || []);
           const chats = applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []);
           const usedNames = new Set([
@@ -2205,6 +2572,7 @@ function renderAdminChatsList() {
       </div>
       <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : "chat")}</div>
       <div class="admin-item-sub">Participants: ${(chat.participants || []).join(", ") || "n/a"}</div>
+      <div class="admin-item-sub">Created by: ${chat.createdByUsername || "unknown"}</div>
       <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}</div>
       <div class="admin-item-sub">Tokens: ${Number(chat.tokenUsage?.totalTokens || 0).toLocaleString()} | Est. Cost: ${
         typeof chat.estimatedCostUsd === "number" ? `$${chat.estimatedCostUsd.toFixed(6)}` : "n/a"
@@ -2242,20 +2610,23 @@ function renderAdminList() {
 async function loadAdminData() {
   byId("admin-pricing-note").textContent = "Loading governance metrics...";
   try {
-    const [overview, personas, chats] = await Promise.all([
+    const [overview, personas, chats, usage] = await Promise.all([
       apiGet("/api/admin/overview"),
       apiGet("/api/admin/personas"),
-      apiGet("/api/admin/chats")
+      apiGet("/api/admin/chats"),
+      apiGet("/api/auth/usage")
     ]);
     state.adminOverview = overview;
     state.adminPersonas = personas;
     state.adminChats = chats;
+    state.adminUsage = usage;
     byId("admin-pricing-note").textContent = overview.pricingNote || "";
     renderAdminSummaryCards();
     renderAdminMatrix();
     renderAdminFilterSummary();
     renderAdminList();
     renderAdminCharts();
+    loadGovernanceChatSessions();
   } catch (error) {
     byId("admin-pricing-note").textContent = `Failed to load admin data: ${error.message}`;
   }
@@ -2976,8 +3347,32 @@ function wireEvents() {
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
   byId("config-view-security").addEventListener("click", () => setConfigView("security"));
+  byId("system-menu-toggle").addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleSystemMenu();
+  });
   byId("auth-login").addEventListener("click", login);
   byId("bootstrap-create").addEventListener("click", bootstrapAdmin);
+  byId("auth-open-login").addEventListener("click", () => {
+    showAuthGate("Sign in with a different user.");
+    closeSystemMenu();
+  });
+  byId("auth-quick-logout").addEventListener("click", logout);
+  byId("open-help-flyout").addEventListener("click", openHelpPopout);
+  byId("open-security-tab").addEventListener("click", () => {
+    switchTab("config");
+    setConfigView("security");
+    closeSystemMenu();
+  });
+  byId("help-close").addEventListener("click", closeHelpPopout);
+  document.addEventListener("click", (event) => {
+    const shell = byId("system-menu-popout");
+    const toggle = byId("system-menu-toggle");
+    if (!shell || shell.classList.contains("hidden")) return;
+    const target = event.target;
+    if (shell.contains(target) || toggle.contains(target)) return;
+    closeSystemMenu();
+  });
   byId("auth-password").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -3261,6 +3656,14 @@ function wireEvents() {
     renderAdminList();
     renderAdminCharts();
   });
+  byId("admin-dim-user").addEventListener("click", () => {
+    state.adminMatrixDimension = "user";
+    state.adminMetricFocus = null;
+    renderAdminMatrix();
+    renderAdminFilterSummary();
+    renderAdminList();
+    renderAdminCharts();
+  });
   byId("admin-clear-filter").addEventListener("click", () => {
     state.adminFilter = null;
     state.adminMetricFocus = null;
@@ -3282,6 +3685,16 @@ function wireEvents() {
     switchTab("chats");
     setChatsView("group");
     setGroupWorkspace("debate-viewer");
+  });
+  byId("gov-chat-create").addEventListener("click", createGovernanceChatSession);
+  byId("gov-chat-refresh-list").addEventListener("click", loadGovernanceChatSessions);
+  byId("gov-chat-load").addEventListener("click", () => loadGovernanceChatSession(byId("gov-chat-id").value.trim()));
+  byId("gov-chat-send").addEventListener("click", sendGovernanceChatMessage);
+  byId("gov-chat-message").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendGovernanceChatMessage();
+    }
   });
   byId("admin-refresh").addEventListener("click", loadAdminData);
 }
@@ -3306,6 +3719,8 @@ async function init() {
   renderGeneratedTopicDrafts();
   renderKnowledgeStudioList();
   setViewerTypeUI(byId("viewer-conversation-type").value || "debate");
+  renderGovernanceChatSessions();
+  renderGovernanceChatHistory();
   if (!authed) {
     return;
   }

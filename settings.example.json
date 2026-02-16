@@ -1,5 +1,10 @@
 {
+  "llmProvider": "openai",
   "openaiApiKey": "sk-your-key-here",
+  "azureOpenAIApiKey": "",
+  "azureOpenAIEndpoint": "",
+  "azureOpenAIDeployment": "",
+  "azureOpenAIApiVersion": "2024-10-21",
   "port": 3000,
   "newsProvider": "google",
   "newsApiKey": ""

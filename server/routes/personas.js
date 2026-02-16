@@ -97,6 +97,10 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const persona = await getPersona(req.params.id);
+    if (persona?.isHidden) {
+      sendError(res, 404, "NOT_FOUND", `Persona '${req.params.id}' not found.`);
+      return;
+    }
     sendOk(res, { persona });
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -177,6 +181,10 @@ router.put("/:id", async (req, res) => {
 
   try {
     const existing = await getPersona(req.params.id);
+    if (existing?.isHidden) {
+      sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be modified via this endpoint.");
+      return;
+    }
     const persona = {
       ...hydratePersonaFromPrompt(parsed.data),
       createdAt: existing.createdAt || new Date().toISOString(),
@@ -202,6 +210,10 @@ router.post("/:id/duplicate", async (req, res) => {
 
   try {
     const source = await getPersona(req.params.id);
+    if (source?.isHidden) {
+      sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be duplicated via this endpoint.");
+      return;
+    }
     const persona = {
       ...source,
       id: newId,
@@ -237,6 +249,11 @@ router.post("/:id/duplicate", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    const existing = await getPersona(req.params.id);
+    if (existing?.isHidden) {
+      sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be deleted via this endpoint.");
+      return;
+    }
     await deletePersona(req.params.id);
     sendOk(res, { deleted: req.params.id });
   } catch {
@@ -265,7 +282,7 @@ router.post("/generate-from-topic", async (req, res) => {
     });
   } catch (error) {
     if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "OpenAI API key is not configured.");
+      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
       return;
     }
     sendError(

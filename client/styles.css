@@ -54,6 +54,13 @@ body {
   font-weight: 600;
 }
 
+.topbar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .topbar h1 {
   margin: 6px 0;
   font-family: "Fraunces", Georgia, serif;
@@ -68,6 +75,41 @@ body {
   justify-self: end;
   border-radius: 14px;
   border: 1px solid #ddd7cb;
+}
+
+.system-menu-shell {
+  position: relative;
+}
+
+.system-menu-toggle {
+  font: inherit;
+  border: 1px solid #d3d8df;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.system-menu-popout {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 200px;
+  border: 1px solid #d4dae3;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  z-index: 65;
+}
+
+.system-menu-popout button {
+  width: 100%;
+  text-align: left;
 }
 
 .muted {
@@ -792,6 +834,17 @@ a {
 
   .tab-btn {
     white-space: nowrap;
+  }
+
+  .system-menu-shell {
+    position: relative;
+  }
+
+  .system-menu-popout {
+    right: auto;
+    left: 0;
+    top: calc(100% + 6px);
+    width: min(88vw, 280px);
   }
 
   .citations-popout {

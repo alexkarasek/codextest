@@ -6,7 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "nodemon server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "docker:release": "bash scripts/docker-release.sh"
   },
   "dependencies": {
     "express": "^4.21.2",

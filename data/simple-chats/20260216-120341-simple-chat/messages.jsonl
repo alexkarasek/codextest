@@ -1,0 +1,2 @@
+{"ts":"2026-02-16T17:03:45.138Z","role":"user","content":"whats up?"}
+{"ts":"2026-02-16T17:03:49.257Z","role":"assistant","content":"Hello! I'm here to help you with any questions or tasks you have. What's on your mind today?","usage":{"prompt_tokens":112,"completion_tokens":21,"total_tokens":133,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"citations":[]}

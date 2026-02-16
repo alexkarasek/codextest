@@ -36,6 +36,18 @@ docker run --rm -p 3000:3000 \
   <dockerhub-username>/persona-debate-app:latest
 ```
 
+Azure OpenAI option:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e LLM_PROVIDER="azure" \
+  -e AZURE_OPENAI_API_KEY="..." \
+  -e AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com" \
+  -e AZURE_OPENAI_DEPLOYMENT="<deployment-name>" \
+  -v "$(pwd)/data:/app/data" \
+  <dockerhub-username>/persona-debate-app:latest
+```
+
 ## Notes
 
 - Container port: `3000`

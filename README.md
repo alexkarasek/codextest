@@ -91,11 +91,16 @@ npm install
 cp settings.example.json settings.local.json
 ```
 
-3. Edit `settings.local.json` and set your API key:
+3. Edit `settings.local.json` and configure an LLM provider:
 
 ```json
 {
+  "llmProvider": "openai",
   "openaiApiKey": "sk-your-key-here",
+  "azureOpenAIApiKey": "",
+  "azureOpenAIEndpoint": "",
+  "azureOpenAIDeployment": "",
+  "azureOpenAIApiVersion": "2024-10-21",
   "port": 3000,
   "newsProvider": "google",
   "newsApiKey": ""
@@ -105,6 +110,9 @@ cp settings.example.json settings.local.json
 You can still override via environment variables if needed, but it is not required.
 
 Notes:
+- `llmProvider`:
+  - `openai`: uses `openaiApiKey` or `OPENAI_API_KEY`
+  - `azure`: uses `azureOpenAIApiKey` / `AZURE_OPENAI_API_KEY`, `azureOpenAIEndpoint` / `AZURE_OPENAI_ENDPOINT`, and `azureOpenAIDeployment` / `AZURE_OPENAI_DEPLOYMENT`
 - `newsProvider`: `google` (default, no API key) or `newsapi`.
 - If using `newsapi`, set `newsApiKey`.
 
@@ -164,7 +172,9 @@ docker run --rm -p 3000:3000 \
 ```
 
 Notes:
-- You can provide API key either via `settings.local.json` or `OPENAI_API_KEY`.
+- You can configure LLM via `settings.local.json` or environment variables.
+- OpenAI env: `OPENAI_API_KEY`
+- Azure env: `LLM_PROVIDER=azure`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` (optional `AZURE_OPENAI_API_VERSION`)
 - `./data` is mounted so personas/debates persist on host disk.
 
 ### Dev container with hot reload (`Dockerfile.dev`)
@@ -202,11 +212,44 @@ docker compose down
 ## Cloud Deployment Notes
 
 - Container listens on `PORT` (default `3000`).
-- Set `OPENAI_API_KEY` as a platform secret.
+- Set either OpenAI or Azure OpenAI secrets as platform secrets.
 - Mount persistent storage for `/app/data` if you want debate/persona persistence across restarts.
 - If your platform does not support file mounts (ephemeral filesystem), exported data will be lost on redeploy/restart.
 
 ## Publish to Docker Hub
+
+### Single-command release (recommended)
+
+This project includes a release script that automatically:
+1. increments Docker image version
+2. builds image
+3. tags version + `latest`
+4. pushes both tags to Docker Hub
+
+Run:
+
+```bash
+DOCKERHUB_USER=<dockerhub-username> npm run docker:release
+```
+
+Optional:
+
+```bash
+# bump minor instead of patch
+npm run docker:release -- --user <dockerhub-username> --bump minor
+
+# explicit version
+npm run docker:release -- --user <dockerhub-username> --version 1.4.0
+
+# dry run (build/tag only, no push)
+npm run docker:release -- --user <dockerhub-username> --no-push
+```
+
+Version tracking:
+- Script persists release version in `.docker-release-version`.
+- If missing, it starts from `package.json` version, then increments.
+
+### Manual release
 
 1. Log in:
 
@@ -307,11 +350,19 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `GET /api/admin/debates/:debateId`
 - `GET /api/admin/chats`
 - `GET /api/admin/chats/:chatId`
+- `POST /api/admin/governance-chat/session`
+- `GET /api/admin/governance-chat`
+- `GET /api/admin/governance-chat/:chatId`
+- `POST /api/admin/governance-chat/:chatId/messages`
+- `POST /api/admin/governance-chat/refresh-assets`
 
 ## Data Folder Behavior
 
 - Personas are saved as both JSON and Markdown.
 - Knowledge packs are saved in `data/knowledge/*.json`.
+- Internal governance assets are auto-managed:
+  - hidden pack: `data/knowledge/governance-admin-dataset.json`
+  - hidden persona: `data/personas/governance-admin-agent.json`
 - Debate runs create timestamped folders under `data/debates`.
 - `messages.jsonl` stores request/response logs for debugging each LLM turn.
 - `chat.jsonl` stores persisted transcript-chat follow-up messages per debate.
@@ -342,5 +393,5 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - A new folder in `data/debates/<timestamp>-<slug>/`
    - `session.json`, `transcript.md`, and `messages.jsonl` exist and contain data.
 7. Failure checks:
-   - Unset `OPENAI_API_KEY` and run debate: verify clear error/failure state.
+   - Remove LLM credentials and run debate: verify clear error/failure state.
    - Introduce malformed JSON in one persona file and refresh persona list: verify corrupted file warning.

@@ -13,7 +13,19 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div>
-        <p class="eyebrow">Round-Table Intelligence Studio</p>
+        <div class="topbar-meta">
+          <p class="eyebrow">Round-Table Intelligence Studio</p>
+          <div class="system-menu-shell">
+            <button id="system-menu-toggle" class="system-menu-toggle" type="button" aria-expanded="false">Menu</button>
+            <div id="system-menu-popout" class="system-menu-popout hidden">
+              <div id="auth-user-chip" class="muted">Guest</div>
+              <button id="auth-open-login" type="button">Login / Switch User</button>
+              <button id="auth-quick-logout" type="button">Logout</button>
+              <button id="open-help-flyout" type="button">Help & Guides</button>
+              <button id="open-security-tab" type="button">Users & Access</button>
+            </div>
+          </div>
+        </div>
         <h1>Persona Debate Orchestrator</h1>
         <p class="muted">Local-first persona manager, debate runner, and transcript-aware chat.</p>
       </div>
@@ -152,7 +164,7 @@
     <section id="tab-security" class="tab-section">
       <div class="grid two">
         <div class="panel stack">
-          <h2>Current Session</h2>
+          <h2>Current Session <span class="tip" tabindex="0">?<span class="tip-flyout">Manage login/logout and API keys for platform and external API access.</span></span></h2>
           <div id="security-session" class="status">Not authenticated.</div>
           <div class="row">
             <button id="security-refresh-session" type="button">Refresh Session</button>
@@ -290,7 +302,7 @@
     <section id="tab-simple-chat" class="tab-section">
       <div class="grid two">
         <div class="panel stack">
-          <h2>Simple Chat</h2>
+          <h2>Simple Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Single-assistant conversation with optional knowledge grounding and session history.</span></span></h2>
           <label>Chat Title<input id="simple-chat-title" type="text" value="Simple Chat"></label>
           <label>Shared Context<textarea id="simple-chat-context" rows="3" placeholder="Optional background instructions for this chat"></textarea></label>
           <div class="grid two">
@@ -317,7 +329,7 @@
         </div>
 
         <div class="panel stack">
-          <h2>Conversation</h2>
+          <h2>Conversation <span class="tip" tabindex="0">?<span class="tip-flyout">Load a session and continue chatting. Risk/sentiment chips appear per message.</span></span></h2>
           <div class="row">
             <label>Chat Id<input id="simple-chat-id" type="text" placeholder="Create or load a simple chat id"></label>
             <button id="simple-chat-load" type="button">Load</button>
@@ -369,7 +381,7 @@
         </div>
 
         <div class="panel stack">
-          <h2>Conversation</h2>
+          <h2>Conversation <span class="tip" tabindex="0">?<span class="tip-flyout">Load group sessions and continue collaboration with selected personas.</span></span></h2>
           <div class="row">
             <label>Chat Id<input id="persona-chat-id" type="text" placeholder="Create or load a chat id"></label>
             <button id="persona-chat-load" type="button">Load</button>
@@ -430,13 +442,14 @@
     <section id="tab-admin" class="tab-section">
       <div class="grid two">
         <div class="panel stack">
-          <h2>Governance Dashboard</h2>
+          <h2>Governance Dashboard <span class="tip" tabindex="0">?<span class="tip-flyout">Use matrix drilldowns to inspect usage, cost, risk, sentiment, and user dimensions.</span></span></h2>
           <div id="admin-summary-cards" class="summary-cards"></div>
           <div class="admin-matrix-controls row">
             <span class="hint">Matrix Dimension</span>
             <button id="admin-dim-channel" type="button">Channel</button>
             <button id="admin-dim-model" type="button">Model</button>
             <button id="admin-dim-persona" type="button">Persona</button>
+            <button id="admin-dim-user" type="button">User</button>
             <button id="admin-clear-filter" type="button">Clear Drill Filter</button>
           </div>
           <div id="admin-filter-summary" class="hint">No active drill filter.</div>
@@ -460,6 +473,23 @@
             <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>
             <button id="admin-nav-debate-history" type="button">Open History Explorer</button>
           </div>
+          <h3>Governance Admin Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Admin-only chat backed by a hidden governance dataset knowledge pack and hidden governance persona.</span></span></h3>
+          <div class="row">
+            <button id="gov-chat-create" type="button">New Governance Chat</button>
+            <button id="gov-chat-refresh-list" type="button">Refresh Sessions</button>
+          </div>
+          <div id="gov-chat-create-status" class="status">Create or load a governance chat session.</div>
+          <div id="gov-chat-session-list" class="list"></div>
+          <div class="row">
+            <label>Chat Id<input id="gov-chat-id" type="text" placeholder="Load governance chat id"></label>
+            <button id="gov-chat-load" type="button">Load</button>
+          </div>
+          <div id="gov-chat-status" class="status">No governance chat loaded.</div>
+          <div id="gov-chat-history" class="chat-history"></div>
+          <div class="row">
+            <input id="gov-chat-message" type="text" placeholder="Ask governance questions (cost, tokens, risky users, topics)">
+            <button id="gov-chat-send" type="button">Send</button>
+          </div>
         </div>
       </div>
     </section>
@@ -471,6 +501,14 @@
       <button id="chat-citations-close" type="button">Close</button>
     </div>
     <div id="chat-citations-list" class="citations-list"></div>
+  </aside>
+
+  <aside id="help-popout" class="citations-popout" aria-hidden="true">
+    <div class="citations-header">
+      <h3 id="help-title">Usage Guide</h3>
+      <button id="help-close" type="button">Close</button>
+    </div>
+    <div id="help-body" class="citations-list"></div>
   </aside>
 
   <script type="module" src="/app.js"></script>

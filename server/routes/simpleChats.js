@@ -217,7 +217,7 @@ router.post("/:chatId/messages", async (req, res) => {
     });
   } catch (error) {
     if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "OpenAI API key is not configured.");
+      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
       return;
     }
     sendError(res, 502, "LLM_ERROR", `Simple chat failed: ${error.message}`);

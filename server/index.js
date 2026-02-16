@@ -14,7 +14,11 @@ import { ensureDataDirs } from "../lib/storage.js";
 import { ensureAuthFiles } from "../lib/auth.js";
 import { sendError } from "./response.js";
 import {
+  getLlmProvider,
+  getAzureOpenAIDeployment,
+  getAzureOpenAIEndpoint,
   getOpenAIApiKey,
+  isLlmConfigured,
   getServerPort,
   getSettingsPath,
   loadSettings
@@ -61,9 +65,21 @@ app.use((error, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  if (!getOpenAIApiKey()) {
-    console.warn(
-      `OpenAI API key not configured. Set openaiApiKey in ${getSettingsPath()} to run debates.`
+  if (!isLlmConfigured()) {
+    if (getLlmProvider() === "azure") {
+      console.warn(
+        `Azure OpenAI is selected but not fully configured. Set azureOpenAIApiKey, azureOpenAIEndpoint, and azureOpenAIDeployment (or per-request model) in ${getSettingsPath()} or env vars.`
+      );
+    } else if (!getOpenAIApiKey()) {
+      console.warn(
+        `OpenAI API key not configured. Set openaiApiKey in ${getSettingsPath()} to run debates.`
+      );
+    }
+  } else if (getLlmProvider() === "azure") {
+    const dep = getAzureOpenAIDeployment();
+    const endpoint = getAzureOpenAIEndpoint();
+    console.log(
+      `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "per-request model"})`
     );
   }
 });

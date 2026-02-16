@@ -182,6 +182,12 @@ router.delete("/api-keys/:keyId", requireAuth, async (req, res) => {
 
 router.get("/usage", requireAuth, requirePermission("viewGovernance"), async (req, res) => {
   const data = await getUsageSummary(1500);
+  if (req.auth.user.role !== "admin") {
+    const onlyMe = (data.byUser || []).filter((row) => row.userId === req.auth.user.id);
+    const recent = (data.recent || []).filter((row) => row.userId === req.auth.user.id);
+    sendOk(res, { byUser: onlyMe, recent });
+    return;
+  }
   sendOk(res, data);
 });
 

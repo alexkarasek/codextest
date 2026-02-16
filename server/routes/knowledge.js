@@ -26,6 +26,10 @@ router.get("/", async (_req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const pack = await getKnowledgePack(req.params.id);
+    if (pack?.isHidden) {
+      sendError(res, 404, "NOT_FOUND", `Knowledge pack '${req.params.id}' not found.`);
+      return;
+    }
     sendOk(res, { pack });
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -74,6 +78,10 @@ router.put("/:id", async (req, res) => {
 
   try {
     const existing = await getKnowledgePack(req.params.id);
+    if (existing?.isHidden) {
+      sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
+      return;
+    }
     const pack = {
       ...parsed.data,
       createdAt: existing.createdAt || new Date().toISOString(),
@@ -92,6 +100,11 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    const existing = await getKnowledgePack(req.params.id);
+    if (existing?.isHidden) {
+      sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be deleted via this endpoint.");
+      return;
+    }
     await fs.rm(knowledgePackPath(req.params.id), { force: true });
     sendOk(res, { deleted: req.params.id });
   } catch {
@@ -141,7 +154,7 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
         res,
         400,
         "MISSING_API_KEY",
-        "OpenAI API key is required for image OCR ingestion."
+        "LLM provider credentials are required for image OCR ingestion."
       );
       return;
     }
