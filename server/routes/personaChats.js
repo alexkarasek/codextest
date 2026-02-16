@@ -217,9 +217,38 @@ function hasPokerScope(scopeCorpus) {
   return POKER_TERMS.some((term) => scopeCorpus.includes(term));
 }
 
+function isGreetingOrSmallTalk(text) {
+  const low = String(text || "").toLowerCase().trim();
+  if (!low) return true;
+  const compact = low.replace(/[^\w\s']/g, " ").replace(/\s+/g, " ").trim();
+  const greetings = new Set([
+    "hi",
+    "hello",
+    "hey",
+    "yo",
+    "hiya",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "how are you",
+    "how's it going",
+    "whats up",
+    "what's up",
+    "nice to meet you",
+    "thanks",
+    "thank you"
+  ]);
+  if (greetings.has(compact)) return true;
+  const words = compact.split(" ").filter(Boolean);
+  return words.length <= 2 && words.every((w) => w.length <= 6);
+}
+
 function appearsOutOfScope({ userMessage, persona, personaPacks }) {
   const scope = personaScopeCorpus(persona, personaPacks);
   const userText = String(userMessage || "").toLowerCase();
+  if (isGreetingOrSmallTalk(userText)) {
+    return false;
+  }
   const userTerms = [...new Set(tokenize(userText))];
 
   if (!userTerms.length) return false;
@@ -232,10 +261,11 @@ function appearsOutOfScope({ userMessage, persona, personaPacks }) {
 
   const overlap = userTerms.filter((term) => scope.includes(term)).length;
   const overlapRatio = overlap / userTerms.length;
-
-  // If there is no specialized knowledge and almost no lexical overlap, treat as out-of-scope.
+  // Conservative lexical gate: only auto-refuse when mismatch is strong.
+  // Short conversational prompts (including character/lore questions) should pass through.
   const hasPacks = Array.isArray(personaPacks) && personaPacks.length > 0;
-  return overlapRatio < 0.12 && !hasPacks;
+  const highConfidenceMismatch = userTerms.length >= 6 && overlapRatio < 0.08;
+  return highConfidenceMismatch && !hasPacks;
 }
 
 function outOfScopeReply(persona, userMessage) {
@@ -273,7 +303,7 @@ function computePersonaRelevance({ userMessage, persona, personaPacks }) {
   return hits / userTerms.length;
 }
 
-function chooseResponders({ personas, knowledgeByPersona, userMessage, history }) {
+function chooseResponders({ personas, knowledgeByPersona, userMessage, history, engagementMode = "chat" }) {
   if (asksParticipantPresence(userMessage)) {
     return {
       selectedPersonas: personas.slice(),
@@ -304,9 +334,15 @@ function chooseResponders({ personas, knowledgeByPersona, userMessage, history }
   const outScope = scored.filter((x) => x.outOfScope).sort((a, b) => b.score - a.score);
 
   let target = 1;
-  if (personas.length >= 3) target = 2;
-  if (personas.length >= 5 && inScope.length >= 3) target = 3;
-  if (inScope.length >= 2 && inScope[0].relevance - inScope[1].relevance < 0.18) {
+  if (engagementMode === "chat") {
+    if (personas.length >= 3) target = 2;
+    if (personas.length >= 5 && inScope.length >= 3) target = 3;
+  } else if (engagementMode === "panel") {
+    target = personas.length >= 4 ? 3 : Math.min(2, personas.length);
+  } else if (engagementMode === "debate-work-order") {
+    target = personas.length >= 3 ? 3 : Math.min(2, personas.length);
+  }
+  if (inScope.length >= 2 && inScope[0].relevance - inScope[1].relevance < 0.15) {
     target = Math.max(target, 2);
   }
   target = Math.min(target, personas.length);
@@ -324,8 +360,8 @@ function chooseResponders({ personas, knowledgeByPersona, userMessage, history }
     reason: x.outOfScope
       ? "Selected to provide an explicit out-of-scope handoff."
       : x.relevance >= 0.35
-        ? "High relevance to current user message."
-        : "Included for diversity and continuity."
+        ? `High relevance to current user message (${engagementMode} mode).`
+        : `Included for diversity and continuity (${engagementMode} mode).`
   }));
 
   return {
@@ -344,6 +380,13 @@ function personaSystemPrompt(persona, settings, personaPacks, session) {
   const knowledge = personaPacks.length
     ? personaPacks.map((p) => `${p.title}: ${truncateText(p.content, 500)}`).join("\n\n")
     : "No persona-specific knowledge packs attached.";
+  const mode = settings?.engagementMode || "chat";
+  const modeInstruction =
+    mode === "panel"
+      ? "Panel mode: contribute a distinct angle with at least one tradeoff and avoid repeating prior speakers."
+      : mode === "debate-work-order"
+        ? "Debate-work-order mode: challenge assumptions briefly, then propose concrete next actions, owners, and sequencing."
+        : "Chat mode: respond conversationally and pragmatically.";
 
   return [
     persona.systemPrompt,
@@ -358,6 +401,8 @@ function personaSystemPrompt(persona, settings, personaPacks, session) {
     `Knowledge available:\n${knowledge}`,
     `Keep your response under ${settings.maxWordsPerTurn} words.`,
     "This is a collaborative chat with a user and other personas.",
+    `Engagement mode: ${mode}.`,
+    modeInstruction,
     `Full participant roster: ${(session?.personas || []).map((p) => p.displayName).join(", ") || persona.displayName}.`,
     "Respond directly to the user's latest message.",
     "Hard scope guard: only provide substantive claims grounded in your persona definition and attached knowledge packs.",
@@ -379,12 +424,14 @@ function personaUserPrompt({
   historyLimit,
   selectedPersonasThisTurn
 }) {
+  const mode = session?.settings?.engagementMode || "chat";
   const roster = (session.personas || []).map((p) => p.displayName);
   const selectedNames = (selectedPersonasThisTurn || []).map((p) => p.displayName);
   const nonSpeaking = roster.filter((name) => !selectedNames.includes(name));
   return [
     `Chat title: ${session.title}`,
     `Shared context: ${session.context || "(none)"}`,
+    `Engagement mode: ${mode}`,
     `You are: ${persona.displayName}`,
     `All participants in this chat: ${roster.join(", ") || persona.displayName}`,
     `Selected to speak this turn: ${selectedNames.join(", ") || persona.displayName}`,
@@ -434,9 +481,10 @@ router.post("/", async (req, res) => {
   }
 
   const chatId = `${timestampForId()}-${slugify(parsed.data.title || "persona-chat") || "persona-chat"}`;
+  const uniqueChatId = `${chatId}-${Math.random().toString(36).slice(2, 7)}`;
   const now = new Date().toISOString();
   const session = {
-    chatId,
+    chatId: uniqueChatId,
     title: parsed.data.title || "Persona Collaboration Chat",
     context: parsed.data.context || "",
     settings: parsed.data.settings,
@@ -449,15 +497,15 @@ router.post("/", async (req, res) => {
     lastSpeakerIds: []
   };
 
-  await createPersonaChatFiles(chatId, session);
+  await createPersonaChatFiles(uniqueChatId, session);
   sendOk(
     res,
     {
-      chatId,
+      chatId: uniqueChatId,
       session,
       links: {
-        self: `/api/persona-chats/${chatId}`,
-        messages: `/api/persona-chats/${chatId}/messages`
+        self: `/api/persona-chats/${uniqueChatId}`,
+        messages: `/api/persona-chats/${uniqueChatId}/messages`
       }
     },
     201
@@ -517,7 +565,8 @@ router.post("/:chatId/messages", async (req, res) => {
     personas: session.personas || [],
     knowledgeByPersona: session.knowledgeByPersona || {},
     userMessage: userEntry.content,
-    history
+    history,
+    engagementMode: session.settings?.engagementMode || "chat"
   });
   const orchestrationEntry = {
     ts: new Date().toISOString(),
@@ -528,7 +577,9 @@ router.post("/:chatId/messages", async (req, res) => {
     rationale: orchestration.rationale,
     content: `Orchestrator selected ${orchestration.rationale
       .map((r) => r.displayName)
-      .join(", ")}${orchestration.omittedCount ? ` (${orchestration.omittedCount} omitted this turn)` : ""}.`
+      .join(", ")}${orchestration.omittedCount ? ` (${orchestration.omittedCount} omitted this turn)` : ""}. Mode=${
+      session.settings?.engagementMode || "chat"
+    }.`
   };
   await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
 

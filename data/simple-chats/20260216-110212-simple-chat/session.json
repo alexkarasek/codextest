@@ -1,0 +1,15 @@
+{
+  "chatId": "20260216-110212-simple-chat",
+  "title": "Simple Chat",
+  "context": "",
+  "settings": {
+    "model": "gpt-4.1-mini",
+    "temperature": 0.4,
+    "maxResponseWords": 220
+  },
+  "knowledgePackIds": [],
+  "knowledgePacks": [],
+  "createdAt": "2026-02-16T16:02:12.680Z",
+  "updatedAt": "2026-02-16T16:02:29.207Z",
+  "messageCount": 4
+}

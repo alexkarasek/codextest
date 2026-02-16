@@ -233,6 +233,12 @@ button:hover {
   background: linear-gradient(140deg, #f4f6fb 0%, #e5f3ef 100%);
 }
 
+button.active {
+  background: #e7faf5;
+  border-color: #80cdbf;
+  color: #0b5d4b;
+}
+
 #run-debate,
 #chat-send,
 #add-adhoc,
@@ -264,6 +270,11 @@ button[type="submit"]:hover {
   background: linear-gradient(180deg, #fffdf8 0%, #fdfcf8 100%);
   display: grid;
   gap: 7px;
+}
+
+.card.dragging {
+  opacity: 0.55;
+  border-style: dashed;
 }
 
 .card-title {
@@ -331,6 +342,24 @@ button[type="submit"]:hover {
   background: #fffdfa;
 }
 
+.setup-advanced {
+  border: 1px solid #d8dde6;
+  border-radius: 12px;
+  background: #fffefb;
+  padding: 8px;
+}
+
+.setup-advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #0f5d6d;
+  list-style: none;
+}
+
+.setup-advanced[open] > summary {
+  margin-bottom: 10px;
+}
+
 .setup-step > h3 {
   margin: 0 0 4px 0;
   font-family: "Fraunces", Georgia, serif;
@@ -352,6 +381,152 @@ button[type="submit"]:hover {
 .admin-item-sub {
   color: #64748b;
   font-size: 0.9rem;
+}
+
+.admin-matrix-controls {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-matrix {
+  border: 1px solid #d5d5ce;
+  border-radius: 12px;
+  background: #fffefb;
+  overflow: auto;
+}
+
+.admin-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-matrix-table th,
+.admin-matrix-table td {
+  border-bottom: 1px solid #ece8df;
+  border-right: 1px solid #f0ede5;
+  padding: 8px 9px;
+  text-align: right;
+}
+
+.admin-matrix-table th:first-child,
+.admin-matrix-table td:first-child {
+  text-align: left;
+}
+
+.admin-matrix-table th:last-child,
+.admin-matrix-table td:last-child {
+  border-right: none;
+}
+
+.admin-matrix-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-matrix-name {
+  display: inline-block;
+  border: none;
+  background: none;
+  color: #0b5060;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.admin-matrix-name:hover {
+  text-decoration: underline;
+}
+
+.admin-matrix-value {
+  font-variant-numeric: tabular-nums;
+  border-radius: 8px;
+}
+
+.admin-matrix-cell {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: right;
+  padding: 2px 4px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.admin-matrix-cell:hover {
+  outline: 1px solid #c9d5e5;
+}
+
+.admin-matrix-value.hot-1 {
+  background: rgba(26, 135, 84, 0.08);
+}
+
+.admin-matrix-value.hot-2 {
+  background: rgba(26, 135, 84, 0.16);
+}
+
+.admin-matrix-value.hot-3 {
+  background: rgba(26, 135, 84, 0.24);
+  font-weight: 600;
+}
+
+.admin-matrix-cell.hot-1 {
+  background: rgba(26, 135, 84, 0.08);
+}
+
+.admin-matrix-cell.hot-2 {
+  background: rgba(26, 135, 84, 0.16);
+}
+
+.admin-matrix-cell.hot-3 {
+  background: rgba(26, 135, 84, 0.24);
+  font-weight: 600;
+}
+
+.viz-card {
+  border: 1px solid #d5d5ce;
+  border-radius: 12px;
+  background: #fffefb;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.viz-title {
+  font-weight: 600;
+  color: #0b5060;
+}
+
+.viz-bars {
+  display: grid;
+  gap: 7px;
+}
+
+.viz-row {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.viz-bar-track {
+  width: 100%;
+  background: #edf2f7;
+  border-radius: 999px;
+  overflow: hidden;
+  height: 10px;
+}
+
+.viz-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0f8a94 0%, #1f6fb0 100%);
+}
+
+.viz-value {
+  font-variant-numeric: tabular-nums;
+  color: #334155;
 }
 
 .preview,
@@ -382,6 +557,65 @@ button[type="submit"]:hover {
   border-radius: 10px;
   border: 1px solid #d9dde5;
   white-space: pre-wrap;
+}
+
+.chat-msg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.risk-badges {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.risk-chip {
+  font-size: 0.72rem;
+  border-radius: 999px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+
+.risk-chip.green {
+  background: #e8f7ec;
+  color: #1e6a35;
+  border-color: #bde4c8;
+}
+
+.risk-chip.yellow {
+  background: #fff8e1;
+  color: #7b5d12;
+  border-color: #f5dd8b;
+}
+
+.risk-chip.red {
+  background: #fdecec;
+  color: #8c1f1f;
+  border-color: #efb0b0;
+}
+
+.risk-chip.sentiment-positive {
+  background: #eefaf1;
+  color: #24683a;
+  border-color: #c7e8d1;
+}
+
+.risk-chip.sentiment-neutral {
+  background: #f4f6f8;
+  color: #475569;
+  border-color: #d8dee7;
+}
+
+.risk-chip.sentiment-negative {
+  background: #fff0f0;
+  color: #8b2d2d;
+  border-color: #efc3c3;
 }
 
 .chat-msg.user {

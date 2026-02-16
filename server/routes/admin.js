@@ -1,9 +1,9 @@
 import express from "express";
 import {
+  getChatAnalyticsDetail,
+  getChatAnalyticsOverview,
   getDebateAnalyticsDetail,
   getDebateAnalyticsOverview,
-  getPersonaChatAnalyticsDetail,
-  getPersonaChatAnalyticsOverview,
   getPersonaAnalytics
 } from "../../lib/adminAnalytics.js";
 import { sendError, sendOk } from "../response.js";
@@ -49,7 +49,7 @@ router.get("/chats", async (req, res) => {
   const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(500, limit)) : 100;
 
   try {
-    const data = await getPersonaChatAnalyticsOverview(safeLimit);
+    const data = await getChatAnalyticsOverview(safeLimit);
     sendOk(res, data);
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to load chat analytics: ${error.message}`);
@@ -58,7 +58,7 @@ router.get("/chats", async (req, res) => {
 
 router.get("/chats/:chatId", async (req, res) => {
   try {
-    const data = await getPersonaChatAnalyticsDetail(req.params.chatId);
+    const data = await getChatAnalyticsDetail(req.params.chatId);
     sendOk(res, data);
   } catch (error) {
     if (error.code === "ENOENT") {

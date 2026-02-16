@@ -31,9 +31,13 @@ A local-first web application to create/edit personas and run multi-round debate
     - Citation excerpts appear in a separate side pop-out so chat flow stays clean
 - Persona Collaboration Chat
   - Create free-form chat sessions with one or more personas (no moderator rounds)
+  - Engagement mode is configurable per group session: `chat`, `panel`, `debate-work-order`
   - Sends each user message through a transparent turn orchestrator that selects only the most relevant personas for that turn
   - Scope guardrails prevent personas from answering outside their defined expertise/knowledge
   - Persists chat sessions and message history to `data/persona-chats/<chatId>/`
+- Simple Chat
+  - Standard assistant chat with selectable model and optional knowledge pack grounding
+  - Persists chat sessions to `data/simple-chats/<chatId>/`
 - Topic Discovery + Persona Generation
   - Search current events and select a topic from live web results
   - Generate topic-appropriate persona drafts and add/save them directly to debates
@@ -222,6 +226,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `data/personas/` persona JSON/MD files
 - `data/debates/` debate session output folders
 - `data/persona-chats/` free-form persona chat sessions
+- `data/simple-chats/` simple assistant chat sessions
 
 ## API Endpoints
 
@@ -253,6 +258,13 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `POST /api/persona-chats`
 - `GET /api/persona-chats/:chatId`
 - `POST /api/persona-chats/:chatId/messages`
+
+### Simple Chats
+
+- `GET /api/simple-chats`
+- `POST /api/simple-chats`
+- `GET /api/simple-chats/:chatId`
+- `POST /api/simple-chats/:chatId/messages`
 
 ### Knowledge Packs
 

@@ -29,6 +29,49 @@ const generateFromTopicSchema = z.object({
   sources: z.array(topicSourceSchema).optional().default([])
 });
 
+function inferDescriptionFromPrompt(systemPrompt) {
+  const text = String(systemPrompt || "").trim();
+  if (!text) return "";
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const firstSentence = String(firstLine || text).split(/[.!?]/)[0].trim();
+  return firstSentence.slice(0, 220);
+}
+
+function inferVerbosity(systemPrompt) {
+  const low = String(systemPrompt || "").toLowerCase();
+  if (/\b(very concise|brief|short)\b/.test(low)) return "concise";
+  if (/\b(verbose|detailed|long-form)\b/.test(low)) return "detailed";
+  return "";
+}
+
+function inferTone(systemPrompt) {
+  const low = String(systemPrompt || "").toLowerCase();
+  if (/\b(friendly|warm|empathetic)\b/.test(low)) return "friendly";
+  if (/\b(formal|professional)\b/.test(low)) return "formal";
+  if (/\b(direct|blunt)\b/.test(low)) return "direct";
+  return "";
+}
+
+function hydratePersonaFromPrompt(persona) {
+  const systemPrompt = String(persona.systemPrompt || "").trim();
+  const description = String(persona.description || "").trim() || inferDescriptionFromPrompt(systemPrompt);
+  const speakingStyle = persona.speakingStyle || {};
+  const hydrated = {
+    ...persona,
+    description,
+    speakingStyle: {
+      tone: String(speakingStyle.tone || "").trim() || inferTone(systemPrompt),
+      verbosity: String(speakingStyle.verbosity || "").trim() || inferVerbosity(systemPrompt),
+      quirks: Array.isArray(speakingStyle.quirks) ? speakingStyle.quirks : []
+    },
+    debateBehavior: String(persona.debateBehavior || "").trim()
+  };
+  return hydrated;
+}
+
 router.get("/", async (req, res) => {
   const q = String(req.query.q || "").toLowerCase().trim();
   const tag = String(req.query.tag || "").toLowerCase().trim();
@@ -76,7 +119,7 @@ router.post("/", async (req, res) => {
   }
 
   const basePersona = {
-    ...parsed.data,
+    ...hydratePersonaFromPrompt(parsed.data),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -105,8 +148,15 @@ router.post("/", async (req, res) => {
     };
     optimization = optimized.optimization;
   } catch (error) {
-    sendError(res, 502, "OPTIMIZATION_FAILED", `Persona optimization failed: ${error.message}`);
-    return;
+    finalPersona = basePersona;
+    optimization = {
+      applied: false,
+      strictRewrite: false,
+      changedFields: 0,
+      fallback: true,
+      warning: true,
+      message: `Persona saved without optimization: ${error.message}`
+    };
   }
 
   await savePersona(finalPersona, { withMarkdown: true });
@@ -128,7 +178,7 @@ router.put("/:id", async (req, res) => {
   try {
     const existing = await getPersona(req.params.id);
     const persona = {
-      ...parsed.data,
+      ...hydratePersonaFromPrompt(parsed.data),
       createdAt: existing.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

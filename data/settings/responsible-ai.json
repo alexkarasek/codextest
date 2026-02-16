@@ -1,0 +1,56 @@
+{
+  "stoplight": {
+    "redKeywords": [
+      "kill",
+      "suicide",
+      "self-harm",
+      "bomb",
+      "terror",
+      "ethnic cleansing",
+      "genocide",
+      "overdose",
+      "rape",
+      "how to hurt",
+      "hack bank",
+      "credit card theft"
+    ],
+    "yellowKeywords": [
+      "guaranteed profit",
+      "insider tip",
+      "evade taxes",
+      "diagnose",
+      "prescribe",
+      "legal advice",
+      "financial advice",
+      "weapon",
+      "violent",
+      "harass",
+      "exploit"
+    ]
+  },
+  "sentiment": {
+    "positiveKeywords": [
+      "good",
+      "great",
+      "helpful",
+      "constructive",
+      "benefit",
+      "improve",
+      "safe",
+      "clarify",
+      "collaborate"
+    ],
+    "negativeKeywords": [
+      "bad",
+      "terrible",
+      "harm",
+      "danger",
+      "risky",
+      "hate",
+      "angry",
+      "useless",
+      "worse"
+    ],
+    "threshold": 1
+  }
+}

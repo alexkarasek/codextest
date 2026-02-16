@@ -22,18 +22,18 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="debates">1. Debates</button>
-    <button class="tab-btn" data-tab="chats">2. Chats</button>
-    <button class="tab-btn" data-tab="governance">3. Governance</button>
-    <button class="tab-btn" data-tab="config">4. Admin & Config</button>
+    <button class="tab-btn active" data-tab="chats">1. Chats</button>
+    <button class="tab-btn" data-tab="governance">2. Governance</button>
+    <button class="tab-btn" data-tab="config">3. Admin & Config</button>
   </nav>
-  <nav id="subnav-debates" class="subtabs">
-    <button id="debates-view-setup" class="subtab-btn active" type="button">New Debate</button>
-    <button id="debates-view-viewer" class="subtab-btn" type="button">Debate Viewer</button>
+  <nav id="subnav-chats" class="subtabs hidden">
+    <button id="chats-view-simple" class="subtab-btn active" type="button">Simple Chat</button>
+    <button id="chats-view-group" class="subtab-btn" type="button">Group Chat</button>
   </nav>
   <nav id="subnav-config" class="subtabs hidden">
     <button id="config-view-personas" class="subtab-btn active" type="button">Personas</button>
     <button id="config-view-knowledge" class="subtab-btn" type="button">Knowledge Studio</button>
+    <button id="config-view-rai" class="subtab-btn" type="button">Responsible AI</button>
   </nav>
 
   <main>
@@ -51,12 +51,12 @@
         </div>
 
         <div class="panel">
-          <h2 id="persona-form-title">Create Persona <span class="tip" tabindex="0">?<span class="tip-flyout">`id`, `displayName`, `description`, and `systemPrompt` are required. Id must be a slug.</span></span></h2>
+          <h2 id="persona-form-title">Create Persona <span class="tip" tabindex="0">?<span class="tip-flyout">`id`, `displayName`, and `systemPrompt` are required. Optional fields can be inferred from the prompt.</span></span></h2>
           <form id="persona-form" class="stack">
             <label>Id (slug) <span class="tip" tabindex="0">?<span class="tip-flyout">Lowercase letters, numbers, and dashes only. Example: policy-analyst.</span></span><input name="id" required placeholder="policy-analyst"></label>
             <label>Display Name <span class="tip" tabindex="0">?<span class="tip-flyout">Human-readable name shown in debate turns.</span></span><input name="displayName" required></label>
             <label>Role/Title<input name="role"></label>
-            <label>Description<input name="description" required></label>
+            <label>Description<input name="description" placeholder="Optional: auto-derived from prompt if blank"></label>
             <label>System Prompt <span class="tip" tabindex="0">?<span class="tip-flyout">Primary instruction for this persona. Keep it specific and behavior-focused.</span></span><textarea name="systemPrompt" rows="6" required></textarea></label>
             <label>Speaking Tone<input name="tone" placeholder="calm, direct"></label>
             <label>Speaking Verbosity<input name="verbosity" placeholder="concise"></label>
@@ -105,7 +105,33 @@
       </div>
     </section>
 
-    <section id="tab-new-debate" class="tab-section active">
+    <section id="tab-rai" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Responsible AI Policy</h2>
+          <div class="hint">Configure stoplight and sentiment heuristics used for exchange-level signals in chat, debate viewer, and governance metrics.</div>
+          <label>Red Keywords (one per line)<textarea id="rai-red-keywords" rows="10" placeholder="high risk terms"></textarea></label>
+          <label>Yellow Keywords (one per line)<textarea id="rai-yellow-keywords" rows="10" placeholder="medium risk terms"></textarea></label>
+          <label>Positive Sentiment Keywords (one per line)<textarea id="rai-positive-keywords" rows="8"></textarea></label>
+          <label>Negative Sentiment Keywords (one per line)<textarea id="rai-negative-keywords" rows="8"></textarea></label>
+          <label>Sentiment Threshold<input id="rai-sentiment-threshold" type="number" min="1" max="5" value="1"></label>
+          <div class="row">
+            <button id="rai-save" type="button">Save Policy</button>
+            <button id="rai-reset-defaults" type="button">Reset to Defaults</button>
+            <button id="rai-reload" type="button">Reload</button>
+          </div>
+          <div id="rai-status" class="status"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Policy Preview</h2>
+          <div class="hint">Changes apply to newly rendered exchanges and governance calculations.</div>
+          <pre id="rai-preview" class="preview"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-new-debate" class="tab-section">
       <div class="grid two">
         <div class="panel stack">
           <h2>Debate Setup <span class="tip" tabindex="0">?<span class="tip-flyout">Configure the topic, choose participants in order, then run. Turns execute sequentially.</span></span></h2>
@@ -114,6 +140,9 @@
             <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The debate question all personas will respond to each round.</span></span><input id="debate-topic" type="text" placeholder="Should cities ban private cars downtown?" required></label>
             <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional background context"></textarea></label>
           </div>
+
+          <details class="setup-advanced">
+            <summary>Advanced Setup (Topic Discovery, Persona Generation, Settings, Knowledge, Participants)</summary>
 
           <div class="setup-step stack">
             <h3>Step 2: Discover Topic Sources (Optional)</h3>
@@ -184,6 +213,7 @@
               <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
             </div>
           </div>
+          </details>
         </div>
 
         <div class="panel stack">
@@ -200,21 +230,80 @@
       </div>
     </section>
 
+    <section id="tab-simple-chat" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Simple Chat</h2>
+          <label>Chat Title<input id="simple-chat-title" type="text" value="Simple Chat"></label>
+          <label>Shared Context<textarea id="simple-chat-context" rows="3" placeholder="Optional background instructions for this chat"></textarea></label>
+          <div class="grid two">
+            <label>Model
+              <select id="simple-chat-model">
+                <option value="gpt-4.1-mini" selected>gpt-4.1-mini</option>
+                <option value="gpt-4.1">gpt-4.1</option>
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+              </select>
+            </label>
+            <label>Temperature<input id="simple-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.4"></label>
+            <label>Max Response Words<input id="simple-chat-max-words" type="number" min="40" max="800" value="220"></label>
+          </div>
+          <h3>Knowledge Packs (Optional)</h3>
+          <div id="simple-chat-knowledge-list" class="list"></div>
+          <div class="row">
+            <button id="simple-chat-create" type="button">Create Simple Chat</button>
+            <button id="simple-chat-refresh-list" type="button">Refresh Sessions</button>
+          </div>
+          <div id="simple-chat-create-status" class="status"></div>
+          <h3>Saved Sessions</h3>
+          <div id="simple-chat-session-list" class="list"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Conversation</h2>
+          <div class="row">
+            <label>Chat Id<input id="simple-chat-id" type="text" placeholder="Create or load a simple chat id"></label>
+            <button id="simple-chat-load" type="button">Load</button>
+          </div>
+          <div id="simple-chat-status" class="status">Create or load a simple chat session to begin.</div>
+          <div id="simple-chat-history" class="chat-history"></div>
+          <div class="row">
+            <input id="simple-chat-message" type="text" placeholder="Ask anything, optionally grounded in selected knowledge packs">
+            <button id="simple-chat-send" type="button">Send</button>
+          </div>
+          <div class="hint">Citations appear automatically when matching knowledge pack evidence is found.</div>
+        </div>
+      </div>
+    </section>
+
     <section id="tab-persona-chat" class="tab-section">
       <div class="grid two">
         <div class="panel stack">
           <h2>Persona Collaboration Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Create a free-form chat session with one or more personas. An orchestrator picks the most relevant subset each turn, so not everyone replies every time.</span></span></h2>
+          <div class="row">
+            <button id="group-work-live" type="button">Live Group Chat</button>
+            <button id="group-work-debate-setup" type="button">Formal Debate Setup</button>
+            <button id="group-work-debate-viewer" type="button">Debate Viewer</button>
+          </div>
           <label>Chat Title<input id="persona-chat-title" type="text" value="Persona Collaboration Chat"></label>
           <label>Shared Context<textarea id="persona-chat-context" rows="3" placeholder="Optional context shared across all persona responses"></textarea></label>
           <div class="grid two">
             <label>Model<input id="persona-chat-model" type="text" value="gpt-4.1-mini"></label>
             <label>Temperature<input id="persona-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.6"></label>
             <label>Max Words / Persona Turn<input id="persona-chat-max-words" type="number" min="40" max="400" value="140"></label>
+            <label>Engagement Mode
+              <select id="persona-chat-mode">
+                <option value="chat" selected>Chat</option>
+                <option value="panel">Panel Discussion</option>
+                <option value="debate-work-order">Debate + Work Order</option>
+              </select>
+            </label>
           </div>
           <h3>Select Personas (One or More)</h3>
           <div id="persona-chat-persona-list" class="list"></div>
           <div class="row">
             <button id="persona-chat-create" type="button">Create Chat Session</button>
+            <button id="persona-chat-new-draft" type="button">New Chat Draft</button>
             <button id="persona-chat-refresh-list" type="button">Refresh Sessions</button>
           </div>
           <div id="persona-chat-create-status" class="status"></div>
@@ -248,6 +337,11 @@
         </div>
         <div id="viewer-progress" class="status"></div>
         <pre id="viewer-transcript" class="transcript"></pre>
+        <div class="panel stack">
+          <h3>Exchange Risk Signals</h3>
+          <div class="hint">Stoplight indicators are heuristic signals based on text content and sentiment terms.</div>
+          <div id="viewer-turns" class="chat-history"></div>
+        </div>
         <div class="chatbox stack">
           <h3>Transcript Chat</h3>
           <div class="hint">
@@ -269,6 +363,15 @@
         <div class="panel stack">
           <h2>Governance Dashboard</h2>
           <div id="admin-summary-cards" class="summary-cards"></div>
+          <div class="admin-matrix-controls row">
+            <span class="hint">Matrix Dimension</span>
+            <button id="admin-dim-channel" type="button">Channel</button>
+            <button id="admin-dim-model" type="button">Model</button>
+            <button id="admin-dim-persona" type="button">Persona</button>
+            <button id="admin-clear-filter" type="button">Clear Drill Filter</button>
+          </div>
+          <div id="admin-filter-summary" class="hint">No active drill filter.</div>
+          <div id="admin-matrix" class="admin-matrix"></div>
           <div class="row">
             <button id="admin-view-debates" type="button">Debate View</button>
             <button id="admin-view-chats" type="button">Chat View</button>
@@ -280,9 +383,14 @@
         </div>
 
         <div class="panel stack">
-          <h2>Drill Down</h2>
-          <div id="admin-detail-status" class="status">Select a debate from Debate View to inspect rounds, outcomes, and transcript.</div>
-          <pre id="admin-detail" class="transcript"></pre>
+          <h2>Visual Analytics</h2>
+          <div id="admin-chart-status" class="status">Charts update from current matrix filters.</div>
+          <div id="admin-charts" class="stack"></div>
+          <div class="row">
+            <button id="admin-nav-group-history" type="button">Open Group Chat History</button>
+            <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>
+            <button id="admin-nav-debate-history" type="button">Open Debate Viewer</button>
+          </div>
         </div>
       </div>
     </section>

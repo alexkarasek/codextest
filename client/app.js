@@ -5,15 +5,20 @@ const state = {
   pollingDebateId: null,
   pollIntervalId: null,
   activeDebateId: null,
-  mainTab: "debates",
-  debatesView: "setup",
+  mainTab: "chats",
+  chatsView: "simple",
+  groupWorkspace: "live",
   configView: "personas",
+  responsibleAiPolicy: null,
   chatByDebate: {},
   lastCitationsByDebate: {},
   adminView: "debates",
   adminOverview: null,
   adminPersonas: null,
   adminChats: null,
+  adminMatrixDimension: "channel",
+  adminFilter: null,
+  adminMetricFocus: null,
   knowledgePacks: [],
   personaFormKnowledgePackIds: [],
   selectedKnowledgePackIds: [],
@@ -26,6 +31,14 @@ const state = {
   },
   personaChat: {
     selectedPersonaIds: [],
+    sessions: [],
+    activeChatId: null,
+    historyByChat: {},
+    activeSessionPersonaIds: [],
+    dirtyConfig: false
+  },
+  simpleChat: {
+    selectedKnowledgePackIds: [],
     sessions: [],
     activeChatId: null,
     historyByChat: {}
@@ -43,6 +56,13 @@ function parseCsv(input) {
     .filter(Boolean);
 }
 
+function parseLineList(input) {
+  return String(input || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function safeNumberInput(raw, fallback, { min = -Infinity, max = Infinity, integer = false } = {}) {
   let n = Number(raw);
   if (!Number.isFinite(n)) n = fallback;
@@ -50,6 +70,57 @@ function safeNumberInput(raw, fallback, { min = -Infinity, max = Infinity, integ
   if (n < min) n = min;
   if (n > max) n = max;
   return n;
+}
+
+function assessExchange(content) {
+  const text = String(content || "").toLowerCase();
+  const policy = state.responsibleAiPolicy || {
+    stoplight: { redKeywords: [], yellowKeywords: [] },
+    sentiment: { positiveKeywords: [], negativeKeywords: [], threshold: 1 }
+  };
+  const redTerms = policy.stoplight?.redKeywords || [];
+  const yellowTerms = policy.stoplight?.yellowKeywords || [];
+  const positiveTerms = policy.sentiment?.positiveKeywords || [];
+  const negativeTerms = policy.sentiment?.negativeKeywords || [];
+  const threshold = Number(policy.sentiment?.threshold || 1);
+
+  const red = redTerms.some((term) => text.includes(String(term).toLowerCase()));
+  const yellow = !red && yellowTerms.some((term) => text.includes(String(term).toLowerCase()));
+  const stoplight = red ? "red" : yellow ? "yellow" : "green";
+  let pos = 0;
+  let neg = 0;
+  positiveTerms.forEach((term) => {
+    if (text.includes(String(term).toLowerCase())) pos += 1;
+  });
+  negativeTerms.forEach((term) => {
+    if (text.includes(String(term).toLowerCase())) neg += 1;
+  });
+  const sentiment = pos - neg >= threshold ? "positive" : neg - pos >= threshold ? "negative" : "neutral";
+  return { stoplight, sentiment };
+}
+
+function renderExchangeMessage(container, { roleClass, title, content }) {
+  const signal = assessExchange(content);
+  const el = document.createElement("div");
+  el.className = `chat-msg ${roleClass}`;
+  const head = document.createElement("div");
+  head.className = "chat-msg-head";
+  const titleEl = document.createElement("span");
+  titleEl.textContent = String(title || "");
+  const badges = document.createElement("span");
+  badges.className = "risk-badges";
+  const riskChip = document.createElement("span");
+  riskChip.className = `risk-chip ${signal.stoplight}`;
+  riskChip.textContent = signal.stoplight.toUpperCase();
+  const sentimentChip = document.createElement("span");
+  sentimentChip.className = `risk-chip sentiment-${signal.sentiment}`;
+  sentimentChip.textContent = signal.sentiment;
+  badges.append(riskChip, sentimentChip);
+  head.append(titleEl, badges);
+  const body = document.createElement("div");
+  body.textContent = String(content || "");
+  el.append(head, body);
+  container.appendChild(el);
 }
 
 function apiErrorMessage(payload, fallback = "Request failed") {
@@ -149,13 +220,33 @@ function renderChatHistory() {
   }
 
   history.forEach((msg) => {
-    const el = document.createElement("div");
-    el.className = `chat-msg ${msg.role}`;
-    el.textContent = `${msg.role === "user" ? "You" : "Assistant"}: ${msg.content}`;
-    container.appendChild(el);
+    renderExchangeMessage(container, {
+      roleClass: msg.role === "user" ? "user" : "assistant",
+      title: msg.role === "user" ? "You" : "Assistant",
+      content: msg.content
+    });
   });
 
   container.scrollTop = container.scrollHeight;
+}
+
+function renderDebateTurns(turns) {
+  const container = byId("viewer-turns");
+  if (!container) return;
+  container.innerHTML = "";
+  const entries = Array.isArray(turns) ? turns : [];
+  if (!entries.length) {
+    container.textContent = "No debate exchanges yet.";
+    return;
+  }
+  entries.forEach((turn) => {
+    const title = `${turn.displayName || turn.speakerId || "Speaker"} (Round ${turn.round || 0})`;
+    renderExchangeMessage(container, {
+      roleClass: turn.type === "moderator" ? "system" : "assistant",
+      title,
+      content: turn.text || ""
+    });
+  });
 }
 
 async function askTranscriptChat() {
@@ -235,6 +326,11 @@ function renderPersonaChatPersonaList() {
       } else {
         state.personaChat.selectedPersonaIds = state.personaChat.selectedPersonaIds.filter((id) => id !== personaId);
       }
+      if (state.personaChat.activeChatId) {
+        state.personaChat.dirtyConfig = true;
+        byId("persona-chat-status").textContent =
+          "Persona selection changed. Click Create Chat Session to start a fresh conversation.";
+      }
     });
   });
 }
@@ -255,6 +351,7 @@ function renderPersonaChatSessionList() {
     card.innerHTML = `
       <div class="card-title">${session.title || "Persona Chat"}</div>
       <div class="muted">${session.chatId}</div>
+      <div>Mode: ${session.engagementMode || "chat"}</div>
       <div>Participants: ${(session.participants || []).join(", ") || "none"}</div>
       <div>Messages: ${session.messageCount || 0}</div>
     `;
@@ -290,10 +387,11 @@ function renderPersonaChatHistory() {
   history.forEach((msg) => {
     const role = msg.role === "user" ? "user" : (msg.role === "orchestrator" ? "system" : "assistant");
     const title = msg.role === "user" ? "You" : (msg.role === "orchestrator" ? "Orchestrator" : (msg.displayName || "Persona"));
-    const el = document.createElement("div");
-    el.className = `chat-msg ${role}`;
-    el.textContent = `${title}: ${msg.content}`;
-    container.appendChild(el);
+    renderExchangeMessage(container, {
+      roleClass: role,
+      title,
+      content: msg.content
+    });
   });
 
   container.scrollTop = container.scrollHeight;
@@ -320,8 +418,24 @@ async function loadPersonaChatSession(chatId) {
   try {
     const data = await apiGet(`/api/persona-chats/${encodeURIComponent(chatId)}`);
     state.personaChat.activeChatId = chatId;
+    state.personaChat.activeSessionPersonaIds = Array.isArray(data.session?.personas)
+      ? data.session.personas.map((p) => p.id).filter(Boolean)
+      : [];
+    state.personaChat.selectedPersonaIds = state.personaChat.activeSessionPersonaIds.slice();
+    state.personaChat.dirtyConfig = false;
     state.personaChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
     byId("persona-chat-id").value = chatId;
+    if (data.session?.settings?.model) byId("persona-chat-model").value = data.session.settings.model;
+    if (typeof data.session?.settings?.temperature !== "undefined") {
+      byId("persona-chat-temperature").value = String(data.session.settings.temperature);
+    }
+    if (typeof data.session?.settings?.maxWordsPerTurn !== "undefined") {
+      byId("persona-chat-max-words").value = String(data.session.settings.maxWordsPerTurn);
+    }
+    if (data.session?.settings?.engagementMode) {
+      byId("persona-chat-mode").value = data.session.settings.engagementMode;
+    }
+    renderPersonaChatPersonaList();
     renderPersonaChatHistory();
     status.textContent = `Loaded chat ${chatId}`;
   } catch (error) {
@@ -348,7 +462,8 @@ async function createPersonaChatSession() {
         min: 40,
         max: 400,
         integer: true
-      })
+      }),
+      engagementMode: byId("persona-chat-mode").value || "chat"
     }
   };
 
@@ -356,7 +471,8 @@ async function createPersonaChatSession() {
   try {
     const data = await apiSend("/api/persona-chats", "POST", payload);
     const chatId = data.chatId;
-    status.textContent = `Created chat ${chatId}`;
+    status.textContent = `Created new chat ${chatId}`;
+    state.personaChat.dirtyConfig = false;
     await loadPersonaChatSessions();
     await loadPersonaChatSession(chatId);
   } catch (error) {
@@ -364,14 +480,39 @@ async function createPersonaChatSession() {
   }
 }
 
+function startNewPersonaChatDraft() {
+  state.personaChat.activeChatId = null;
+  state.personaChat.activeSessionPersonaIds = [];
+  state.personaChat.dirtyConfig = false;
+  byId("persona-chat-id").value = "";
+  byId("persona-chat-title").value = "Persona Collaboration Chat";
+  byId("persona-chat-context").value = "";
+  byId("persona-chat-model").value = "gpt-4.1-mini";
+  byId("persona-chat-temperature").value = "0.6";
+  byId("persona-chat-max-words").value = "140";
+  byId("persona-chat-mode").value = "chat";
+  byId("persona-chat-status").textContent = "Draft reset. Select personas/settings and click Create Chat Session.";
+  renderPersonaChatHistory();
+}
+
 async function sendPersonaChatMessage() {
   const status = byId("persona-chat-status");
   const input = byId("persona-chat-message");
-  const chatId = state.personaChat.activeChatId || byId("persona-chat-id").value.trim();
+  const explicitChatId = byId("persona-chat-id").value.trim();
+  const chatId = explicitChatId || state.personaChat.activeChatId;
   const message = input.value.trim();
 
   if (!chatId) {
     status.textContent = "Create or load a chat first.";
+    return;
+  }
+  if (explicitChatId && state.personaChat.activeChatId && explicitChatId !== state.personaChat.activeChatId) {
+    status.textContent = "Chat id field differs from active session. Click Load to switch sessions first.";
+    return;
+  }
+  if (state.personaChat.dirtyConfig) {
+    status.textContent =
+      "Chat configuration changed since this session loaded. Click Create Chat Session to start a new conversation.";
     return;
   }
   if (!message) return;
@@ -408,15 +549,207 @@ async function sendPersonaChatMessage() {
   }
 }
 
+function renderSimpleChatKnowledgeList() {
+  const container = byId("simple-chat-knowledge-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!state.knowledgePacks.length) {
+    container.textContent = "No knowledge packs available yet.";
+    return;
+  }
+
+  state.knowledgePacks.forEach((pack) => {
+    const row = document.createElement("label");
+    row.className = "inline";
+    const checked = state.simpleChat.selectedKnowledgePackIds.includes(pack.id);
+    row.innerHTML = `
+      <input type="checkbox" data-simple-pack-id="${pack.id}" ${checked ? "checked" : ""}>
+      ${pack.title} <span class="muted">(${pack.id})</span>
+    `;
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll("input[type='checkbox'][data-simple-pack-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const packId = input.getAttribute("data-simple-pack-id");
+      if (!packId) return;
+      if (input.checked) {
+        if (!state.simpleChat.selectedKnowledgePackIds.includes(packId)) {
+          state.simpleChat.selectedKnowledgePackIds.push(packId);
+        }
+      } else {
+        state.simpleChat.selectedKnowledgePackIds = state.simpleChat.selectedKnowledgePackIds.filter((id) => id !== packId);
+      }
+    });
+  });
+}
+
+function renderSimpleChatSessionList() {
+  const container = byId("simple-chat-session-list");
+  if (!container) return;
+  container.innerHTML = "";
+  const sessions = state.simpleChat.sessions || [];
+
+  if (!sessions.length) {
+    container.textContent = "No simple chat sessions yet.";
+    return;
+  }
+
+  sessions.forEach((session) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${session.title || "Simple Chat"}</div>
+      <div class="muted">${session.chatId}</div>
+      <div>Model: ${session.model || "unknown"} | Messages: ${session.messageCount || 0}</div>
+      <div>Knowledge: ${(session.knowledgePackIds || []).join(", ") || "none"}</div>
+    `;
+    const row = document.createElement("div");
+    row.className = "row";
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.textContent = "Load Chat";
+    loadBtn.addEventListener("click", () => loadSimpleChatSession(session.chatId));
+    row.appendChild(loadBtn);
+    card.appendChild(row);
+    container.appendChild(card);
+  });
+}
+
+function renderSimpleChatHistory() {
+  const container = byId("simple-chat-history");
+  if (!container) return;
+  container.innerHTML = "";
+  const chatId = state.simpleChat.activeChatId;
+  if (!chatId) {
+    container.textContent = "No chat loaded.";
+    return;
+  }
+
+  const history = state.simpleChat.historyByChat[chatId] || [];
+  if (!history.length) {
+    container.textContent = "No messages yet.";
+    return;
+  }
+
+  history.forEach((msg) => {
+    const role = msg.role === "user" ? "user" : "assistant";
+    const title = msg.role === "user" ? "You" : "Assistant";
+    const citations = Array.isArray(msg.citations) && msg.citations.length
+      ? `\n\nCitations: ${msg.citations.map((c) => c.id || c.title).join(", ")}`
+      : "";
+    renderExchangeMessage(container, {
+      roleClass: role,
+      title,
+      content: `${msg.content || ""}${citations}`
+    });
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+async function loadSimpleChatSessions() {
+  const status = byId("simple-chat-create-status");
+  try {
+    const data = await apiGet("/api/simple-chats");
+    state.simpleChat.sessions = Array.isArray(data.chats) ? data.chats : [];
+    renderSimpleChatSessionList();
+  } catch (error) {
+    status.textContent = `Failed to load simple chats: ${error.message}`;
+  }
+}
+
+async function loadSimpleChatSession(chatId) {
+  const status = byId("simple-chat-status");
+  if (!chatId) {
+    status.textContent = "Chat id is required.";
+    return;
+  }
+
+  status.textContent = `Loading ${chatId}...`;
+  try {
+    const data = await apiGet(`/api/simple-chats/${encodeURIComponent(chatId)}`);
+    state.simpleChat.activeChatId = chatId;
+    state.simpleChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
+    byId("simple-chat-id").value = chatId;
+    renderSimpleChatHistory();
+    status.textContent = `Loaded simple chat ${chatId}`;
+  } catch (error) {
+    status.textContent = `Failed to load simple chat: ${error.message}`;
+  }
+}
+
+async function createSimpleChatSession() {
+  const status = byId("simple-chat-create-status");
+  const payload = {
+    title: byId("simple-chat-title").value.trim() || "Simple Chat",
+    context: byId("simple-chat-context").value.trim(),
+    knowledgePackIds: state.simpleChat.selectedKnowledgePackIds.slice(),
+    settings: {
+      model: byId("simple-chat-model").value.trim() || "gpt-4.1-mini",
+      temperature: safeNumberInput(byId("simple-chat-temperature").value, 0.4, { min: 0, max: 2 }),
+      maxResponseWords: safeNumberInput(byId("simple-chat-max-words").value, 220, {
+        min: 40,
+        max: 800,
+        integer: true
+      })
+    }
+  };
+  status.textContent = "Creating simple chat session...";
+  try {
+    const data = await apiSend("/api/simple-chats", "POST", payload);
+    const chatId = data.chatId;
+    status.textContent = `Created simple chat ${chatId}`;
+    await loadSimpleChatSessions();
+    await loadSimpleChatSession(chatId);
+  } catch (error) {
+    status.textContent = `Create failed: ${error.message}`;
+  }
+}
+
+async function sendSimpleChatMessage() {
+  const status = byId("simple-chat-status");
+  const input = byId("simple-chat-message");
+  const chatId = state.simpleChat.activeChatId || byId("simple-chat-id").value.trim();
+  const message = input.value.trim();
+
+  if (!chatId) {
+    status.textContent = "Create or load a chat first.";
+    return;
+  }
+  if (!message) return;
+
+  if (!state.simpleChat.historyByChat[chatId]) state.simpleChat.historyByChat[chatId] = [];
+  state.simpleChat.historyByChat[chatId].push({ role: "user", content: message });
+  state.simpleChat.activeChatId = chatId;
+  renderSimpleChatHistory();
+  input.value = "";
+  status.textContent = "Thinking...";
+
+  try {
+    const data = await apiSend(`/api/simple-chats/${encodeURIComponent(chatId)}/messages`, "POST", { message });
+    if (data.assistant) {
+      state.simpleChat.historyByChat[chatId].push(data.assistant);
+    }
+    renderSimpleChatHistory();
+    status.textContent = `Response ready${Array.isArray(data.citations) && data.citations.length ? ` with ${data.citations.length} citations.` : "."}`;
+    await loadSimpleChatSessions();
+  } catch (error) {
+    status.textContent = `Simple chat failed: ${error.message}`;
+  }
+}
+
 function setSubtabActive(group, value) {
   const map = {
-    debates: {
-      setup: "debates-view-setup",
-      viewer: "debates-view-viewer"
+    chats: {
+      simple: "chats-view-simple",
+      group: "chats-view-group"
     },
     config: {
       personas: "config-view-personas",
-      knowledge: "config-view-knowledge"
+      knowledge: "config-view-knowledge",
+      rai: "config-view-rai"
     }
   };
   const groupMap = map[group] || {};
@@ -426,20 +759,48 @@ function setSubtabActive(group, value) {
   });
 }
 
-function setDebatesView(view) {
-  state.debatesView = view === "viewer" ? "viewer" : "setup";
-  byId("tab-new-debate").classList.toggle("active", state.mainTab === "debates" && state.debatesView === "setup");
-  byId("tab-viewer").classList.toggle("active", state.mainTab === "debates" && state.debatesView === "viewer");
-  setSubtabActive("debates", state.debatesView);
+function setGroupWorkspace(view) {
+  state.groupWorkspace = ["live", "debate-setup", "debate-viewer"].includes(view) ? view : "live";
+  const groupActive = state.mainTab === "chats" && state.chatsView === "group";
+  byId("tab-persona-chat").classList.toggle("active", groupActive && state.groupWorkspace === "live");
+  byId("tab-new-debate").classList.toggle("active", groupActive && state.groupWorkspace === "debate-setup");
+  byId("tab-viewer").classList.toggle("active", groupActive && state.groupWorkspace === "debate-viewer");
+  byId("group-work-live").classList.toggle("active", state.groupWorkspace === "live");
+  byId("group-work-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
+  byId("group-work-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
+}
+
+function setChatsView(view) {
+  state.chatsView = view === "group" ? "group" : "simple";
+  byId("tab-simple-chat").classList.toggle("active", state.mainTab === "chats" && state.chatsView === "simple");
+  byId("tab-persona-chat").classList.remove("active");
+  byId("tab-new-debate").classList.remove("active");
+  byId("tab-viewer").classList.remove("active");
+  setSubtabActive("chats", state.chatsView);
+  if (state.mainTab === "chats" && state.chatsView === "simple") {
+    renderSimpleChatKnowledgeList();
+    renderSimpleChatHistory();
+    loadSimpleChatSessions();
+  }
+  if (state.mainTab === "chats" && state.chatsView === "group") {
+    setGroupWorkspace(state.groupWorkspace);
+    renderPersonaChatPersonaList();
+    renderPersonaChatHistory();
+    loadPersonaChatSessions();
+  }
 }
 
 function setConfigView(view) {
-  state.configView = view === "knowledge" ? "knowledge" : "personas";
+  state.configView = view === "knowledge" || view === "rai" ? view : "personas";
   byId("tab-personas").classList.toggle("active", state.mainTab === "config" && state.configView === "personas");
   byId("tab-knowledge").classList.toggle("active", state.mainTab === "config" && state.configView === "knowledge");
+  byId("tab-rai").classList.toggle("active", state.mainTab === "config" && state.configView === "rai");
   setSubtabActive("config", state.configView);
   if (state.mainTab === "config" && state.configView === "knowledge") {
     loadKnowledgePacks();
+  }
+  if (state.mainTab === "config" && state.configView === "rai") {
+    loadResponsibleAiPolicy();
   }
 }
 
@@ -453,19 +814,11 @@ function switchTab(tabName) {
     section.classList.remove("active");
   });
 
-  byId("subnav-debates").classList.toggle("hidden", tabName !== "debates");
+  byId("subnav-chats").classList.toggle("hidden", tabName !== "chats");
   byId("subnav-config").classList.toggle("hidden", tabName !== "config");
 
-  if (tabName === "debates") {
-    setDebatesView(state.debatesView);
-    return;
-  }
-
   if (tabName === "chats") {
-    byId("tab-persona-chat").classList.add("active");
-    renderPersonaChatPersonaList();
-    renderPersonaChatHistory();
-    loadPersonaChatSessions();
+    setChatsView(state.chatsView);
     return;
   }
 
@@ -725,6 +1078,8 @@ function renderSelectedPersonas() {
   state.selectedPersonas.forEach((entry, index) => {
     const card = document.createElement("div");
     card.className = "card";
+    card.draggable = true;
+    card.dataset.index = String(index);
 
     const title = document.createElement("div");
     title.className = "card-title";
@@ -766,6 +1121,31 @@ function renderSelectedPersonas() {
 
     actions.append(up, down, remove);
     card.appendChild(actions);
+
+    card.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("text/plain", String(index));
+      event.dataTransfer.effectAllowed = "move";
+      card.classList.add("dragging");
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+    });
+    card.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    });
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const fromIdx = Number(event.dataTransfer.getData("text/plain"));
+      const toIdx = index;
+      if (!Number.isFinite(fromIdx) || fromIdx === toIdx) return;
+      const next = state.selectedPersonas.slice();
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      state.selectedPersonas = next;
+      renderSelectedPersonas();
+    });
+
     container.appendChild(card);
   });
 }
@@ -1107,6 +1487,14 @@ function renderAdminSummaryCards() {
     { label: "Chats", value: totals.chats ?? 0 },
     { label: "Total Tokens", value: Number(totals.totalTokens || 0).toLocaleString() },
     { label: "Chat Messages", value: Number(totals.chatMessages || 0).toLocaleString() },
+    { label: "Scope Refusals", value: Number(totals.scopeRefusals || 0).toLocaleString() },
+    { label: "Grounded Replies", value: Number(totals.groundedReplies || 0).toLocaleString() },
+    { label: "Ungrounded Replies", value: Number(totals.ungroundedReplies || 0).toLocaleString() },
+    { label: "Risk Red", value: Number(totals.stoplightRed || 0).toLocaleString() },
+    { label: "Risk Yellow", value: Number(totals.stoplightYellow || 0).toLocaleString() },
+    { label: "Risk Green", value: Number(totals.stoplightGreen || 0).toLocaleString() },
+    { label: "Sentiment +", value: Number(totals.sentimentPositive || 0).toLocaleString() },
+    { label: "Sentiment -", value: Number(totals.sentimentNegative || 0).toLocaleString() },
     {
       label: "Est. Cost (USD)",
       value:
@@ -1123,10 +1511,453 @@ function renderAdminSummaryCards() {
     .join("");
 }
 
+function formatAdminUsd(value) {
+  return typeof value === "number" ? `$${value.toFixed(6)}` : "n/a";
+}
+
+function getPersonaNameMaps() {
+  const idToName = new Map();
+  const nameToId = new Map();
+  (state.adminPersonas?.personas || []).forEach((p) => {
+    idToName.set(p.id, p.displayName);
+    nameToId.set(String(p.displayName || "").toLowerCase(), p.id);
+  });
+  return { idToName, nameToId };
+}
+
+function buildAdminMatrixRows() {
+  const debates = state.adminOverview?.debates || [];
+  const chats = state.adminChats?.chats || state.adminOverview?.chats || [];
+  const personas = state.adminPersonas?.personas || [];
+  const { idToName, nameToId } = getPersonaNameMaps();
+
+  const rowsByDimension = {
+    channel: [],
+    model: [],
+    persona: []
+  };
+
+  const channelMap = new Map();
+  const modelMap = new Map();
+  const personaMap = new Map(
+    personas.map((p) => [
+      p.id,
+      {
+        key: p.id,
+        label: p.displayName,
+        conversations: 0,
+        tokens: 0,
+        cost: 0,
+        messages: 0,
+        scopeRefusals: 0,
+        grounded: 0
+      }
+    ])
+  );
+
+  function ensureMetricRow(map, key, label) {
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label,
+        conversations: 0,
+        tokens: 0,
+        cost: 0,
+        messages: 0,
+        scopeRefusals: 0,
+        grounded: 0
+      });
+    }
+    return map.get(key);
+  }
+
+  debates.forEach((debate) => {
+    const model = debate.model || "unknown";
+    const turns = Number(debate.drillSummary?.turns || 0);
+    const tokens = Number(debate.tokenUsage?.totalTokens || 0);
+    const cost = typeof debate.estimatedCostUsd === "number" ? debate.estimatedCostUsd : 0;
+    const channelRow = ensureMetricRow(channelMap, "debate", "Debate");
+    const modelRow = ensureMetricRow(modelMap, model, model);
+    channelRow.conversations += 1;
+    channelRow.tokens += tokens;
+    channelRow.cost += cost;
+    channelRow.messages += turns;
+    modelRow.conversations += 1;
+    modelRow.tokens += tokens;
+    modelRow.cost += cost;
+    modelRow.messages += turns;
+
+    (debate.participants || []).forEach((name) => {
+      const pid = nameToId.get(String(name).toLowerCase());
+      if (!pid || !personaMap.has(pid)) return;
+      const row = personaMap.get(pid);
+      row.conversations += 1;
+      row.tokens += tokens;
+      row.cost += cost;
+      row.messages += turns;
+    });
+  });
+
+  chats.forEach((chat) => {
+    const model = chat.model || "unknown";
+    const kind = chat.kind === "simple" ? "simple" : "group";
+    const label = kind === "simple" ? "Simple Chat" : "Group Chat";
+    const tokens = Number(chat.tokenUsage?.totalTokens || 0);
+    const cost = typeof chat.estimatedCostUsd === "number" ? chat.estimatedCostUsd : 0;
+    const messages = Number(chat.messageCount || 0);
+    const scopeRefusals = Number(chat.responsibleAi?.scopeRefusalCount || 0);
+    const grounded = Number(chat.responsibleAi?.groundedReplyCount || 0);
+    const channelRow = ensureMetricRow(channelMap, kind, label);
+    const modelRow = ensureMetricRow(modelMap, model, model);
+
+    channelRow.conversations += 1;
+    channelRow.tokens += tokens;
+    channelRow.cost += cost;
+    channelRow.messages += messages;
+    channelRow.scopeRefusals += scopeRefusals;
+    channelRow.grounded += grounded;
+
+    modelRow.conversations += 1;
+    modelRow.tokens += tokens;
+    modelRow.cost += cost;
+    modelRow.messages += messages;
+    modelRow.scopeRefusals += scopeRefusals;
+    modelRow.grounded += grounded;
+
+    (chat.participants || []).forEach((name) => {
+      const pid = nameToId.get(String(name).toLowerCase());
+      if (!pid || !personaMap.has(pid)) return;
+      const row = personaMap.get(pid);
+      row.conversations += 1;
+      row.tokens += tokens;
+      row.cost += cost;
+      row.messages += messages;
+      row.scopeRefusals += scopeRefusals;
+      row.grounded += grounded;
+    });
+  });
+
+  rowsByDimension.channel = [...channelMap.values()].sort((a, b) => b.conversations - a.conversations);
+  rowsByDimension.model = [...modelMap.values()].sort((a, b) => b.tokens - a.tokens);
+  rowsByDimension.persona = [...personaMap.values()]
+    .filter((row) => row.conversations > 0 || row.messages > 0)
+    .sort((a, b) => b.conversations - a.conversations || String(a.label).localeCompare(String(b.label)));
+
+  // Keep known personas visible even with zero activity when persona dimension is selected.
+  if (!rowsByDimension.persona.length && personas.length) {
+    rowsByDimension.persona = personas.map((p) => ({
+      key: p.id,
+      label: idToName.get(p.id) || p.displayName,
+      conversations: 0,
+      tokens: 0,
+      cost: 0,
+      messages: 0,
+      scopeRefusals: 0,
+      grounded: 0
+    }));
+  }
+
+  return rowsByDimension;
+}
+
+function renderAdminFilterSummary() {
+  const el = byId("admin-filter-summary");
+  if (!state.adminFilter) {
+    el.textContent = "No active drill filter.";
+    return;
+  }
+  const metricText = state.adminMetricFocus ? ` | metric = ${state.adminMetricFocus}` : "";
+  el.textContent = `Active filter: ${state.adminFilter.dimension} = ${state.adminFilter.label}${metricText}`;
+}
+
+function setAdminFilter(filter, nextView = null, metricFocus = null) {
+  state.adminFilter = filter;
+  state.adminMetricFocus = metricFocus;
+  if (nextView) state.adminView = nextView;
+  renderAdminFilterSummary();
+  renderAdminMatrix();
+  renderAdminList();
+  renderAdminCharts();
+}
+
+function getHeatClass(value, max) {
+  if (!max || value <= 0) return "";
+  const ratio = value / max;
+  if (ratio >= 0.66) return "hot-3";
+  if (ratio >= 0.33) return "hot-2";
+  return "hot-1";
+}
+
+function renderAdminMatrix() {
+  const container = byId("admin-matrix");
+  const rowsByDimension = buildAdminMatrixRows();
+  const dimension = state.adminMatrixDimension || "channel";
+  const rows = rowsByDimension[dimension] || [];
+
+  if (!rows.length) {
+    container.textContent = "No metrics yet.";
+    return;
+  }
+
+  const maxes = rows.reduce(
+    (acc, row) => {
+      acc.conversations = Math.max(acc.conversations, Number(row.conversations || 0));
+      acc.tokens = Math.max(acc.tokens, Number(row.tokens || 0));
+      acc.cost = Math.max(acc.cost, Number(row.cost || 0));
+      acc.messages = Math.max(acc.messages, Number(row.messages || 0));
+      acc.scopeRefusals = Math.max(acc.scopeRefusals, Number(row.scopeRefusals || 0));
+      acc.grounded = Math.max(acc.grounded, Number(row.grounded || 0));
+      return acc;
+    },
+    { conversations: 0, tokens: 0, cost: 0, messages: 0, scopeRefusals: 0, grounded: 0 }
+  );
+
+  container.innerHTML = `
+    <table class="admin-matrix-table">
+      <thead>
+        <tr>
+          <th>${dimension[0].toUpperCase()}${dimension.slice(1)}</th>
+          <th>Conversations</th>
+          <th>Tokens</th>
+          <th>Cost (USD)</th>
+          <th>Messages</th>
+          <th>Scope Flags</th>
+          <th>Grounded</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+          <tr data-dimension="${dimension}" data-key="${row.key}" data-label="${row.label}">
+            <td><button type="button" class="admin-matrix-name">${row.label}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.conversations || 0), maxes.conversations)}" data-metric="conversations">${Number(row.conversations || 0).toLocaleString()}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.tokens || 0), maxes.tokens)}" data-metric="tokens">${Number(row.tokens || 0).toLocaleString()}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.cost || 0), maxes.cost)}" data-metric="cost">${formatAdminUsd(Number(row.cost || 0))}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.messages || 0), maxes.messages)}" data-metric="messages">${Number(row.messages || 0).toLocaleString()}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.scopeRefusals || 0), maxes.scopeRefusals)}" data-metric="scopeRefusals">${Number(row.scopeRefusals || 0).toLocaleString()}</button></td>
+            <td><button type="button" class="admin-matrix-cell ${getHeatClass(Number(row.grounded || 0), maxes.grounded)}" data-metric="grounded">${Number(row.grounded || 0).toLocaleString()}</button></td>
+          </tr>
+        `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  function chooseNextViewForFilter(filter, metricFocus = null) {
+    if (filter.dimension === "channel") {
+      return filter.key === "debate" ? "debates" : "chats";
+    }
+    if (filter.dimension === "persona") {
+      if (metricFocus === "scopeRefusals" || metricFocus === "grounded") return "chats";
+      return "personas";
+    }
+    if (filter.dimension === "model") {
+      if (metricFocus === "scopeRefusals" || metricFocus === "grounded") return "chats";
+      return state.adminView;
+    }
+    return state.adminView;
+  }
+
+  container.querySelectorAll("tr[data-key] .admin-matrix-name").forEach((nameEl) => {
+    nameEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const rowEl = nameEl.closest("tr[data-key]");
+      if (!rowEl) return;
+      const filter = {
+        dimension: rowEl.getAttribute("data-dimension"),
+        key: rowEl.getAttribute("data-key"),
+        label: rowEl.getAttribute("data-label")
+      };
+      const nextView = chooseNextViewForFilter(filter, null);
+      setAdminFilter(filter, nextView, null);
+    });
+  });
+
+  container.querySelectorAll("tr[data-key] .admin-matrix-cell").forEach((cellEl) => {
+    cellEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const rowEl = cellEl.closest("tr[data-key]");
+      if (!rowEl) return;
+      const filter = {
+        dimension: rowEl.getAttribute("data-dimension"),
+        key: rowEl.getAttribute("data-key"),
+        label: rowEl.getAttribute("data-label")
+      };
+      const metricFocus = cellEl.getAttribute("data-metric");
+      const nextView = chooseNextViewForFilter(filter, metricFocus);
+      setAdminFilter(filter, nextView, metricFocus);
+    });
+  });
+}
+
+function getFilteredGovernanceData() {
+  const debates = applyDebateFilter(state.adminOverview?.debates || []);
+  const chats = applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []);
+  return { debates, chats };
+}
+
+function aggregateSignals(records) {
+  return records.reduce(
+    (acc, record) => {
+      acc.red += Number(record.responsibleAi?.stoplights?.red || 0);
+      acc.yellow += Number(record.responsibleAi?.stoplights?.yellow || 0);
+      acc.green += Number(record.responsibleAi?.stoplights?.green || 0);
+      acc.positive += Number(record.responsibleAi?.sentiment?.positive || 0);
+      acc.neutral += Number(record.responsibleAi?.sentiment?.neutral || 0);
+      acc.negative += Number(record.responsibleAi?.sentiment?.negative || 0);
+      return acc;
+    },
+    { red: 0, yellow: 0, green: 0, positive: 0, neutral: 0, negative: 0 }
+  );
+}
+
+function renderVizCard(title, rows) {
+  const max = rows.reduce((m, r) => Math.max(m, Number(r.value || 0)), 0);
+  const body = rows.length
+    ? rows
+        .map((row) => {
+          const pct = max > 0 ? Math.max(3, Math.round((Number(row.value || 0) / max) * 100)) : 0;
+          return `
+            <div class="viz-row">
+              <div>${row.label}</div>
+              <div class="viz-bar-track"><div class="viz-bar-fill" style="width:${pct}%"></div></div>
+              <div class="viz-value">${row.valueText || Number(row.value || 0).toLocaleString()}</div>
+            </div>
+          `;
+        })
+        .join("")
+    : `<div class="muted">No data.</div>`;
+  return `<div class="viz-card"><div class="viz-title">${title}</div><div class="viz-bars">${body}</div></div>`;
+}
+
+function renderAdminCharts() {
+  const statusEl = byId("admin-chart-status");
+  const chartsEl = byId("admin-charts");
+  if (!chartsEl || !statusEl) return;
+
+  const { debates, chats } = getFilteredGovernanceData();
+  const records = [...debates, ...chats];
+  const signals = aggregateSignals(records);
+  const channelRows = buildAdminMatrixRows().channel || [];
+  const modelRows = (buildAdminMatrixRows().model || []).slice(0, 6);
+
+  chartsEl.innerHTML = [
+    renderVizCard(
+      "Conversations by Channel",
+      channelRows.map((row) => ({ label: row.label, value: row.conversations }))
+    ),
+    renderVizCard("Top Models by Cost", modelRows.map((row) => ({
+      label: row.label,
+      value: Number(row.cost || 0),
+      valueText: formatAdminUsd(Number(row.cost || 0))
+    }))),
+    renderVizCard("Risk Stoplights", [
+      { label: "Red", value: signals.red },
+      { label: "Yellow", value: signals.yellow },
+      { label: "Green", value: signals.green }
+    ]),
+    renderVizCard("Sentiment", [
+      { label: "Positive", value: signals.positive },
+      { label: "Neutral", value: signals.neutral },
+      { label: "Negative", value: signals.negative }
+    ])
+  ].join("");
+
+  statusEl.textContent = `Charts reflect ${records.length} filtered conversation(s).`;
+}
+
+function getMetricValue(item, metric) {
+  if (!metric) return 0;
+  if (metric === "tokens") return Number(item.tokenUsage?.totalTokens || 0);
+  if (metric === "cost") return Number(item.estimatedCostUsd || 0);
+  if (metric === "messages") {
+    if (typeof item.messageCount === "number") return Number(item.messageCount || 0);
+    return Number(item.drillSummary?.turns || 0);
+  }
+  if (metric === "conversations") return 1;
+  if (metric === "scopeRefusals") return Number(item.responsibleAi?.scopeRefusalCount || 0);
+  if (metric === "grounded") return Number(item.responsibleAi?.groundedReplyCount || 0);
+  return 0;
+}
+
+function sortByMetric(items, metric) {
+  if (!metric) return items;
+  return [...items].sort((a, b) => {
+    const delta = getMetricValue(b, metric) - getMetricValue(a, metric);
+    if (delta !== 0) return delta;
+    return String(b.lastActivityAt || b.createdAt || b.title || b.chatId || b.debateId || "").localeCompare(
+      String(a.lastActivityAt || a.createdAt || a.title || a.chatId || a.debateId || "")
+    );
+  });
+}
+
+async function openDebateInHistory(debateId) {
+  switchTab("chats");
+  setChatsView("group");
+  setGroupWorkspace("debate-viewer");
+  byId("viewer-debate-id").value = debateId;
+  try {
+    await loadDebate(debateId);
+    startPollingDebate(debateId);
+  } catch (error) {
+    byId("viewer-progress").textContent = `Failed to open debate: ${error.message}`;
+  }
+}
+
+async function openChatInHistory(chatId, kind = "group") {
+  try {
+    switchTab("chats");
+    if (kind === "simple") {
+      setChatsView("simple");
+      await loadSimpleChatSession(chatId);
+      return;
+    }
+    setChatsView("group");
+    setGroupWorkspace("live");
+    await loadPersonaChatSession(chatId);
+  } catch (error) {
+    window.alert(`Failed to open chat history: ${error.message}`);
+  }
+}
+
+function applyDebateFilter(debates) {
+  const filter = state.adminFilter;
+  if (!filter) return debates;
+  if (filter.dimension === "model") {
+    return debates.filter((d) => String(d.model || "") === filter.key);
+  }
+  if (filter.dimension === "persona") {
+    return debates.filter((d) => (d.participants || []).some((name) => String(name) === String(filter.label)));
+  }
+  if (filter.dimension === "channel") {
+    return filter.key === "debate" ? debates : [];
+  }
+  return debates;
+}
+
+function applyChatFilter(chats) {
+  const filter = state.adminFilter;
+  if (!filter) return chats;
+  if (filter.dimension === "model") {
+    return chats.filter((c) => String(c.model || "") === filter.key);
+  }
+  if (filter.dimension === "persona") {
+    return chats.filter((c) => (c.participants || []).some((name) => String(name) === String(filter.label)));
+  }
+  if (filter.dimension === "channel") {
+    if (filter.key === "group") return chats.filter((c) => c.kind === "group");
+    if (filter.key === "simple") return chats.filter((c) => c.kind === "simple");
+    return [];
+  }
+  return chats;
+}
+
 function renderAdminDebatesList() {
   const container = byId("admin-list");
   container.innerHTML = "";
-  const debates = state.adminOverview?.debates || [];
+  const debates = sortByMetric(applyDebateFilter(state.adminOverview?.debates || []), state.adminMetricFocus);
 
   if (!debates.length) {
     container.textContent = "No debates found.";
@@ -1147,15 +1978,16 @@ function renderAdminDebatesList() {
       <div class="admin-item-sub">Tokens: ${Number(debate.tokenUsage?.totalTokens || 0).toLocaleString()} | Est. Cost: ${
         typeof debate.estimatedCostUsd === "number" ? `$${debate.estimatedCostUsd.toFixed(6)}` : "n/a"
       }</div>
+      <div class="admin-item-sub">Risk: R ${Number(debate.responsibleAi?.stoplights?.red || 0)} | Y ${Number(debate.responsibleAi?.stoplights?.yellow || 0)} | G ${Number(debate.responsibleAi?.stoplights?.green || 0)}</div>
     `;
 
     const actions = document.createElement("div");
     actions.className = "row";
-    const drill = document.createElement("button");
-    drill.type = "button";
-    drill.textContent = "Drill Down";
-    drill.addEventListener("click", () => loadAdminDebateDetail(debate.debateId));
-    actions.appendChild(drill);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = "Open in Debate Viewer";
+    open.addEventListener("click", () => openDebateInHistory(debate.debateId));
+    actions.appendChild(open);
     item.appendChild(actions);
 
     container.appendChild(item);
@@ -1165,7 +1997,40 @@ function renderAdminDebatesList() {
 function renderAdminPersonasList() {
   const container = byId("admin-list");
   container.innerHTML = "";
-  const personas = state.adminPersonas?.personas || [];
+  const all = state.adminPersonas?.personas || [];
+  const filter = state.adminFilter;
+  let personas = !filter
+    ? all
+    : all.filter((persona) => {
+        if (filter.dimension === "persona") return persona.id === filter.key;
+        if (filter.dimension === "channel") {
+          if (filter.key === "debate") return Number(persona.metrics?.debateCount || 0) > 0;
+          if (filter.key === "group") return Number(persona.metrics?.chatCount || 0) > 0;
+          if (filter.key === "simple") return false;
+          return true;
+        }
+        if (filter.dimension === "model") {
+          const debates = applyDebateFilter(state.adminOverview?.debates || []);
+          const chats = applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []);
+          const usedNames = new Set([
+            ...debates.flatMap((d) => d.participants || []),
+            ...chats.flatMap((c) => c.participants || [])
+          ]);
+          return usedNames.has(persona.displayName);
+        }
+        return true;
+      });
+  if (state.adminMetricFocus) {
+    personas = [...personas].sort((a, b) => {
+      const aConversations = Number(a.metrics?.debateCount || 0) + Number(a.metrics?.chatCount || 0);
+      const bConversations = Number(b.metrics?.debateCount || 0) + Number(b.metrics?.chatCount || 0);
+      const aMessages = Number(a.metrics?.turnCount || 0) + Number(a.metrics?.chatTurnCount || 0);
+      const bMessages = Number(b.metrics?.turnCount || 0) + Number(b.metrics?.chatTurnCount || 0);
+      if (state.adminMetricFocus === "conversations") return bConversations - aConversations;
+      if (state.adminMetricFocus === "messages") return bMessages - aMessages;
+      return String(a.displayName || "").localeCompare(String(b.displayName || ""));
+    });
+  }
 
   if (!personas.length) {
     container.textContent = "No personas found.";
@@ -1197,7 +2062,10 @@ function renderAdminPersonasList() {
 function renderAdminChatsList() {
   const container = byId("admin-list");
   container.innerHTML = "";
-  const chats = state.adminChats?.chats || state.adminOverview?.chats || [];
+  const chats = sortByMetric(
+    applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []),
+    state.adminMetricFocus
+  );
 
   if (!chats.length) {
     container.textContent = "No persona chats found.";
@@ -1210,21 +2078,26 @@ function renderAdminChatsList() {
     item.innerHTML = `
       <div class="admin-item-head">
         <strong>${chat.title || chat.chatId}</strong>
-        <span class="admin-item-sub">${chat.chatId}</span>
+        <span class="admin-item-sub">${chat.kind || "chat"} | ${chat.chatId}</span>
       </div>
+      <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : "chat")}</div>
       <div class="admin-item-sub">Participants: ${(chat.participants || []).join(", ") || "n/a"}</div>
       <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}</div>
+      <div class="admin-item-sub">Tokens: ${Number(chat.tokenUsage?.totalTokens || 0).toLocaleString()} | Est. Cost: ${
+        typeof chat.estimatedCostUsd === "number" ? `$${chat.estimatedCostUsd.toFixed(6)}` : "n/a"
+      }</div>
+      <div class="admin-item-sub">Risk: R ${Number(chat.responsibleAi?.stoplights?.red || 0)} | Y ${Number(chat.responsibleAi?.stoplights?.yellow || 0)} | G ${Number(chat.responsibleAi?.stoplights?.green || 0)}</div>
       <div class="admin-item-sub">Last activity: ${chat.lastActivityAt || chat.updatedAt || "n/a"}</div>
       <div class="admin-item-sub">Summary: ${chat.summary || "n/a"}</div>
     `;
 
     const actions = document.createElement("div");
     actions.className = "row";
-    const drill = document.createElement("button");
-    drill.type = "button";
-    drill.textContent = "Drill Down";
-    drill.addEventListener("click", () => loadAdminChatDetail(chat.chatId));
-    actions.appendChild(drill);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = chat.kind === "simple" ? "Open in Simple Chat" : "Open in Group Chat";
+    open.addEventListener("click", () => openChatInHistory(chat.chatId, chat.kind));
+    actions.appendChild(open);
     item.appendChild(actions);
 
     container.appendChild(item);
@@ -1232,6 +2105,7 @@ function renderAdminChatsList() {
 }
 
 function renderAdminList() {
+  renderAdminFilterSummary();
   if (state.adminView === "personas") {
     renderAdminPersonasList();
   } else if (state.adminView === "chats") {
@@ -1239,75 +2113,7 @@ function renderAdminList() {
   } else {
     renderAdminDebatesList();
   }
-}
-
-async function loadAdminDebateDetail(debateId) {
-  const statusEl = byId("admin-detail-status");
-  const detailEl = byId("admin-detail");
-  statusEl.textContent = `Loading ${debateId}...`;
-
-  try {
-    const detail = await apiGet(`/api/admin/debates/${encodeURIComponent(debateId)}`);
-    const roundsText = (detail.rounds || [])
-      .map((round) => {
-        const entries = (round.entries || [])
-          .map((e) => `- ${e.speaker} [${e.type}, ${e.wordCount} words]\\n${e.text}`)
-          .join("\\n\\n");
-        return `## Round ${round.round}\\n\\n${entries}`;
-      })
-      .join("\\n\\n");
-
-    detailEl.textContent = [
-      `Title: ${detail.title}`,
-      `Participants: ${(detail.participants || []).join(", ")}`,
-      `Model: ${detail.model}`,
-      `Tokens: ${Number(detail.tokenUsage?.totalTokens || 0).toLocaleString()}`,
-      `Estimated Cost: ${typeof detail.estimatedCostUsd === "number" ? `$${detail.estimatedCostUsd.toFixed(6)}` : "n/a"}`,
-      "",
-      `Outcomes:\\n${detail.outcomes || "n/a"}`,
-      "",
-      roundsText || "No round data available."
-    ].join("\\n");
-    statusEl.textContent = `Loaded ${debateId}`;
-  } catch (error) {
-    statusEl.textContent = `Failed to load detail: ${error.message}`;
-  }
-}
-
-async function loadAdminChatDetail(chatId) {
-  const statusEl = byId("admin-detail-status");
-  const detailEl = byId("admin-detail");
-  statusEl.textContent = `Loading chat ${chatId}...`;
-
-  try {
-    const detail = await apiGet(`/api/admin/chats/${encodeURIComponent(chatId)}`);
-    const rows = (detail.messages || [])
-      .map((m) => {
-        const who =
-          m.role === "user"
-            ? "You"
-            : m.role === "orchestrator"
-              ? "Orchestrator"
-              : (m.displayName || m.speakerId || "Persona");
-        return `- ${who} [${m.role}] ${m.content || ""}`;
-      })
-      .join("\n\n");
-
-    detailEl.textContent = [
-      `Title: ${detail.title}`,
-      `Chat Id: ${detail.chatId}`,
-      `Participants: ${(detail.participants || []).join(", ")}`,
-      `Model: ${detail.model}`,
-      `Turns: ${detail.turns || 0}`,
-      `Messages: ${detail.messageCount || 0}`,
-      `Last activity: ${detail.lastActivityAt || detail.updatedAt || "n/a"}`,
-      "",
-      rows || "No chat messages available."
-    ].join("\n");
-    statusEl.textContent = `Loaded chat ${chatId}`;
-  } catch (error) {
-    statusEl.textContent = `Failed to load chat detail: ${error.message}`;
-  }
+  renderAdminCharts();
 }
 
 async function loadAdminData() {
@@ -1323,7 +2129,10 @@ async function loadAdminData() {
     state.adminChats = chats;
     byId("admin-pricing-note").textContent = overview.pricingNote || "";
     renderAdminSummaryCards();
+    renderAdminMatrix();
+    renderAdminFilterSummary();
     renderAdminList();
+    renderAdminCharts();
   } catch (error) {
     byId("admin-pricing-note").textContent = `Failed to load admin data: ${error.message}`;
   }
@@ -1359,17 +2168,143 @@ async function loadKnowledgePacks() {
     state.personaFormKnowledgePackIds = state.personaFormKnowledgePackIds.filter((id) =>
       state.knowledgePacks.some((p) => p.id === id)
     );
+    state.simpleChat.selectedKnowledgePackIds = state.simpleChat.selectedKnowledgePackIds.filter((id) =>
+      state.knowledgePacks.some((p) => p.id === id)
+    );
     renderKnowledgePacks();
     renderKnowledgeStudioList();
     renderPersonaKnowledgePackList();
+    renderSimpleChatKnowledgeList();
   } catch {
     state.knowledgePacks = [];
     state.selectedKnowledgePackIds = [];
     state.personaFormKnowledgePackIds = [];
+    state.simpleChat.selectedKnowledgePackIds = [];
     renderKnowledgePacks();
     renderKnowledgeStudioList();
     renderPersonaKnowledgePackList();
+    renderSimpleChatKnowledgeList();
   }
+}
+
+function renderResponsibleAiPolicyForm() {
+  const policy = state.responsibleAiPolicy;
+  if (!policy || !byId("rai-preview")) return;
+  byId("rai-red-keywords").value = (policy.stoplight?.redKeywords || []).join("\n");
+  byId("rai-yellow-keywords").value = (policy.stoplight?.yellowKeywords || []).join("\n");
+  byId("rai-positive-keywords").value = (policy.sentiment?.positiveKeywords || []).join("\n");
+  byId("rai-negative-keywords").value = (policy.sentiment?.negativeKeywords || []).join("\n");
+  byId("rai-sentiment-threshold").value = String(policy.sentiment?.threshold || 1);
+  byId("rai-preview").textContent = JSON.stringify(policy, null, 2);
+}
+
+async function loadResponsibleAiPolicy() {
+  const status = byId("rai-status");
+  if (!status) return;
+  status.textContent = "Loading Responsible AI policy...";
+  try {
+    const data = await apiGet("/api/settings/responsible-ai");
+    state.responsibleAiPolicy = data.policy || null;
+    renderResponsibleAiPolicyForm();
+    status.textContent = "Policy loaded.";
+  } catch (error) {
+    status.textContent = `Failed to load policy: ${error.message}`;
+  }
+}
+
+function collectResponsibleAiPolicyFromForm() {
+  return {
+    stoplight: {
+      redKeywords: parseLineList(byId("rai-red-keywords").value),
+      yellowKeywords: parseLineList(byId("rai-yellow-keywords").value)
+    },
+    sentiment: {
+      positiveKeywords: parseLineList(byId("rai-positive-keywords").value),
+      negativeKeywords: parseLineList(byId("rai-negative-keywords").value),
+      threshold: safeNumberInput(byId("rai-sentiment-threshold").value, 1, { min: 1, max: 5, integer: true })
+    }
+  };
+}
+
+async function saveResponsibleAiPolicy() {
+  const status = byId("rai-status");
+  const payload = collectResponsibleAiPolicyFromForm();
+  status.textContent = "Saving policy...";
+  try {
+    const data = await apiSend("/api/settings/responsible-ai", "PUT", { policy: payload });
+    state.responsibleAiPolicy = data.policy || payload;
+    renderResponsibleAiPolicyForm();
+    status.textContent = "Policy saved.";
+    renderSimpleChatHistory();
+    renderPersonaChatHistory();
+    renderChatHistory();
+    if (state.activeDebateId) {
+      try {
+        const debateData = await apiGet(`/api/debates/${encodeURIComponent(state.activeDebateId)}`);
+        renderDebateTurns(debateData.session?.turns || []);
+      } catch {
+        renderDebateTurns([]);
+      }
+    }
+    renderAdminSummaryCards();
+    renderAdminCharts();
+  } catch (error) {
+    status.textContent = `Save failed: ${error.message}`;
+  }
+}
+
+function resetResponsibleAiPolicyDefaults() {
+  byId("rai-red-keywords").value = [
+    "kill",
+    "suicide",
+    "self-harm",
+    "bomb",
+    "terror",
+    "ethnic cleansing",
+    "genocide",
+    "overdose",
+    "rape",
+    "how to hurt",
+    "hack bank",
+    "credit card theft"
+  ].join("\n");
+  byId("rai-yellow-keywords").value = [
+    "guaranteed profit",
+    "insider tip",
+    "evade taxes",
+    "diagnose",
+    "prescribe",
+    "legal advice",
+    "financial advice",
+    "weapon",
+    "violent",
+    "harass",
+    "exploit"
+  ].join("\n");
+  byId("rai-positive-keywords").value = [
+    "good",
+    "great",
+    "helpful",
+    "constructive",
+    "benefit",
+    "improve",
+    "safe",
+    "clarify",
+    "collaborate"
+  ].join("\n");
+  byId("rai-negative-keywords").value = [
+    "bad",
+    "terrible",
+    "harm",
+    "danger",
+    "risky",
+    "hate",
+    "angry",
+    "useless",
+    "worse"
+  ].join("\n");
+  byId("rai-sentiment-threshold").value = "1";
+  byId("rai-status").textContent = "Default values loaded. Click Save Policy to persist.";
 }
 
 async function uploadKnowledgeFile(event) {
@@ -1482,6 +2417,7 @@ async function loadDebate(debateId) {
     byId("viewer-progress").textContent += ` | selection=${session.personaSelection.mode}`;
   }
   byId("viewer-transcript").textContent = data.transcript || "";
+  renderDebateTurns(session.turns || []);
   renderChatHistory();
   renderCitationsPopout();
   byId("chat-status").textContent = "Transcript chat ready.";
@@ -1515,19 +2451,30 @@ function wireEvents() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
-  byId("debates-view-setup").addEventListener("click", () => setDebatesView("setup"));
-  byId("debates-view-viewer").addEventListener("click", () => setDebatesView("viewer"));
+  byId("chats-view-simple").addEventListener("click", () => setChatsView("simple"));
+  byId("chats-view-group").addEventListener("click", () => setChatsView("group"));
+  byId("group-work-live").addEventListener("click", () => setGroupWorkspace("live"));
+  byId("group-work-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
+  byId("group-work-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
+  byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
+  byId("rai-save").addEventListener("click", saveResponsibleAiPolicy);
+  byId("rai-reset-defaults").addEventListener("click", resetResponsibleAiPolicyDefaults);
+  byId("rai-reload").addEventListener("click", loadResponsibleAiPolicy);
 
   byId("persona-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const persona = personaFromForm();
+    const statusEl = byId("persona-status");
+    statusEl.textContent = state.editingPersonaId
+      ? "Updating persona..."
+      : "Creating persona and running optimizer...";
 
     try {
       if (state.editingPersonaId) {
         await apiSend(`/api/personas/${state.editingPersonaId}`, "PUT", persona);
-        byId("persona-status").textContent = "Persona updated.";
+        statusEl.textContent = "Persona updated.";
       } else {
         const data = await apiSend("/api/personas", "POST", persona);
         const details = data.optimization
@@ -1535,15 +2482,16 @@ function wireEvents() {
               data.optimization.strictRewrite
             )}`
           : "";
-        const message = `${data.optimization?.message || "Persona created."}${
+        const baseMessage = `${data.optimization?.message || "Persona created."}${
           details ? ` (${details})` : ""
         }`;
-        byId("persona-status").textContent = message;
+        const levelPrefix = data.optimization?.warning ? "Warning: " : "";
+        statusEl.textContent = `${levelPrefix}${baseMessage}`;
       }
       resetPersonaForm();
       await loadPersonas();
     } catch (error) {
-      window.alert(error.message);
+      statusEl.textContent = `Failed: ${error.message}`;
     }
   });
 
@@ -1618,8 +2566,9 @@ function wireEvents() {
       const mode = data.personaSelection?.mode || "manual";
       byId("debate-run-status").textContent = `Debate queued: ${debateId} (selection: ${mode})`;
       byId("viewer-debate-id").value = debateId;
-      switchTab("debates");
-      setDebatesView("viewer");
+      switchTab("chats");
+      setChatsView("group");
+      setGroupWorkspace("debate-viewer");
       await loadDebate(debateId);
       startPollingDebate(debateId);
     } catch (error) {
@@ -1664,6 +2613,7 @@ function wireEvents() {
   byId("knowledge-upload-form").addEventListener("submit", uploadKnowledgeFile);
   byId("knowledge-refresh").addEventListener("click", loadKnowledgePacks);
   byId("persona-chat-create").addEventListener("click", createPersonaChatSession);
+  byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-refresh-list").addEventListener("click", loadPersonaChatSessions);
   byId("persona-chat-load").addEventListener("click", () => {
     loadPersonaChatSession(byId("persona-chat-id").value.trim());
@@ -1673,6 +2623,28 @@ function wireEvents() {
     if (event.key === "Enter") {
       event.preventDefault();
       sendPersonaChatMessage();
+    }
+  });
+  ["persona-chat-title", "persona-chat-context", "persona-chat-model", "persona-chat-temperature", "persona-chat-max-words", "persona-chat-mode"].forEach((id) => {
+    const el = byId(id);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      if (!state.personaChat.activeChatId) return;
+      state.personaChat.dirtyConfig = true;
+      byId("persona-chat-status").textContent =
+        "Settings changed. Click Create Chat Session to start a new conversation.";
+    });
+  });
+  byId("simple-chat-create").addEventListener("click", createSimpleChatSession);
+  byId("simple-chat-refresh-list").addEventListener("click", loadSimpleChatSessions);
+  byId("simple-chat-load").addEventListener("click", () => {
+    loadSimpleChatSession(byId("simple-chat-id").value.trim());
+  });
+  byId("simple-chat-send").addEventListener("click", sendSimpleChatMessage);
+  byId("simple-chat-message").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendSimpleChatMessage();
     }
   });
 
@@ -1688,26 +2660,77 @@ function wireEvents() {
     state.adminView = "personas";
     renderAdminList();
   });
+  byId("admin-dim-channel").addEventListener("click", () => {
+    state.adminMatrixDimension = "channel";
+    state.adminMetricFocus = null;
+    renderAdminMatrix();
+    renderAdminFilterSummary();
+    renderAdminList();
+    renderAdminCharts();
+  });
+  byId("admin-dim-model").addEventListener("click", () => {
+    state.adminMatrixDimension = "model";
+    state.adminMetricFocus = null;
+    renderAdminMatrix();
+    renderAdminFilterSummary();
+    renderAdminList();
+    renderAdminCharts();
+  });
+  byId("admin-dim-persona").addEventListener("click", () => {
+    state.adminMatrixDimension = "persona";
+    state.adminMetricFocus = null;
+    renderAdminMatrix();
+    renderAdminFilterSummary();
+    renderAdminList();
+    renderAdminCharts();
+  });
+  byId("admin-clear-filter").addEventListener("click", () => {
+    state.adminFilter = null;
+    state.adminMetricFocus = null;
+    renderAdminFilterSummary();
+    renderAdminMatrix();
+    renderAdminList();
+    renderAdminCharts();
+  });
+  byId("admin-nav-group-history").addEventListener("click", () => {
+    switchTab("chats");
+    setChatsView("group");
+    setGroupWorkspace("live");
+  });
+  byId("admin-nav-simple-history").addEventListener("click", () => {
+    switchTab("chats");
+    setChatsView("simple");
+  });
+  byId("admin-nav-debate-history").addEventListener("click", () => {
+    switchTab("chats");
+    setChatsView("group");
+    setGroupWorkspace("debate-viewer");
+  });
   byId("admin-refresh").addEventListener("click", loadAdminData);
 }
 
 async function init() {
   wireEvents();
-  switchTab("debates");
-  setDebatesView("setup");
+  switchTab("chats");
+  setChatsView("simple");
+  setGroupWorkspace("live");
   setConfigView("personas");
   renderPersonaKnowledgePackList();
   renderPersonaPreview();
   renderChatHistory();
   renderPersonaChatPersonaList();
   renderPersonaChatHistory();
+  renderSimpleChatKnowledgeList();
+  renderSimpleChatHistory();
   renderSelectedTopicSummary();
   renderTopicDiscoveryResults();
   renderGeneratedTopicDrafts();
   renderKnowledgeStudioList();
   await loadPersonas();
   await loadKnowledgePacks();
+  await loadResponsibleAiPolicy();
   await loadPersonaChatSessions();
+  await loadSimpleChatSessions();
 }
 
 init();
