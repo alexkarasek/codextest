@@ -1,0 +1,2 @@
+{"ts":"2026-02-16T20:13:44.623Z","role":"user","content":"Hello! Reply with one sentence confirming you received this."}
+{"ts":"2026-02-16T20:13:45.479Z","role":"assistant","content":"Hello! I received your message confirming that you said hello.","usage":{"prompt_tokens":121,"completion_tokens":12,"total_tokens":133,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"citations":[]}

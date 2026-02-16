@@ -24,3 +24,8 @@
 {"ts":"2026-02-16T20:01:30.741Z","method":"GET","path":"/api-keys","status":304,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}
 {"ts":"2026-02-16T20:01:35.710Z","method":"POST","path":"/api-keys","status":201,"durationMs":3,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}
 {"ts":"2026-02-16T20:01:35.716Z","method":"GET","path":"/api-keys","status":200,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}
+{"ts":"2026-02-16T20:09:49.378Z","method":"POST","path":"/api/simple-chats/api/simple-chats/20260216-150505-postman-simple-chat/messages","status":404,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"api_key","apiKeyId":"key_3f79b80fe3bfc304"}
+{"ts":"2026-02-16T20:17:30.633Z","method":"GET","path":"/api-keys","status":200,"durationMs":19,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}
+{"ts":"2026-02-16T20:20:09.703Z","method":"GET","path":"/api/personas%0A","status":404,"durationMs":3,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"api_key","apiKeyId":"key_3f79b80fe3bfc304"}
+{"ts":"2026-02-16T20:30:38.758Z","method":"POST","path":"/api/persona-chats/20260216-152756-postman-test-715zs/message","status":404,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"api_key","apiKeyId":"key_3f79b80fe3bfc304"}
+{"ts":"2026-02-16T20:30:57.135Z","method":"POST","path":"/api/persona-chats/20260216-152756-postman-test-715zs/message","status":404,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"api_key","apiKeyId":"key_3f79b80fe3bfc304"}
