@@ -1,0 +1,35 @@
+{
+  "chatId": "20260215-220628-poker-chat",
+  "title": "poker chat",
+  "context": "",
+  "settings": {
+    "model": "gpt-4.1-mini",
+    "temperature": 0.6,
+    "maxWordsPerTurn": 140
+  },
+  "personas": [
+    {
+      "displayName": "Nate the Nutritionist",
+      "role": "professional food advisor",
+      "description": "professional food advisor",
+      "systemPrompt": "provide authoritative advice on nutrition",
+      "speakingStyle": {
+        "tone": "professional",
+        "verbosity": "",
+        "quirks": []
+      },
+      "expertiseTags": [],
+      "biasValues": [],
+      "debateBehavior": "",
+      "id": "nate-nutrition",
+      "createdAt": "2026-02-15T21:07:16.157Z",
+      "updatedAt": "2026-02-15T21:07:16.157Z"
+    }
+  ],
+  "knowledgeByPersona": {
+    "nate-nutrition": []
+  },
+  "createdAt": "2026-02-16T03:06:28.578Z",
+  "updatedAt": "2026-02-16T03:07:04.070Z",
+  "messageCount": 6
+}

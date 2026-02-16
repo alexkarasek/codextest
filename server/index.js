@@ -3,6 +3,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import personasRouter from "./routes/personas.js";
 import debatesRouter from "./routes/debates.js";
+import adminRouter from "./routes/admin.js";
+import topicsRouter from "./routes/topics.js";
+import knowledgeRouter from "./routes/knowledge.js";
+import personaChatsRouter from "./routes/personaChats.js";
 import { ensureDataDirs } from "../lib/storage.js";
 import { sendError } from "./response.js";
 import {
@@ -31,6 +35,10 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/personas", personasRouter);
 app.use("/api/debates", debatesRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/topics", topicsRouter);
+app.use("/api/knowledge", knowledgeRouter);
+app.use("/api/persona-chats", personaChatsRouter);
 
 app.use((req, res) => {
   sendError(res, 404, "NOT_FOUND", `Route ${req.method} ${req.path} not found.`);

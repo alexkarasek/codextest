@@ -1,4 +1,6 @@
 {
   "openaiApiKey": "sk-your-key-here",
-  "port": 3000
+  "port": 3000,
+  "newsProvider": "google",
+  "newsApiKey": ""
 }

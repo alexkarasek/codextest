@@ -6,6 +6,7 @@ import {
   createDebateFiles,
   debatePath,
   getDebate,
+  getKnowledgePack,
   getPersona,
   listDebateChat,
   listPersonas,
@@ -119,6 +120,16 @@ async function resolveSelectedPersonas(selected) {
   return resolved;
 }
 
+async function resolveKnowledgePacks(ids) {
+  const packs = [];
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+  for (const id of uniqueIds) {
+    const pack = await getKnowledgePack(id);
+    packs.push(pack);
+  }
+  return packs;
+}
+
 async function runDebateQueued(debateId) {
   runQueue = runQueue.then(async () => {
     try {
@@ -152,6 +163,9 @@ router.post("/", async (req, res) => {
   }
 
   let personas;
+  let knowledgePacks = [];
+  let globalKnowledgePackIds = [];
+  let personaKnowledgeMap = {};
   let selectionMeta = { mode: "manual", reasoning: "Used manually selected personas." };
   try {
     if (parsed.data.selectedPersonas.length) {
@@ -171,6 +185,14 @@ router.post("/", async (req, res) => {
         reasoning: dynamicSelection.reasoning
       };
     }
+    globalKnowledgePackIds = [...new Set(parsed.data.knowledgePackIds || [])];
+    personaKnowledgeMap = personas.reduce((acc, persona) => {
+      acc[persona.id] = [...new Set(persona.knowledgePackIds || [])];
+      return acc;
+    }, {});
+    const allPersonaPackIds = Object.values(personaKnowledgeMap).flat();
+    const allKnowledgePackIds = [...new Set([...globalKnowledgePackIds, ...allPersonaPackIds])];
+    knowledgePacks = await resolveKnowledgePacks(allKnowledgePackIds);
   } catch (error) {
     if (error.code === "NO_PERSONAS_AVAILABLE") {
       sendError(
@@ -182,7 +204,12 @@ router.post("/", async (req, res) => {
       return;
     }
     if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", "One or more selected personas were not found.");
+      sendError(
+        res,
+        404,
+        "NOT_FOUND",
+        "One or more selected personas or knowledge packs were not found."
+      );
       return;
     }
     if (error.code === "INVALID_JSON") {
@@ -208,6 +235,12 @@ router.post("/", async (req, res) => {
     debateId,
     topic: parsed.data.topic,
     context: parsed.data.context || "",
+    topicDiscovery: parsed.data.topicDiscovery || { query: "", selectedTitle: "", selectedSummary: "", sources: [] },
+    knowledgePacks,
+    knowledgePackCatalog: knowledgePacks,
+    knowledgePackIds: globalKnowledgePackIds,
+    globalKnowledgePackIds,
+    personaKnowledgeMap,
     settings: parsed.data.settings,
     personas,
     personaSelection: selectionMeta,

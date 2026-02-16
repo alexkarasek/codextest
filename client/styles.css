@@ -82,6 +82,37 @@ body {
   display: flex;
   gap: 8px;
   padding: 8px 22px 0;
+  flex-wrap: wrap;
+}
+
+.subtabs {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 8px 22px 0;
+  flex-wrap: wrap;
+}
+
+.subtab-btn {
+  font: inherit;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #cfd6de;
+  background: #f8fbff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.subtab-btn.active {
+  background: #ecfdf5;
+  border-color: #80cdbf;
+  color: #0b5d4b;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .tab-btn {
@@ -94,6 +125,7 @@ body {
   color: #334155;
   cursor: pointer;
   transition: all 120ms ease;
+  min-height: 40px;
 }
 
 .tab-btn:hover {
@@ -238,6 +270,90 @@ button[type="submit"]:hover {
   font-weight: 600;
 }
 
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.metric-card {
+  border: 1px solid #d5d5ce;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf8 0%, #f4f7fb 100%);
+  padding: 10px;
+}
+
+.metric-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.metric-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.admin-item {
+  border: 1px solid #d5d5ce;
+  border-radius: 12px;
+  background: #fffefb;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.topic-result {
+  border: 1px solid #d5d5ce;
+  border-radius: 12px;
+  background: #fffefb;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.topic-result-title {
+  font-weight: 600;
+}
+
+.setup-step {
+  border: 1px dashed #d5dae2;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fffdfa;
+}
+
+.setup-step > h3 {
+  margin: 0 0 4px 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.02rem;
+}
+
+.knowledge-content-preview {
+  margin: 0;
+  background: #f6f9fc;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  padding: 8px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #334155;
+}
+
+.admin-item-sub {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
 .preview,
 .transcript {
   background: linear-gradient(180deg, #132537 0%, #1f2f3e 100%);
@@ -276,6 +392,12 @@ button[type="submit"]:hover {
 .chat-msg.assistant {
   background: #f4f8fc;
   border-color: #dce7f3;
+}
+
+.chat-msg.system {
+  background: #fff7e8;
+  border-color: #f0d7a7;
+  color: #6b4f1a;
 }
 
 .error {
@@ -411,6 +533,10 @@ a {
   .grid.two {
     grid-template-columns: 1fr;
   }
+
+  .summary-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -436,6 +562,10 @@ a {
     left: 12px;
     width: auto;
     max-height: calc(100vh - 24px);
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
   }
 }
 

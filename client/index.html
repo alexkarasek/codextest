@@ -22,13 +22,22 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="personas">Personas</button>
-    <button class="tab-btn" data-tab="new-debate">New Debate</button>
-    <button class="tab-btn" data-tab="viewer">Debate Viewer</button>
+    <button class="tab-btn active" data-tab="debates">1. Debates</button>
+    <button class="tab-btn" data-tab="chats">2. Chats</button>
+    <button class="tab-btn" data-tab="governance">3. Governance</button>
+    <button class="tab-btn" data-tab="config">4. Admin & Config</button>
+  </nav>
+  <nav id="subnav-debates" class="subtabs">
+    <button id="debates-view-setup" class="subtab-btn active" type="button">New Debate</button>
+    <button id="debates-view-viewer" class="subtab-btn" type="button">Debate Viewer</button>
+  </nav>
+  <nav id="subnav-config" class="subtabs hidden">
+    <button id="config-view-personas" class="subtab-btn active" type="button">Personas</button>
+    <button id="config-view-knowledge" class="subtab-btn" type="button">Knowledge Studio</button>
   </nav>
 
   <main>
-    <section id="tab-personas" class="tab-section active">
+    <section id="tab-personas" class="tab-section">
       <div class="grid two">
         <div class="panel">
           <h2>Persona List <span class="tip" tabindex="0">?<span class="tip-flyout">Search, filter by tag, then use actions on each card to edit, duplicate, delete, or add to debate.</span></span></h2>
@@ -55,6 +64,10 @@
             <label>Expertise Tags (comma-separated)<input name="expertiseTags"></label>
             <label>Bias/Values (comma-separated or text)<textarea name="biasValues" rows="2"></textarea></label>
             <label>Debate Behavior<textarea name="debateBehavior" rows="3" placeholder="Steelman first, ask one clarifying question."></textarea></label>
+            <div class="stack">
+              <div>Persona Knowledge Packs <span class="tip" tabindex="0">?<span class="tip-flyout">Optional specialized knowledge this persona can access in every debate turn.</span></span></div>
+              <div id="persona-knowledge-pack-list" class="list"></div>
+            </div>
             <div class="row">
               <button type="submit">Save Persona</button>
               <button id="persona-reset" type="button">Reset</button>
@@ -67,39 +80,109 @@
       </div>
     </section>
 
-    <section id="tab-new-debate" class="tab-section">
+    <section id="tab-knowledge" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Knowledge Studio</h2>
+          <div class="hint">Upload source files and convert them into reusable knowledge packs. Supported: .txt, .pdf, .jpg/.jpeg/.png, .doc, .docx</div>
+          <form id="knowledge-upload-form" class="stack">
+            <label>File<input id="knowledge-upload-file" type="file" accept=".txt,.pdf,.jpg,.jpeg,.png,.doc,.docx" required></label>
+            <label>Title (optional)<input id="knowledge-upload-title" type="text" placeholder="Auto-derived from filename if empty"></label>
+            <label>Id (optional slug)<input id="knowledge-upload-id" type="text" placeholder="Auto-generated if empty"></label>
+            <label>Tags (comma-separated)<input id="knowledge-upload-tags" type="text" placeholder="policy, economics, technology"></label>
+            <label>Description (optional)<textarea id="knowledge-upload-description" rows="3" placeholder="Optional description for this pack"></textarea></label>
+            <div class="row">
+              <button type="submit">Upload + Convert</button>
+              <button id="knowledge-refresh" type="button">Refresh Packs</button>
+            </div>
+          </form>
+          <div id="knowledge-upload-status" class="status"></div>
+        </div>
+        <div class="panel stack">
+          <h2>Knowledge Pack Library</h2>
+          <div id="knowledge-studio-list" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-new-debate" class="tab-section active">
       <div class="grid two">
         <div class="panel stack">
           <h2>Debate Setup <span class="tip" tabindex="0">?<span class="tip-flyout">Configure the topic, choose participants in order, then run. Turns execute sequentially.</span></span></h2>
-          <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The debate question all personas will respond to each round.</span></span><input id="debate-topic" type="text" placeholder="Should cities ban private cars downtown?" required></label>
-          <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional background context"></textarea></label>
+          <div class="setup-step stack">
+            <h3>Step 1: Define Topic</h3>
+            <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The debate question all personas will respond to each round.</span></span><input id="debate-topic" type="text" placeholder="Should cities ban private cars downtown?" required></label>
+            <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional background context"></textarea></label>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 2: Discover Topic Sources (Optional)</h3>
+            <div class="hint">Use current events search, or skip and work from your manual topic above.</div>
+            <div class="row">
+              <input id="topic-discovery-query" type="text" placeholder="Search current events (e.g., ai regulation, election policy)">
+              <button id="topic-discovery-search" type="button">Search Events</button>
+              <button id="topic-use-manual" type="button">Use Manual Topic</button>
+            </div>
+            <div id="topic-discovery-results" class="list"></div>
+            <div id="topic-selected-summary" class="status">No current-event topic selected. Manual topic generation is available.</div>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 3: Generate Personas (Optional)</h3>
+            <div class="hint">Generates from selected event topic when available, otherwise from manual Topic/Context.</div>
+            <div class="row">
+              <label>Generated Personas<input id="topic-persona-count" type="number" min="1" max="6" value="3"></label>
+              <button id="topic-generate-personas" type="button">Generate Personas</button>
+            </div>
+            <div id="topic-generated-drafts" class="list"></div>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 4: Configure Debate Settings</h3>
           <div class="grid two">
             <label>Rounds <span class="tip" tabindex="0">?<span class="tip-flyout">Number of speaking rounds per persona. Higher values cost more tokens/time.</span></span><input id="debate-rounds" type="number" min="1" max="8" value="3"></label>
             <label>Max Words / Turn <span class="tip" tabindex="0">?<span class="tip-flyout">Hard target for brevity in each generated turn.</span></span><input id="debate-max-words" type="number" min="40" max="400" value="120"></label>
             <label>Temperature<input id="debate-temperature" type="number" min="0" max="2" step="0.1" value="0.7"></label>
             <label>Model<input id="debate-model" type="text" value="gpt-4.1-mini"></label>
+            <label>Source Grounding
+              <select id="debate-source-grounding">
+                <option value="light" selected>Light</option>
+                <option value="strict">Strict</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
           </div>
           <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
           <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
+          </div>
+          <div class="setup-step stack">
+          <h3>Step 5: Attach Knowledge (Optional)</h3>
+          <div class="hint">These packs are global to all participants. Persona-specific packs can be set in Persona profiles.</div>
+          <div id="knowledge-pack-list" class="list"></div>
+          </div>
 
-          <h3>Available Saved Personas</h3>
-          <div id="available-personas" class="list"></div>
+          <div class="setup-step stack">
+            <h3>Step 6: Select Participants</h3>
+            <h3>Available Saved Personas</h3>
+            <div id="available-personas" class="list"></div>
 
-          <h3>Add Ad-hoc Persona <span class="tip" tabindex="0">?<span class="tip-flyout">Use this for one-off participants. Enable “Save persona” to persist into data/personas.</span></span></h3>
-          <div class="stack">
-            <label>Display Name<input id="adhoc-displayName" type="text"></label>
-            <label>Description<input id="adhoc-description" type="text"></label>
-            <label>System Prompt<textarea id="adhoc-systemPrompt" rows="4"></textarea></label>
-            <label>Role<input id="adhoc-role" type="text"></label>
-            <label>Tone<input id="adhoc-tone" type="text"></label>
-            <label>Verbosity<input id="adhoc-verbosity" type="text"></label>
-            <label>Quirks (comma-separated)<input id="adhoc-quirks" type="text"></label>
-            <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
-            <label>Bias/Values<input id="adhoc-bias" type="text"></label>
-            <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
-            <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
-            <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>
-            <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
+            <h3>Add Ad-hoc Persona <span class="tip" tabindex="0">?<span class="tip-flyout">Use this for one-off participants. Enable “Save persona” to persist into data/personas.</span></span></h3>
+            <div class="stack">
+              <label>Display Name<input id="adhoc-displayName" type="text"></label>
+              <label>Description<input id="adhoc-description" type="text"></label>
+              <label>System Prompt<textarea id="adhoc-systemPrompt" rows="4"></textarea></label>
+              <label>Role<input id="adhoc-role" type="text"></label>
+              <label>Tone<input id="adhoc-tone" type="text"></label>
+              <label>Verbosity<input id="adhoc-verbosity" type="text"></label>
+              <label>Quirks (comma-separated)<input id="adhoc-quirks" type="text"></label>
+              <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
+              <label>Bias/Values<input id="adhoc-bias" type="text"></label>
+              <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
+              <label>Knowledge Pack Ids (comma-separated)<input id="adhoc-knowledge-pack-ids" type="text" placeholder="optional: debate-quality-rubric, current-events-analysis"></label>
+              <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
+              <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>
+              <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
+            </div>
           </div>
         </div>
 
@@ -113,6 +196,44 @@
           <div id="selected-personas" class="list"></div>
           <button id="run-debate" type="button">Run Debate</button>
           <div id="debate-run-status" class="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-persona-chat" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Persona Collaboration Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Create a free-form chat session with one or more personas. An orchestrator picks the most relevant subset each turn, so not everyone replies every time.</span></span></h2>
+          <label>Chat Title<input id="persona-chat-title" type="text" value="Persona Collaboration Chat"></label>
+          <label>Shared Context<textarea id="persona-chat-context" rows="3" placeholder="Optional context shared across all persona responses"></textarea></label>
+          <div class="grid two">
+            <label>Model<input id="persona-chat-model" type="text" value="gpt-4.1-mini"></label>
+            <label>Temperature<input id="persona-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.6"></label>
+            <label>Max Words / Persona Turn<input id="persona-chat-max-words" type="number" min="40" max="400" value="140"></label>
+          </div>
+          <h3>Select Personas (One or More)</h3>
+          <div id="persona-chat-persona-list" class="list"></div>
+          <div class="row">
+            <button id="persona-chat-create" type="button">Create Chat Session</button>
+            <button id="persona-chat-refresh-list" type="button">Refresh Sessions</button>
+          </div>
+          <div id="persona-chat-create-status" class="status"></div>
+          <h3>Saved Sessions</h3>
+          <div id="persona-chat-session-list" class="list"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Conversation</h2>
+          <div class="row">
+            <label>Chat Id<input id="persona-chat-id" type="text" placeholder="Create or load a chat id"></label>
+            <button id="persona-chat-load" type="button">Load</button>
+          </div>
+          <div id="persona-chat-status" class="status">Create or load a persona chat session to begin.</div>
+          <div id="persona-chat-history" class="chat-history"></div>
+          <div class="row">
+            <input id="persona-chat-message" type="text" placeholder="Ask your selected personas anything">
+            <button id="persona-chat-send" type="button">Send</button>
+          </div>
         </div>
       </div>
     </section>
@@ -139,6 +260,29 @@
             <button id="chat-citations-open" type="button">Show Citations</button>
           </div>
           <div id="chat-status" class="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-admin" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Governance Dashboard</h2>
+          <div id="admin-summary-cards" class="summary-cards"></div>
+          <div class="row">
+            <button id="admin-view-debates" type="button">Debate View</button>
+            <button id="admin-view-chats" type="button">Chat View</button>
+            <button id="admin-view-personas" type="button">Persona View</button>
+            <button id="admin-refresh" type="button">Refresh</button>
+          </div>
+          <div id="admin-pricing-note" class="hint"></div>
+          <div id="admin-list" class="list"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Drill Down</h2>
+          <div id="admin-detail-status" class="status">Select a debate from Debate View to inspect rounds, outcomes, and transcript.</div>
+          <pre id="admin-detail" class="transcript"></pre>
         </div>
       </div>
     </section>

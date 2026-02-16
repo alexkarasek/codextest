@@ -8,6 +8,7 @@
 - quirks: texas drawal
 - expertiseTags: poker, betting, gambling
 - bias/values: 
+- knowledgePackIds: key-strategies-for-texas-hold-em
 
 ## Debate Behavior
 

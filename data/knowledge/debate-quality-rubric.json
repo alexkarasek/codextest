@@ -1,0 +1,9 @@
+{
+  "id": "debate-quality-rubric",
+  "title": "Debate Quality Rubric",
+  "description": "Guidelines for high-quality debate turns and synthesis.",
+  "tags": ["debate", "quality", "moderation"],
+  "content": "Strong debate turns should: acknowledge strongest opposing argument, provide one concrete example, identify assumptions, and propose a testable claim. Moderator summaries should include: points of agreement, points of disagreement, unresolved questions, and one practical next step.",
+  "createdAt": "2026-02-16T00:00:00.000Z",
+  "updatedAt": "2026-02-16T00:00:00.000Z"
+}

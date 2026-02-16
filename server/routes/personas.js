@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "fs/promises";
+import { z } from "zod";
 import {
   deletePersona,
   getPersona,
@@ -7,11 +8,26 @@ import {
   personaJsonPath,
   savePersona
 } from "../../lib/storage.js";
-import { formatZodError, personaSchema } from "../../lib/validators.js";
+import { formatZodError, personaSchema, topicSourceSchema } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
 import { optimizePersonaForDebate } from "../../lib/personaOptimizer.js";
+import { generatePersonasFromTopic } from "../../lib/personaGenerator.js";
 
 const router = express.Router();
+const generateFromTopicSchema = z.object({
+  topic: z.string().min(2, "topic is required"),
+  context: z.string().optional().default(""),
+  count: z
+    .preprocess((v) => {
+      if (v === undefined || v === null || v === "") return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    }, z.number().int().min(1).max(6))
+    .optional()
+    .default(3),
+  model: z.string().optional().default("gpt-4.1-mini"),
+  sources: z.array(topicSourceSchema).optional().default([])
+});
 
 router.get("/", async (req, res) => {
   const q = String(req.query.q || "").toLowerCase().trim();
@@ -175,6 +191,39 @@ router.delete("/:id", async (req, res) => {
     sendOk(res, { deleted: req.params.id });
   } catch {
     sendError(res, 500, "SERVER_ERROR", "Failed to delete persona.");
+  }
+});
+
+router.post("/generate-from-topic", async (req, res) => {
+  const parsed = generateFromTopicSchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendError(
+      res,
+      400,
+      "VALIDATION_ERROR",
+      "Invalid generate-from-topic payload.",
+      formatZodError(parsed.error)
+    );
+    return;
+  }
+
+  try {
+    const drafts = await generatePersonasFromTopic(parsed.data);
+    sendOk(res, {
+      topic: parsed.data.topic,
+      drafts
+    });
+  } catch (error) {
+    if (error.code === "MISSING_API_KEY") {
+      sendError(res, 400, "MISSING_API_KEY", "OpenAI API key is not configured.");
+      return;
+    }
+    sendError(
+      res,
+      502,
+      "PERSONA_GENERATION_FAILED",
+      `Failed to generate personas from topic: ${error.message}`
+    );
   }
 });
 
