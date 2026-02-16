@@ -88,6 +88,8 @@ router.post("/", async (req, res) => {
     settings: parsed.data.settings,
     knowledgePackIds: parsed.data.knowledgePackIds || [],
     knowledgePacks,
+    createdBy: req.auth?.user?.id || null,
+    createdByUsername: req.auth?.user?.username || null,
     createdAt: now,
     updatedAt: now,
     messageCount: 0

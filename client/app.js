@@ -10,6 +10,11 @@ const state = {
   groupWorkspace: "live",
   configView: "personas",
   responsibleAiPolicy: null,
+  auth: {
+    authenticated: false,
+    bootstrapRequired: false,
+    user: null
+  },
   chatByDebate: {},
   lastCitationsByDebate: {},
   adminView: "debates",
@@ -42,6 +47,15 @@ const state = {
     sessions: [],
     activeChatId: null,
     historyByChat: {}
+  },
+  viewer: {
+    type: "debate",
+    activeId: null,
+    historyByType: {
+      debate: [],
+      group: [],
+      simple: []
+    }
   }
 };
 
@@ -133,10 +147,18 @@ function apiErrorMessage(payload, fallback = "Request failed") {
   return details ? `${message} ${details}` : message;
 }
 
+function handleUnauthorized(payload = null) {
+  state.auth.authenticated = false;
+  state.auth.user = null;
+  const message = payload?.error?.message || "Authentication required.";
+  showAuthGate(message);
+}
+
 async function apiGet(url) {
   const res = await fetch(url);
   const payload = await res.json().catch(() => ({}));
   if (!res.ok || !payload.ok) {
+    if (res.status === 401) handleUnauthorized(payload);
     throw new Error(apiErrorMessage(payload));
   }
   return payload.data;
@@ -150,9 +172,98 @@ async function apiSend(url, method, body) {
   });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok || !payload.ok) {
+    if (res.status === 401) handleUnauthorized(payload);
     throw new Error(apiErrorMessage(payload));
   }
   return payload.data;
+}
+
+function showAuthGate(statusMessage = "") {
+  byId("auth-gate").classList.remove("hidden");
+  byId("bootstrap-status").textContent = "";
+  byId("auth-status").textContent = statusMessage || "";
+  byId("auth-bootstrap-panel").classList.toggle("hidden", !state.auth.bootstrapRequired);
+  byId("auth-login-panel").classList.toggle("hidden", state.auth.bootstrapRequired);
+}
+
+function hideAuthGate() {
+  byId("auth-gate").classList.add("hidden");
+}
+
+function parsePermissionsInput(input) {
+  const values = parseCsv(input);
+  const perms = {};
+  values.forEach((value) => {
+    perms[value] = true;
+  });
+  return perms;
+}
+
+async function loadAuthState() {
+  try {
+    const data = await apiGet("/api/auth/me");
+    state.auth.authenticated = Boolean(data.authenticated);
+    state.auth.bootstrapRequired = Boolean(data.bootstrapRequired);
+    state.auth.user = data.user || null;
+    if (!state.auth.authenticated) {
+      showAuthGate(data.bootstrapRequired ? "Create the first admin account." : "Please log in.");
+      return false;
+    }
+    hideAuthGate();
+    return true;
+  } catch (error) {
+    showAuthGate(`Auth check failed: ${error.message}`);
+    return false;
+  }
+}
+
+async function login() {
+  const username = byId("auth-username").value.trim();
+  const password = byId("auth-password").value;
+  byId("auth-status").textContent = "Signing in...";
+  try {
+    await apiSend("/api/auth/login", "POST", { username, password });
+    byId("auth-password").value = "";
+    await loadAuthState();
+    await refreshAfterAuth();
+  } catch (error) {
+    byId("auth-status").textContent = `Login failed: ${error.message}`;
+  }
+}
+
+async function bootstrapAdmin() {
+  const username = byId("bootstrap-username").value.trim();
+  const password = byId("bootstrap-password").value;
+  byId("bootstrap-status").textContent = "Creating admin account...";
+  try {
+    await apiSend("/api/auth/bootstrap", "POST", { username, password });
+    byId("bootstrap-password").value = "";
+    await loadAuthState();
+    await refreshAfterAuth();
+  } catch (error) {
+    byId("bootstrap-status").textContent = `Bootstrap failed: ${error.message}`;
+  }
+}
+
+async function logout() {
+  try {
+    await apiSend("/api/auth/logout", "POST", {});
+  } catch {
+    // ignore
+  }
+  state.auth.authenticated = false;
+  state.auth.user = null;
+  showAuthGate("Logged out.");
+}
+
+async function refreshAfterAuth() {
+  renderSessionSummary();
+  await loadPersonas();
+  await loadKnowledgePacks();
+  await loadPersonaChatSessions();
+  await loadSimpleChatSessions();
+  await loadAdminData();
+  await loadSecurityData();
 }
 
 function getActiveChatHistory() {
@@ -749,7 +860,8 @@ function setSubtabActive(group, value) {
     config: {
       personas: "config-view-personas",
       knowledge: "config-view-knowledge",
-      rai: "config-view-rai"
+      rai: "config-view-rai",
+      security: "config-view-security"
     }
   };
   const groupMap = map[group] || {};
@@ -768,6 +880,12 @@ function setGroupWorkspace(view) {
   byId("group-work-live").classList.toggle("active", state.groupWorkspace === "live");
   byId("group-work-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
   byId("group-work-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
+  if (groupActive && state.groupWorkspace === "debate-viewer") {
+    const type = byId("viewer-conversation-type").value || "debate";
+    loadViewerHistory(type).catch((error) => {
+      byId("viewer-progress").textContent = `Failed to load history: ${error.message}`;
+    });
+  }
 }
 
 function setChatsView(view) {
@@ -791,16 +909,20 @@ function setChatsView(view) {
 }
 
 function setConfigView(view) {
-  state.configView = view === "knowledge" || view === "rai" ? view : "personas";
+  state.configView = ["knowledge", "rai", "security"].includes(view) ? view : "personas";
   byId("tab-personas").classList.toggle("active", state.mainTab === "config" && state.configView === "personas");
   byId("tab-knowledge").classList.toggle("active", state.mainTab === "config" && state.configView === "knowledge");
   byId("tab-rai").classList.toggle("active", state.mainTab === "config" && state.configView === "rai");
+  byId("tab-security").classList.toggle("active", state.mainTab === "config" && state.configView === "security");
   setSubtabActive("config", state.configView);
   if (state.mainTab === "config" && state.configView === "knowledge") {
     loadKnowledgePacks();
   }
   if (state.mainTab === "config" && state.configView === "rai") {
     loadResponsibleAiPolicy();
+  }
+  if (state.mainTab === "config" && state.configView === "security") {
+    loadSecurityData();
   }
 }
 
@@ -1897,10 +2019,11 @@ async function openDebateInHistory(debateId) {
   switchTab("chats");
   setChatsView("group");
   setGroupWorkspace("debate-viewer");
-  byId("viewer-debate-id").value = debateId;
+  byId("viewer-conversation-type").value = "debate";
+  byId("viewer-conversation-select").value = debateId;
+  renderViewerHistoryBrowser("debate");
   try {
-    await loadDebate(debateId);
-    startPollingDebate(debateId);
+    await loadViewerConversation("debate", debateId);
   } catch (error) {
     byId("viewer-progress").textContent = `Failed to open debate: ${error.message}`;
   }
@@ -2307,6 +2430,171 @@ function resetResponsibleAiPolicyDefaults() {
   byId("rai-status").textContent = "Default values loaded. Click Save Policy to persist.";
 }
 
+function renderSessionSummary() {
+  const el = byId("security-session");
+  if (!el) return;
+  if (!state.auth.authenticated || !state.auth.user) {
+    el.textContent = "Not authenticated.";
+    return;
+  }
+  const user = state.auth.user;
+  const perms = Object.entries(user.permissions || {})
+    .filter(([, allowed]) => Boolean(allowed))
+    .map(([name]) => name)
+    .join(", ");
+  el.textContent = `Logged in as ${user.username} (${user.role}). Permissions: ${perms || "none"}.`;
+}
+
+function renderSecurityUsers(users) {
+  const container = byId("security-users");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!users.length) {
+    container.textContent = "No users.";
+    return;
+  }
+  users.forEach((user) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    const perms = Object.entries(user.permissions || {})
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+      .join(", ");
+    card.innerHTML = `
+      <div class="card-title">${user.username}</div>
+      <div>Role: ${user.role}</div>
+      <div class="muted">Permissions: ${perms || "none"}</div>
+      <div class="muted">Last login: ${user.lastLoginAt || "n/a"}</div>
+    `;
+    if (state.auth.user?.role === "admin") {
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.textContent = "Reset Password";
+      resetBtn.addEventListener("click", async () => {
+        const password = window.prompt(`New password for ${user.username}:`);
+        if (!password) return;
+        try {
+          await apiSend(`/api/auth/users/${encodeURIComponent(user.id)}`, "PUT", { password });
+          byId("security-user-status").textContent = `Password updated for ${user.username}.`;
+        } catch (error) {
+          byId("security-user-status").textContent = `Failed: ${error.message}`;
+        }
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "Delete";
+      delBtn.disabled = state.auth.user?.id === user.id;
+      delBtn.addEventListener("click", async () => {
+        if (!window.confirm(`Delete user ${user.username}?`)) return;
+        try {
+          await apiSend(`/api/auth/users/${encodeURIComponent(user.id)}`, "DELETE", {});
+          byId("security-user-status").textContent = `Deleted ${user.username}.`;
+          await loadSecurityData();
+        } catch (error) {
+          byId("security-user-status").textContent = `Failed: ${error.message}`;
+        }
+      });
+      row.append(resetBtn, delBtn);
+      card.appendChild(row);
+    }
+    container.appendChild(card);
+  });
+}
+
+function renderSecurityApiKeys(keys) {
+  const container = byId("security-api-keys");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!keys.length) {
+    container.textContent = "No API keys.";
+    return;
+  }
+  keys.forEach((key) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${key.name}</div>
+      <div class="muted">${key.prefix}...</div>
+      <div>Created: ${key.createdAt || "n/a"}</div>
+      <div>Last used: ${key.lastUsedAt || "never"}</div>
+      <div>Status: ${key.revokedAt ? `revoked (${key.revokedAt})` : "active"}</div>
+    `;
+    if (!key.revokedAt) {
+      const row = document.createElement("div");
+      row.className = "row";
+      const revokeBtn = document.createElement("button");
+      revokeBtn.type = "button";
+      revokeBtn.textContent = "Revoke";
+      revokeBtn.addEventListener("click", async () => {
+        try {
+          await apiSend(`/api/auth/api-keys/${encodeURIComponent(key.id)}`, "DELETE", {});
+          byId("security-key-status").textContent = "Key revoked.";
+          await loadSecurityData();
+        } catch (error) {
+          byId("security-key-status").textContent = `Failed: ${error.message}`;
+        }
+      });
+      row.appendChild(revokeBtn);
+      card.appendChild(row);
+    }
+    container.appendChild(card);
+  });
+}
+
+function renderSecurityUsage(usage) {
+  const container = byId("security-usage");
+  if (!container) return;
+  container.innerHTML = "";
+  const rows = usage?.byUser || [];
+  if (!rows.length) {
+    container.textContent = "No usage logs yet.";
+    return;
+  }
+  rows.forEach((row) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${row.username || row.userId || "unknown"}</div>
+      <div>Requests: ${row.requests || 0}</div>
+      <div>Last seen: ${row.lastSeenAt || "n/a"}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function loadSecurityData() {
+  renderSessionSummary();
+  if (!state.auth.authenticated) return;
+  byId("security-key-once").textContent = "";
+  byId("security-key-status").textContent = "";
+  try {
+    const [keys, usage] = await Promise.all([
+      apiGet("/api/auth/api-keys"),
+      apiGet("/api/auth/usage")
+    ]);
+    renderSecurityApiKeys(keys.keys || []);
+    renderSecurityUsage(usage);
+  } catch (error) {
+    byId("security-key-status").textContent = `Failed to load security data: ${error.message}`;
+  }
+
+  if (state.auth.user?.role === "admin") {
+    try {
+      const usersData = await apiGet("/api/auth/users");
+      renderSecurityUsers(usersData.users || []);
+    } catch (error) {
+      byId("security-user-status").textContent = `Failed to load users: ${error.message}`;
+      renderSecurityUsers([]);
+    }
+  } else {
+    renderSecurityUsers([]);
+  }
+}
+
 async function uploadKnowledgeFile(event) {
   event.preventDefault();
   const status = byId("knowledge-upload-status");
@@ -2390,6 +2678,8 @@ function clearAdHocForm() {
 async function loadDebate(debateId) {
   const data = await apiGet(`/api/debates/${encodeURIComponent(debateId)}`);
   const session = data.session;
+  state.viewer.type = "debate";
+  state.viewer.activeId = debateId;
   state.activeDebateId = debateId;
   if (!state.chatByDebate[debateId]) {
     state.chatByDebate[debateId] = [];
@@ -2408,8 +2698,12 @@ async function loadDebate(debateId) {
     // Ignore missing/unavailable chat history and keep local state.
   }
 
-  byId("viewer-debate-id").value = debateId;
+  byId("viewer-conversation-type").value = "debate";
+  byId("viewer-conversation-select").value = debateId;
+  renderViewerHistoryBrowser("debate");
   byId("download-transcript").href = `/api/debates/${encodeURIComponent(debateId)}/transcript`;
+  byId("download-transcript").classList.remove("hidden");
+  byId("viewer-transcript-chat").classList.remove("hidden");
   byId("viewer-progress").textContent = `${session.status.toUpperCase()} | Round ${
     session.progress?.round || 0
   } | ${session.progress?.currentSpeaker || "-"} | ${session.progress?.message || ""}`;
@@ -2430,6 +2724,228 @@ async function loadDebate(debateId) {
       state.pollingDebateId = null;
     }
   }
+}
+
+function normalizeViewerMessagesFromChat(chat) {
+  const messages = Array.isArray(chat?.messages) ? chat.messages : [];
+  return messages.map((m, idx) => {
+    const roleClass = m.role === "user" ? "user" : m.role === "orchestrator" ? "system" : "assistant";
+    const title =
+      m.role === "user"
+        ? "You"
+        : m.role === "orchestrator"
+          ? "Orchestrator"
+          : m.displayName || m.speakerId || "Assistant";
+    return {
+      id: `${m.turnId || 0}-${idx}`,
+      roleClass,
+      title,
+      content: m.content || ""
+    };
+  });
+}
+
+function renderViewerExchanges(entries) {
+  const container = byId("viewer-turns");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!entries.length) {
+    container.textContent = "No exchanges yet.";
+    return;
+  }
+  entries.forEach((entry) => {
+    renderExchangeMessage(container, {
+      roleClass: entry.roleClass,
+      title: entry.title,
+      content: entry.content
+    });
+  });
+}
+
+function setViewerTypeUI(type) {
+  const isDebate = type === "debate";
+  byId("viewer-transcript-chat").classList.toggle("hidden", !isDebate);
+  byId("download-transcript").classList.toggle("hidden", !isDebate);
+  if (!isDebate) {
+    byId("chat-status").textContent = "Transcript chat is available for debates only.";
+    byId("chat-history").textContent = "Select Debate type to use transcript Q&A.";
+  }
+}
+
+function viewerEntryId(type, row) {
+  return row.id;
+}
+
+function viewerEntryTitle(type, row) {
+  return row.title || row.id;
+}
+
+function renderViewerHistoryBrowser(type) {
+  const select = byId("viewer-conversation-select");
+  const list = byId("viewer-history-list");
+  const rows = state.viewer.historyByType[type] || [];
+  select.innerHTML = `<option value="">Select conversation</option>`;
+  list.innerHTML = "";
+
+  if (!rows.length) {
+    list.textContent = "No saved conversations for this type.";
+    return;
+  }
+
+  rows.forEach((row) => {
+    const id = viewerEntryId(type, row);
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = `${viewerEntryTitle(type, row)} (${id}) | tokens ${Number(row.tokens || 0).toLocaleString()} | cost ${formatAdminUsd(row.cost)}`;
+    if (state.viewer.activeId === id) option.selected = true;
+    select.appendChild(option);
+  });
+  if (!select.value && rows.length) {
+    select.value = viewerEntryId(type, rows[0]);
+  }
+
+  rows.forEach((row) => {
+    const id = viewerEntryId(type, row);
+    const card = document.createElement("div");
+    card.className = "card";
+    const subtitle = `participants: ${(row.participants || []).join(", ") || "n/a"} | messages: ${Number(row.messages || 0).toLocaleString()} | tokens: ${Number(row.tokens || 0).toLocaleString()} | cost: ${formatAdminUsd(row.cost)}`;
+    const risk = row.risk || { red: 0, yellow: 0, green: 0 };
+    const sentiment = row.sentiment || { positive: 0, neutral: 0, negative: 0 };
+    card.innerHTML = `
+      <div class="card-title">${viewerEntryTitle(type, row)}</div>
+      <div class="muted">${id}</div>
+      <div>${type === "debate" ? `status: ${row.status || "n/a"} | ` : ""}${subtitle}</div>
+      <div class="admin-item-sub">Risk: R ${risk.red} | Y ${risk.yellow} | G ${risk.green}</div>
+      <div class="admin-item-sub">Sentiment: + ${sentiment.positive} | ~ ${sentiment.neutral} | - ${sentiment.negative}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "row";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.textContent = "Open";
+    openBtn.addEventListener("click", async () => {
+      byId("viewer-conversation-select").value = id;
+      try {
+        await loadViewerConversation(type, id);
+      } catch (error) {
+        byId("viewer-progress").textContent = error.message;
+      }
+    });
+    actions.appendChild(openBtn);
+    card.appendChild(actions);
+    list.appendChild(card);
+  });
+}
+
+async function loadViewerHistory(type) {
+  let rows = [];
+  if (type === "debate") {
+    const overview = await apiGet("/api/admin/overview");
+    rows = (overview.debates || []).map((d) => ({
+      id: d.debateId,
+      title: d.title || d.debateId,
+      status: d.status || "n/a",
+      participants: d.participants || [],
+      messages: Number(d.drillSummary?.turns || 0),
+      tokens: Number(d.tokenUsage?.totalTokens || 0),
+      cost: typeof d.estimatedCostUsd === "number" ? d.estimatedCostUsd : 0,
+      risk: {
+        red: Number(d.responsibleAi?.stoplights?.red || 0),
+        yellow: Number(d.responsibleAi?.stoplights?.yellow || 0),
+        green: Number(d.responsibleAi?.stoplights?.green || 0)
+      },
+      sentiment: {
+        positive: Number(d.responsibleAi?.sentiment?.positive || 0),
+        neutral: Number(d.responsibleAi?.sentiment?.neutral || 0),
+        negative: Number(d.responsibleAi?.sentiment?.negative || 0)
+      },
+      createdAt: d.createdAt || ""
+    }));
+  } else {
+    const chats = await apiGet("/api/admin/chats");
+    rows = (chats.chats || [])
+      .filter((c) => (type === "group" ? c.kind === "group" : c.kind === "simple"))
+      .map((c) => ({
+        id: c.chatId,
+        title: c.title || c.chatId,
+        participants: c.participants || [],
+        messages: Number(c.messageCount || 0),
+        tokens: Number(c.tokenUsage?.totalTokens || 0),
+        cost: typeof c.estimatedCostUsd === "number" ? c.estimatedCostUsd : 0,
+        risk: {
+          red: Number(c.responsibleAi?.stoplights?.red || 0),
+          yellow: Number(c.responsibleAi?.stoplights?.yellow || 0),
+          green: Number(c.responsibleAi?.stoplights?.green || 0)
+        },
+        sentiment: {
+          positive: Number(c.responsibleAi?.sentiment?.positive || 0),
+          neutral: Number(c.responsibleAi?.sentiment?.neutral || 0),
+          negative: Number(c.responsibleAi?.sentiment?.negative || 0)
+        },
+        createdAt: c.lastActivityAt || c.updatedAt || c.createdAt || ""
+      }));
+  }
+  rows.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  state.viewer.historyByType[type] = rows;
+  renderViewerHistoryBrowser(type);
+}
+
+async function loadViewerConversation(type, id) {
+  if (!id) throw new Error("Conversation id is required.");
+  if (type === "debate") {
+    setViewerTypeUI("debate");
+    await loadDebate(id);
+    startPollingDebate(id);
+    return;
+  }
+
+  if (state.pollIntervalId) {
+    clearInterval(state.pollIntervalId);
+    state.pollIntervalId = null;
+    state.pollingDebateId = null;
+  }
+
+  state.viewer.type = type;
+  state.viewer.activeId = id;
+  byId("viewer-conversation-type").value = type;
+  byId("viewer-conversation-select").value = id;
+  renderViewerHistoryBrowser(type);
+  setViewerTypeUI(type);
+  byId("download-transcript").removeAttribute("href");
+  byId("viewer-transcript").textContent = "";
+  state.activeDebateId = null;
+
+  if (type === "group") {
+    const data = await apiGet(`/api/persona-chats/${encodeURIComponent(id)}`);
+    const session = data.session || {};
+    byId("viewer-progress").textContent = `GROUP CHAT | ${session.title || id} | mode=${session.settings?.engagementMode || "chat"} | messages=${(data.messages || []).length}`;
+    byId("viewer-transcript").textContent = [
+      `Title: ${session.title || id}`,
+      `Type: Group Chat`,
+      `Participants: ${(session.personas || []).map((p) => p.displayName).join(", ") || "n/a"}`,
+      `Model: ${session.settings?.model || "n/a"}`,
+      `Context: ${session.context || "(none)"}`
+    ].join("\n");
+    renderViewerExchanges(normalizeViewerMessagesFromChat(data));
+    return;
+  }
+
+  if (type === "simple") {
+    const data = await apiGet(`/api/simple-chats/${encodeURIComponent(id)}`);
+    const session = data.session || {};
+    byId("viewer-progress").textContent = `SIMPLE CHAT | ${session.title || id} | messages=${(data.messages || []).length}`;
+    byId("viewer-transcript").textContent = [
+      `Title: ${session.title || id}`,
+      `Type: Simple Chat`,
+      `Model: ${session.settings?.model || "n/a"}`,
+      `Context: ${session.context || "(none)"}`,
+      `Knowledge Packs: ${(session.knowledgePackIds || []).join(", ") || "none"}`
+    ].join("\n");
+    renderViewerExchanges(normalizeViewerMessagesFromChat(data));
+    return;
+  }
+
+  throw new Error(`Unsupported conversation type: ${type}`);
 }
 
 function startPollingDebate(debateId) {
@@ -2459,6 +2975,54 @@ function wireEvents() {
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
+  byId("config-view-security").addEventListener("click", () => setConfigView("security"));
+  byId("auth-login").addEventListener("click", login);
+  byId("bootstrap-create").addEventListener("click", bootstrapAdmin);
+  byId("auth-password").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      login();
+    }
+  });
+  byId("bootstrap-password").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      bootstrapAdmin();
+    }
+  });
+  byId("security-refresh-session").addEventListener("click", async () => {
+    await loadAuthState();
+    await loadSecurityData();
+  });
+  byId("security-logout").addEventListener("click", logout);
+  byId("security-create-key").addEventListener("click", async () => {
+    const name = byId("security-key-name").value.trim();
+    byId("security-key-status").textContent = "Generating key...";
+    try {
+      const data = await apiSend("/api/auth/api-keys", "POST", { name });
+      byId("security-key-status").textContent = "API key created. Copy it now; it will not be shown again.";
+      byId("security-key-once").textContent = data.key?.rawKey || "";
+      byId("security-key-name").value = "";
+      await loadSecurityData();
+    } catch (error) {
+      byId("security-key-status").textContent = `Failed: ${error.message}`;
+    }
+  });
+  byId("security-create-user").addEventListener("click", async () => {
+    const username = byId("security-new-username").value.trim();
+    const password = byId("security-new-password").value;
+    const role = byId("security-new-role").value || "user";
+    byId("security-user-status").textContent = "Creating user...";
+    try {
+      await apiSend("/api/auth/users", "POST", { username, password, role });
+      byId("security-new-username").value = "";
+      byId("security-new-password").value = "";
+      byId("security-user-status").textContent = "User created.";
+      await loadSecurityData();
+    } catch (error) {
+      byId("security-user-status").textContent = `Failed: ${error.message}`;
+    }
+  });
   byId("rai-save").addEventListener("click", saveResponsibleAiPolicy);
   byId("rai-reset-defaults").addEventListener("click", resetResponsibleAiPolicyDefaults);
   byId("rai-reload").addEventListener("click", loadResponsibleAiPolicy);
@@ -2565,29 +3129,42 @@ function wireEvents() {
       const debateId = data.debateId;
       const mode = data.personaSelection?.mode || "manual";
       byId("debate-run-status").textContent = `Debate queued: ${debateId} (selection: ${mode})`;
-      byId("viewer-debate-id").value = debateId;
+      byId("viewer-conversation-type").value = "debate";
+      byId("viewer-conversation-select").value = debateId;
+      await loadViewerHistory("debate");
       switchTab("chats");
       setChatsView("group");
       setGroupWorkspace("debate-viewer");
-      await loadDebate(debateId);
-      startPollingDebate(debateId);
+      await loadViewerConversation("debate", debateId);
     } catch (error) {
       byId("debate-run-status").textContent = `Failed: ${error.message}`;
     }
   });
 
-  byId("load-debate").addEventListener("click", async () => {
-    const debateId = byId("viewer-debate-id").value.trim();
-    if (!debateId) {
-      window.alert("Enter debate id.");
+  byId("load-conversation").addEventListener("click", async () => {
+    const type = byId("viewer-conversation-type").value || "debate";
+    const id = byId("viewer-conversation-select").value.trim();
+    if (!id) {
+      window.alert("Select a conversation from history.");
       return;
     }
 
     try {
-      await loadDebate(debateId);
-      startPollingDebate(debateId);
+      await loadViewerConversation(type, id);
     } catch (error) {
       byId("viewer-progress").textContent = error.message;
+    }
+  });
+  byId("viewer-conversation-type").addEventListener("change", () => {
+    const type = byId("viewer-conversation-type").value || "debate";
+    setViewerTypeUI(type);
+    loadViewerHistory(type).catch((error) => {
+      byId("viewer-progress").textContent = `Failed to load history: ${error.message}`;
+    });
+    if (type !== "debate" && state.pollIntervalId) {
+      clearInterval(state.pollIntervalId);
+      state.pollIntervalId = null;
+      state.pollingDebateId = null;
     }
   });
 
@@ -2711,6 +3288,8 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+  const authed = await loadAuthState();
+  renderSessionSummary();
   switchTab("chats");
   setChatsView("simple");
   setGroupWorkspace("live");
@@ -2726,11 +3305,12 @@ async function init() {
   renderTopicDiscoveryResults();
   renderGeneratedTopicDrafts();
   renderKnowledgeStudioList();
-  await loadPersonas();
-  await loadKnowledgePacks();
+  setViewerTypeUI(byId("viewer-conversation-type").value || "debate");
+  if (!authed) {
+    return;
+  }
+  await refreshAfterAuth();
   await loadResponsibleAiPolicy();
-  await loadPersonaChatSessions();
-  await loadSimpleChatSessions();
 }
 
 init();

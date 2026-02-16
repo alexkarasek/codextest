@@ -1,0 +1,2 @@
+{"ts":"2026-02-16T17:01:48.716Z","method":"GET","path":"/api-keys","status":200,"durationMs":0,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}
+{"ts":"2026-02-16T17:01:56.585Z","method":"GET","path":"/api-keys","status":304,"durationMs":1,"userId":"usr_0ffa98068134468f","username":"akadmin","authMethod":"session","apiKeyId":null}

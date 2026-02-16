@@ -4,6 +4,14 @@ A local-first web application to create/edit personas and run multi-round debate
 
 ## Features
 
+- Security Baseline (local-first)
+  - Username/password authentication with file-based users
+  - First-run bootstrap flow to create initial admin user
+  - Basic roles/permissions (`admin`, `user`) with route-level enforcement
+  - API key generation/revocation per user for external clients (Postman/Copilot integrations)
+  - Per-request usage audit log with user attribution in `data/settings/usage.jsonl`
+  - User/session/API key administration from `Admin & Config -> Users & Access`
+
 - Persona Manager
   - Create, edit, duplicate, delete personas
   - Search/filter by tag
@@ -117,6 +125,23 @@ npm start
 Open in browser:
 
 - `http://localhost:3000`
+
+## Authentication Quick Start
+
+1. Open the app in browser.
+2. On first run, create the bootstrap admin account in the sign-in panel.
+3. After login, go to `Admin & Config -> Users & Access` to:
+   - create additional users
+   - generate/revoke API keys
+   - inspect per-user usage summary
+
+For API clients (Postman/Copilot), send:
+
+- Header: `x-api-key: <your-generated-key>`
+
+All authenticated API requests are logged with user attribution in:
+
+- `data/settings/usage.jsonl`
 
 ## Run with Docker
 

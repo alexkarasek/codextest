@@ -172,6 +172,10 @@ main {
   box-shadow: var(--shadow);
 }
 
+.auth-gate {
+  margin: 14px 18px 0 18px;
+}
+
 .stack {
   display: grid;
   gap: 10px;

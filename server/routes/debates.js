@@ -244,6 +244,8 @@ router.post("/", async (req, res) => {
     settings: parsed.data.settings,
     personas,
     personaSelection: selectionMeta,
+    createdBy: req.auth?.user?.id || null,
+    createdByUsername: req.auth?.user?.username || null,
     status: "queued",
     createdAt: new Date().toISOString(),
     progress: {

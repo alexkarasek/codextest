@@ -34,7 +34,25 @@
     <button id="config-view-personas" class="subtab-btn active" type="button">Personas</button>
     <button id="config-view-knowledge" class="subtab-btn" type="button">Knowledge Studio</button>
     <button id="config-view-rai" class="subtab-btn" type="button">Responsible AI</button>
+    <button id="config-view-security" class="subtab-btn" type="button">Users & Access</button>
   </nav>
+
+  <section id="auth-gate" class="panel stack auth-gate hidden">
+    <h2>Sign In</h2>
+    <div id="auth-bootstrap-panel" class="stack hidden">
+      <div class="hint">No users exist yet. Create the first admin account.</div>
+      <label>Admin Username<input id="bootstrap-username" type="text" placeholder="admin"></label>
+      <label>Admin Password<input id="bootstrap-password" type="password" placeholder="at least 8 characters"></label>
+      <button id="bootstrap-create" type="button">Create Admin</button>
+      <div id="bootstrap-status" class="status"></div>
+    </div>
+    <div id="auth-login-panel" class="stack">
+      <label>Username<input id="auth-username" type="text"></label>
+      <label>Password<input id="auth-password" type="password"></label>
+      <button id="auth-login" type="button">Login</button>
+      <div id="auth-status" class="status"></div>
+    </div>
+  </section>
 
   <main>
     <section id="tab-personas" class="tab-section">
@@ -127,6 +145,45 @@
           <h2>Policy Preview</h2>
           <div class="hint">Changes apply to newly rendered exchanges and governance calculations.</div>
           <pre id="rai-preview" class="preview"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-security" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Current Session</h2>
+          <div id="security-session" class="status">Not authenticated.</div>
+          <div class="row">
+            <button id="security-refresh-session" type="button">Refresh Session</button>
+            <button id="security-logout" type="button">Logout</button>
+          </div>
+          <h3>Create API Key</h3>
+          <label>Key Label<input id="security-key-name" type="text" placeholder="Postman key"></label>
+          <button id="security-create-key" type="button">Generate API Key</button>
+          <div id="security-key-status" class="status"></div>
+          <pre id="security-key-once" class="preview"></pre>
+          <h3>Your API Keys</h3>
+          <div id="security-api-keys" class="list"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>User Administration</h2>
+          <div class="hint">Admin users can create users, reset passwords, and set permissions.</div>
+          <label>Username<input id="security-new-username" type="text"></label>
+          <label>Password<input id="security-new-password" type="password"></label>
+          <label>Role
+            <select id="security-new-role">
+              <option value="user" selected>User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button id="security-create-user" type="button">Create User</button>
+          <div id="security-user-status" class="status"></div>
+          <h3>Users</h3>
+          <div id="security-users" class="list"></div>
+          <h3>Usage by User</h3>
+          <div id="security-usage" class="list"></div>
         </div>
       </div>
     </section>
@@ -283,7 +340,7 @@
           <div class="row">
             <button id="group-work-live" type="button">Live Group Chat</button>
             <button id="group-work-debate-setup" type="button">Formal Debate Setup</button>
-            <button id="group-work-debate-viewer" type="button">Debate Viewer</button>
+            <button id="group-work-debate-viewer" type="button">History Explorer</button>
           </div>
           <label>Chat Title<input id="persona-chat-title" type="text" value="Persona Collaboration Chat"></label>
           <label>Shared Context<textarea id="persona-chat-context" rows="3" placeholder="Optional context shared across all persona responses"></textarea></label>
@@ -329,12 +386,24 @@
 
     <section id="tab-viewer" class="tab-section">
       <div class="panel stack">
-        <h2>Debate Viewer <span class="tip" tabindex="0">?<span class="tip-flyout">Live progress appears while queued/running. Use download to save transcript markdown.</span></span></h2>
+        <h2>History Explorer <span class="tip" tabindex="0">?<span class="tip-flyout">Browse conversation history by type. Select and open any session to monitor exchange-level risk flags.</span></span></h2>
         <div class="row">
-          <label>Debate Id<input id="viewer-debate-id" type="text" placeholder="auto-filled when running"></label>
-          <button id="load-debate" type="button">Load</button>
+          <label>Type
+            <select id="viewer-conversation-type">
+              <option value="debate" selected>Debate</option>
+              <option value="group">Group Chat</option>
+              <option value="simple">Simple Chat</option>
+            </select>
+          </label>
+          <label>Conversation
+            <select id="viewer-conversation-select">
+              <option value="">Select conversation</option>
+            </select>
+          </label>
+          <button id="load-conversation" type="button">Load</button>
           <a id="download-transcript" href="#" target="_blank" rel="noopener">Download Transcript</a>
         </div>
+        <div id="viewer-history-list" class="list"></div>
         <div id="viewer-progress" class="status"></div>
         <pre id="viewer-transcript" class="transcript"></pre>
         <div class="panel stack">
@@ -342,7 +411,7 @@
           <div class="hint">Stoplight indicators are heuristic signals based on text content and sentiment terms.</div>
           <div id="viewer-turns" class="chat-history"></div>
         </div>
-        <div class="chatbox stack">
+        <div id="viewer-transcript-chat" class="chatbox stack">
           <h3>Transcript Chat</h3>
           <div class="hint">
             Ask questions about the currently loaded debate transcript. Responses are grounded in transcript excerpts.
@@ -389,7 +458,7 @@
           <div class="row">
             <button id="admin-nav-group-history" type="button">Open Group Chat History</button>
             <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>
-            <button id="admin-nav-debate-history" type="button">Open Debate Viewer</button>
+            <button id="admin-nav-debate-history" type="button">Open History Explorer</button>
           </div>
         </div>
       </div>
