@@ -27,6 +27,7 @@ const state = {
   adminMetricFocus: null,
   governanceChat: {
     sessions: [],
+    searchQuery: "",
     activeChatId: null,
     historyByChat: {}
   },
@@ -65,6 +66,53 @@ const state = {
   }
 };
 
+const DEFAULT_RAI_POLICY = {
+  stoplight: {
+    redKeywords: [
+      "kill",
+      "suicide",
+      "self-harm",
+      "bomb",
+      "terror",
+      "ethnic cleansing",
+      "genocide",
+      "overdose",
+      "rape",
+      "how to hurt",
+      "hack bank",
+      "credit card theft"
+    ],
+    yellowKeywords: [
+      "guaranteed profit",
+      "insider tip",
+      "evade taxes",
+      "diagnose",
+      "prescribe",
+      "legal advice",
+      "financial advice",
+      "weapon",
+      "violent",
+      "harass",
+      "exploit"
+    ]
+  },
+  sentiment: {
+    positiveKeywords: [
+      "good",
+      "great",
+      "helpful",
+      "constructive",
+      "benefit",
+      "improve",
+      "safe",
+      "clarify",
+      "collaborate"
+    ],
+    negativeKeywords: ["bad", "terrible", "harm", "danger", "risky", "hate", "angry", "useless", "worse"],
+    threshold: 1
+  }
+};
+
 function byId(id) {
   return document.getElementById(id);
 }
@@ -74,6 +122,17 @@ function parseCsv(input) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsTerm(text, term) {
+  const t = String(term || "").toLowerCase().trim();
+  if (!t) return false;
+  const pattern = `(?:^|[^a-z0-9])${escapeRegex(t)}(?:$|[^a-z0-9])`;
+  return new RegExp(pattern, "i").test(text);
 }
 
 function parseLineList(input) {
@@ -94,26 +153,23 @@ function safeNumberInput(raw, fallback, { min = -Infinity, max = Infinity, integ
 
 function assessExchange(content) {
   const text = String(content || "").toLowerCase();
-  const policy = state.responsibleAiPolicy || {
-    stoplight: { redKeywords: [], yellowKeywords: [] },
-    sentiment: { positiveKeywords: [], negativeKeywords: [], threshold: 1 }
-  };
+  const policy = state.responsibleAiPolicy || DEFAULT_RAI_POLICY;
   const redTerms = policy.stoplight?.redKeywords || [];
   const yellowTerms = policy.stoplight?.yellowKeywords || [];
   const positiveTerms = policy.sentiment?.positiveKeywords || [];
   const negativeTerms = policy.sentiment?.negativeKeywords || [];
   const threshold = Number(policy.sentiment?.threshold || 1);
 
-  const red = redTerms.some((term) => text.includes(String(term).toLowerCase()));
-  const yellow = !red && yellowTerms.some((term) => text.includes(String(term).toLowerCase()));
+  const red = redTerms.some((term) => containsTerm(text, term));
+  const yellow = !red && yellowTerms.some((term) => containsTerm(text, term));
   const stoplight = red ? "red" : yellow ? "yellow" : "green";
   let pos = 0;
   let neg = 0;
   positiveTerms.forEach((term) => {
-    if (text.includes(String(term).toLowerCase())) pos += 1;
+    if (containsTerm(text, term)) pos += 1;
   });
   negativeTerms.forEach((term) => {
-    if (text.includes(String(term).toLowerCase())) neg += 1;
+    if (containsTerm(text, term)) neg += 1;
   });
   const sentiment = pos - neg >= threshold ? "positive" : neg - pos >= threshold ? "negative" : "neutral";
   return { stoplight, sentiment };
@@ -311,6 +367,7 @@ async function refreshAfterAuth() {
   renderSessionSummary();
   await loadPersonas();
   await loadKnowledgePacks();
+  await loadResponsibleAiPolicy();
   await loadPersonaChatSessions();
   await loadSimpleChatSessions();
   await loadAdminData();
@@ -2230,13 +2287,29 @@ function renderGovernanceChatHistory() {
 
 function renderGovernanceChatSessions() {
   const container = byId("gov-chat-session-list");
+  const status = byId("gov-chat-search-status");
   if (!container) return;
   container.innerHTML = "";
+  const query = String(state.governanceChat.searchQuery || "").trim();
   const sessions = state.governanceChat.sessions || [];
-  if (!sessions.length) {
-    container.textContent = "No governance admin chat sessions yet.";
+
+  if (!query) {
+    container.classList.add("hidden");
+    if (status) status.classList.add("hidden");
     return;
   }
+
+  container.classList.remove("hidden");
+  if (status) status.classList.remove("hidden");
+
+  if (!sessions.length) {
+    container.textContent = "No matches found.";
+    if (status) status.textContent = `No governance chats matched "${query}".`;
+    return;
+  }
+
+  if (status) status.textContent = `Found ${sessions.length} governance chat(s) for "${query}".`;
+
   sessions.forEach((session) => {
     const card = document.createElement("div");
     card.className = "card";
@@ -2258,15 +2331,31 @@ function renderGovernanceChatSessions() {
   });
 }
 
-async function loadGovernanceChatSessions() {
-  const status = byId("gov-chat-create-status");
-  if (!status) return;
+async function searchGovernanceChatSessions() {
+  const query = byId("gov-chat-search")?.value.trim() || "";
+  state.governanceChat.searchQuery = query;
+  const status = byId("gov-chat-search-status");
+  if (!query) {
+    state.governanceChat.sessions = [];
+    renderGovernanceChatSessions();
+    return;
+  }
+  if (status) {
+    status.classList.remove("hidden");
+    status.textContent = "Searching governance chats...";
+  }
   try {
     const data = await apiGet("/api/admin/governance-chat");
-    state.governanceChat.sessions = Array.isArray(data.chats) ? data.chats : [];
+    const all = Array.isArray(data.chats) ? data.chats : [];
+    const q = query.toLowerCase();
+    state.governanceChat.sessions = all.filter((chat) => {
+      const id = String(chat.chatId || "").toLowerCase();
+      const title = String(chat.title || "").toLowerCase();
+      return id.includes(q) || title.includes(q);
+    });
     renderGovernanceChatSessions();
   } catch (error) {
-    status.textContent = `Failed to load governance chats: ${error.message}`;
+    if (status) status.textContent = `Failed to search governance chats: ${error.message}`;
   }
 }
 
@@ -2276,7 +2365,9 @@ async function createGovernanceChatSession() {
   try {
     const data = await apiSend("/api/admin/governance-chat/session", "POST", {});
     status.textContent = `Created governance chat ${data.chatId}`;
-    await loadGovernanceChatSessions();
+    state.governanceChat.searchQuery = "";
+    byId("gov-chat-search").value = "";
+    renderGovernanceChatSessions();
     await loadGovernanceChatSession(data.chatId);
   } catch (error) {
     status.textContent = `Create failed: ${error.message}`;
@@ -2296,6 +2387,9 @@ async function loadGovernanceChatSession(chatId) {
     state.governanceChat.activeChatId = id;
     state.governanceChat.historyByChat[id] = Array.isArray(data.messages) ? data.messages : [];
     byId("gov-chat-id").value = id;
+    state.governanceChat.searchQuery = "";
+    byId("gov-chat-search").value = "";
+    renderGovernanceChatSessions();
     renderGovernanceChatHistory();
     status.textContent = `Loaded governance chat ${id}`;
   } catch (error) {
@@ -2335,7 +2429,6 @@ async function sendGovernanceChatMessage() {
     state.governanceChat.historyByChat[chatId].push(...responses);
     renderGovernanceChatHistory();
     status.textContent = `Received ${responses.length} response(s).`;
-    await loadGovernanceChatSessions();
   } catch (error) {
     status.textContent = `Governance chat failed: ${error.message}`;
   }
@@ -2626,7 +2719,7 @@ async function loadAdminData() {
     renderAdminFilterSummary();
     renderAdminList();
     renderAdminCharts();
-    loadGovernanceChatSessions();
+    renderGovernanceChatSessions();
   } catch (error) {
     byId("admin-pricing-note").textContent = `Failed to load admin data: ${error.message}`;
   }
@@ -3687,7 +3780,13 @@ function wireEvents() {
     setGroupWorkspace("debate-viewer");
   });
   byId("gov-chat-create").addEventListener("click", createGovernanceChatSession);
-  byId("gov-chat-refresh-list").addEventListener("click", loadGovernanceChatSessions);
+  byId("gov-chat-search-btn").addEventListener("click", searchGovernanceChatSessions);
+  byId("gov-chat-search").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchGovernanceChatSessions();
+    }
+  });
   byId("gov-chat-load").addEventListener("click", () => loadGovernanceChatSession(byId("gov-chat-id").value.trim()));
   byId("gov-chat-send").addEventListener("click", sendGovernanceChatMessage);
   byId("gov-chat-message").addEventListener("keydown", (event) => {
@@ -3725,7 +3824,6 @@ async function init() {
     return;
   }
   await refreshAfterAuth();
-  await loadResponsibleAiPolicy();
 }
 
 init();

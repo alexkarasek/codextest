@@ -476,10 +476,12 @@
           <h3>Governance Admin Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Admin-only chat backed by a hidden governance dataset knowledge pack and hidden governance persona.</span></span></h3>
           <div class="row">
             <button id="gov-chat-create" type="button">New Governance Chat</button>
-            <button id="gov-chat-refresh-list" type="button">Refresh Sessions</button>
+            <label>Find Past Chat<input id="gov-chat-search" type="text" placeholder="Search by id or title"></label>
+            <button id="gov-chat-search-btn" type="button">Search</button>
           </div>
           <div id="gov-chat-create-status" class="status">Create or load a governance chat session.</div>
-          <div id="gov-chat-session-list" class="list"></div>
+          <div id="gov-chat-search-status" class="hint hidden">Search results appear here.</div>
+          <div id="gov-chat-session-list" class="list hidden"></div>
           <div class="row">
             <label>Chat Id<input id="gov-chat-id" type="text" placeholder="Load governance chat id"></label>
             <button id="gov-chat-load" type="button">Load</button>
