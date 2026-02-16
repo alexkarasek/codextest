@@ -292,6 +292,29 @@ function renderAuthChrome() {
   }
 }
 
+async function copyGeneratedApiKey() {
+  const key = byId("security-key-once")?.textContent || "";
+  if (!key.trim()) {
+    byId("security-key-status").textContent = "No generated key to copy.";
+    return;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(key.trim());
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = key.trim();
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    byId("security-key-status").textContent = "API key copied to clipboard.";
+  } catch (error) {
+    byId("security-key-status").textContent = `Copy failed: ${error.message}`;
+  }
+}
+
 function parsePermissionsInput(input) {
   const values = parseCsv(input);
   const perms = {};
@@ -3034,6 +3057,7 @@ async function loadSecurityData() {
   renderSessionSummary();
   if (!state.auth.authenticated) return;
   byId("security-key-once").textContent = "";
+  byId("security-copy-key").disabled = true;
   byId("security-key-status").textContent = "";
   try {
     const [keys, usage] = await Promise.all([
@@ -3488,14 +3512,17 @@ function wireEvents() {
     byId("security-key-status").textContent = "Generating key...";
     try {
       const data = await apiSend("/api/auth/api-keys", "POST", { name });
-      byId("security-key-status").textContent = "API key created. Copy it now; it will not be shown again.";
-      byId("security-key-once").textContent = data.key?.rawKey || "";
+      const raw = String(data.key?.rawKey || "");
       byId("security-key-name").value = "";
       await loadSecurityData();
+      byId("security-key-status").textContent = "API key created. Copy it now; it will not be shown again.";
+      byId("security-key-once").textContent = raw;
+      byId("security-copy-key").disabled = !raw;
     } catch (error) {
       byId("security-key-status").textContent = `Failed: ${error.message}`;
     }
   });
+  byId("security-copy-key").addEventListener("click", copyGeneratedApiKey);
   byId("security-create-user").addEventListener("click", async () => {
     const username = byId("security-new-username").value.trim();
     const password = byId("security-new-password").value;

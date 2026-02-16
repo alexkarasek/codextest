@@ -1,0 +1,34 @@
+{
+  "keys": [
+    {
+      "id": "key_81f588929a963399",
+      "userId": "usr_0ffa98068134468f",
+      "name": "API Key",
+      "prefix": "pk_2eecd4d",
+      "keyHash": "5f5c45081bc04ab8373483527d34dcd99b90d03fa497435ac0693ab237657032",
+      "createdAt": "2026-02-16T19:52:57.171Z",
+      "lastUsedAt": null,
+      "revokedAt": null
+    },
+    {
+      "id": "key_c22a25e530d8a460",
+      "userId": "usr_0ffa98068134468f",
+      "name": "API Key",
+      "prefix": "pk_c153879",
+      "keyHash": "21f7d23c31903393a8588a72a0e699b532bb1572e398bd28887032a61259d4cc",
+      "createdAt": "2026-02-16T19:55:01.896Z",
+      "lastUsedAt": null,
+      "revokedAt": null
+    },
+    {
+      "id": "key_3f79b80fe3bfc304",
+      "userId": "usr_0ffa98068134468f",
+      "name": "API Key",
+      "prefix": "pk_6578b68",
+      "keyHash": "c8276007a2d37deda37484f1377b79160294d1bb43139590e585f340f80bdad7",
+      "createdAt": "2026-02-16T20:01:35.708Z",
+      "lastUsedAt": "2026-02-16T20:01:54.696Z",
+      "revokedAt": null
+    }
+  ]
+}

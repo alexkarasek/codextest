@@ -587,6 +587,12 @@ button[type="submit"]:hover {
   border: 1px solid #2f4256;
 }
 
+#security-key-once {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
 .chat-history {
   background: #fff;
   border: 1px solid #d5dae2;
