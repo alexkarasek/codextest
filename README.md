@@ -295,6 +295,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `data/debates/` debate session output folders
 - `data/persona-chats/` free-form persona chat sessions
 - `data/simple-chats/` simple assistant chat sessions
+- `data/agentic/` task runner, approvals, jobs, and agentic event logs
 
 ## API Endpoints
 
@@ -356,6 +357,25 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `POST /api/admin/governance-chat/:chatId/messages`
 - `POST /api/admin/governance-chat/refresh-assets`
 
+### Agentic (Scaffold)
+
+- `GET /api/agentic/tools`
+- `POST /api/agentic/plan`
+- `POST /api/agentic/router/preview`
+- `GET /api/agentic/templates`
+- `POST /api/agentic/templates`
+- `DELETE /api/agentic/templates/:templateId`
+- `GET /api/agentic/tasks`
+- `GET /api/agentic/tasks/:taskId`
+- `POST /api/agentic/tasks`
+- `POST /api/agentic/tasks/:taskId/run`
+- `GET /api/agentic/approvals`
+- `POST /api/agentic/approvals/:approvalId/decision`
+- `GET /api/agentic/jobs`
+- `GET /api/agentic/events?type=task|tool&limit=<n>`
+- `GET /api/agentic/metrics/overview`
+- `GET /api/agentic/mcp/status`
+
 ## Data Folder Behavior
 
 - Personas are saved as both JSON and Markdown.
@@ -366,6 +386,11 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - Debate runs create timestamped folders under `data/debates`.
 - `messages.jsonl` stores request/response logs for debugging each LLM turn.
 - `chat.jsonl` stores persisted transcript-chat follow-up messages per debate.
+- `data/agentic/tasks/*.json` stores task runner state.
+- `data/agentic/approvals/*.json` stores approval requests and decisions.
+- `data/agentic/jobs/*.json` stores queued/background job metadata.
+- `data/agentic/task-events.jsonl` stores orchestration lifecycle events.
+- `data/agentic/tool-usage.jsonl` stores tool execution telemetry.
 
 ## Manual Test Plan
 

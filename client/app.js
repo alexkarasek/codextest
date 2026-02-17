@@ -55,6 +55,21 @@ const state = {
     activeChatId: null,
     historyByChat: {}
   },
+  agentic: {
+    tools: [],
+    tasks: [],
+    templates: [],
+    approvals: [],
+    jobs: [],
+    metrics: null,
+    mcp: null,
+    events: {
+      task: [],
+      tool: []
+    },
+    activeTaskId: "",
+    stepDrafts: []
+  },
   viewer: {
     type: "debate",
     activeId: null,
@@ -65,6 +80,85 @@ const state = {
     }
   }
 };
+
+const AGENTIC_BUILTIN_PRESETS = [
+  {
+    id: "preset-http-analyze-save",
+    kind: "builtin",
+    name: "HTTP -> Analyze -> Save report",
+    template: {
+      title: "HTTP Analysis Report",
+      objective: "Fetch endpoint data, summarize, and persist a concise report.",
+      team: { mode: "auto", personaIds: [], tags: ["analysis"], maxAgents: 3 },
+      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      steps: [
+        {
+          id: "step-1",
+          name: "Fetch endpoint",
+          type: "tool",
+          toolId: "http.request",
+          input: { url: "http://localhost:3000/health", method: "GET" },
+          dependsOn: [],
+          requiresApproval: false
+        },
+        {
+          id: "step-2",
+          name: "Summarize response",
+          type: "llm",
+          prompt:
+            "Summarize this response in 3 concise bullets and include key status signals:\\n{{steps.step-1.result.bodyPreview}}",
+          dependsOn: ["step-1"],
+          requiresApproval: false
+        },
+        {
+          id: "step-3",
+          name: "Write report",
+          type: "tool",
+          toolId: "filesystem.write_text",
+          input: {
+            path: "data/agentic/reports/http-report.txt",
+            content: "{{steps.step-2.result.text}}"
+          },
+          dependsOn: ["step-2"],
+          requiresApproval: false
+        }
+      ]
+    }
+  },
+  {
+    id: "preset-safe-write-with-approval",
+    kind: "builtin",
+    name: "Safe write with approval gate",
+    template: {
+      title: "Approved File Write Workflow",
+      objective: "Draft content and require approval before writing to disk.",
+      team: { mode: "auto", personaIds: [], tags: ["governance"], maxAgents: 3 },
+      settings: { model: "gpt-4.1-mini", temperature: 0.2 },
+      steps: [
+        {
+          id: "step-1",
+          name: "Draft content",
+          type: "llm",
+          prompt: "Draft a short operational note with 5 bullet points for governance reporting.",
+          dependsOn: [],
+          requiresApproval: false
+        },
+        {
+          id: "step-2",
+          name: "Write approved note",
+          type: "tool",
+          toolId: "filesystem.write_text",
+          input: {
+            path: "data/agentic/reports/approved-note.txt",
+            content: "{{steps.step-1.result.text}}"
+          },
+          dependsOn: ["step-1"],
+          requiresApproval: true
+        }
+      ]
+    }
+  }
+];
 
 const DEFAULT_RAI_POLICY = {
   stoplight: {
@@ -149,6 +243,14 @@ function safeNumberInput(raw, fallback, { min = -Infinity, max = Infinity, integ
   if (n < min) n = min;
   if (n > max) n = max;
   return n;
+}
+
+function toPrettyJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function assessExchange(content) {
@@ -395,6 +497,7 @@ async function refreshAfterAuth() {
   await loadSimpleChatSessions();
   await loadAdminData();
   await loadSecurityData();
+  await loadAgenticData();
 }
 
 function getActiveChatHistory() {
@@ -1115,6 +1218,7 @@ function setSubtabActive(group, value) {
       personas: "config-view-personas",
       knowledge: "config-view-knowledge",
       rai: "config-view-rai",
+      agentic: "config-view-agentic",
       security: "config-view-security"
     }
   };
@@ -1163,10 +1267,11 @@ function setChatsView(view) {
 }
 
 function setConfigView(view) {
-  state.configView = ["knowledge", "rai", "security"].includes(view) ? view : "personas";
+  state.configView = ["knowledge", "rai", "agentic", "security"].includes(view) ? view : "personas";
   byId("tab-personas").classList.toggle("active", state.mainTab === "config" && state.configView === "personas");
   byId("tab-knowledge").classList.toggle("active", state.mainTab === "config" && state.configView === "knowledge");
   byId("tab-rai").classList.toggle("active", state.mainTab === "config" && state.configView === "rai");
+  byId("tab-agentic").classList.toggle("active", state.mainTab === "config" && state.configView === "agentic");
   byId("tab-security").classList.toggle("active", state.mainTab === "config" && state.configView === "security");
   setSubtabActive("config", state.configView);
   if (state.mainTab === "config" && state.configView === "knowledge") {
@@ -1174,6 +1279,9 @@ function setConfigView(view) {
   }
   if (state.mainTab === "config" && state.configView === "rai") {
     loadResponsibleAiPolicy();
+  }
+  if (state.mainTab === "config" && state.configView === "agentic") {
+    loadAgenticData();
   }
   if (state.mainTab === "config" && state.configView === "security") {
     loadSecurityData();
@@ -3083,6 +3191,706 @@ async function loadSecurityData() {
   }
 }
 
+function getDefaultAgenticSteps() {
+  return [
+    {
+      id: "step-1",
+      name: "Write task note",
+      type: "tool",
+      toolId: "filesystem.write_text",
+      input: {
+        path: "data/agentic/notes/latest-task.txt",
+        content: "Agentic task scaffold created from UI.\n"
+      },
+      requiresApproval: false
+    },
+    {
+      id: "step-2",
+      name: "Read task note",
+      type: "tool",
+      toolId: "filesystem.read_text",
+      input: {
+        path: "data/agentic/notes/latest-task.txt"
+      },
+      dependsOn: ["step-1"],
+      requiresApproval: false
+    }
+  ];
+}
+
+function normalizeAgenticTemplate(template = {}) {
+  return {
+    title: String(template.title || "").trim() || "Agentic Task",
+    objective: String(template.objective || "").trim(),
+    team: {
+      mode: template.team?.mode === "manual" ? "manual" : "auto",
+      personaIds: Array.isArray(template.team?.personaIds)
+        ? template.team.personaIds.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+      tags: Array.isArray(template.team?.tags)
+        ? template.team.tags.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+      maxAgents: safeNumberInput(template.team?.maxAgents, 3, { min: 1, max: 8, integer: true })
+    },
+    settings: {
+      model: String(template.settings?.model || "gpt-4.1-mini"),
+      temperature: safeNumberInput(template.settings?.temperature, 0.3, { min: 0, max: 2 })
+    },
+    steps: (Array.isArray(template.steps) && template.steps.length ? template.steps : getDefaultAgenticSteps()).map(
+      (step, idx) => normalizeAgenticStepDraft(step, idx)
+    )
+  };
+}
+
+function applyAgenticTemplate(template) {
+  const normalized = normalizeAgenticTemplate(template);
+  byId("agentic-task-title").value = normalized.title;
+  byId("agentic-task-objective").value = normalized.objective;
+  byId("agentic-team-mode").value = normalized.team.mode;
+  byId("agentic-team-persona-ids").value = normalized.team.personaIds.join(", ");
+  byId("agentic-team-tags").value = normalized.team.tags.join(", ");
+  byId("agentic-team-max-agents").value = String(normalized.team.maxAgents);
+  byId("agentic-task-model").value = normalized.settings.model;
+  byId("agentic-task-temperature").value = String(normalized.settings.temperature);
+  initAgenticStepDrafts(normalized.steps);
+  renderAgenticStepBuilder();
+  refreshAgenticJsonFromBuilder({ silent: true });
+}
+
+function resetAgenticBuilderToBlank() {
+  applyAgenticTemplate({
+    title: "Agentic Task",
+    objective: "",
+    team: { mode: "auto", personaIds: [], tags: [], maxAgents: 3 },
+    settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+    steps: [
+      {
+        id: "step-1",
+        name: "New Step",
+        type: "tool",
+        toolId: "filesystem.write_text",
+        input: { path: "data/agentic/output.txt", content: "hello" },
+        dependsOn: [],
+        requiresApproval: false
+      }
+    ]
+  });
+}
+
+function renderAgenticPresetSelect() {
+  const select = byId("agentic-preset-select");
+  if (!select) return;
+  const current = select.value;
+  const options = [
+    ...AGENTIC_BUILTIN_PRESETS.map((item) => ({
+      value: `builtin:${item.id}`,
+      label: `Built-in: ${item.name}`
+    })),
+    ...(state.agentic.templates || []).map((item) => ({
+      value: `saved:${item.id}`,
+      label: `Saved: ${item.name}`
+    }))
+  ];
+
+  select.innerHTML = "";
+  if (!options.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No presets available";
+    select.appendChild(opt);
+    return;
+  }
+  options.forEach((item, idx) => {
+    const opt = document.createElement("option");
+    opt.value = item.value;
+    opt.textContent = item.label;
+    if ((current && current === item.value) || (!current && idx === 0)) {
+      opt.selected = true;
+    }
+    select.appendChild(opt);
+  });
+}
+
+function findSelectedAgenticPreset() {
+  const raw = byId("agentic-preset-select").value || "";
+  if (!raw.includes(":")) return null;
+  const [kind, id] = raw.split(":");
+  if (kind === "builtin") {
+    const found = AGENTIC_BUILTIN_PRESETS.find((item) => item.id === id);
+    return found ? { kind, id, name: found.name, template: found.template } : null;
+  }
+  if (kind === "saved") {
+    const found = (state.agentic.templates || []).find((item) => item.id === id);
+    if (!found) return null;
+    return {
+      kind,
+      id,
+      name: found.name,
+      template: {
+        title: found.title,
+        objective: found.objective,
+        team: found.team || {},
+        settings: found.settings || {},
+        steps: found.steps || []
+      }
+    };
+  }
+  return null;
+}
+
+function normalizeAgenticStepDraft(step, idx) {
+  const position = idx + 1;
+  const baseType = ["tool", "llm", "job"].includes(String(step?.type || "")) ? String(step.type) : "tool";
+  return {
+    id: String(step?.id || `step-${position}`).trim() || `step-${position}`,
+    name: String(step?.name || `Step ${position}`).trim() || `Step ${position}`,
+    type: baseType,
+    toolId: String(step?.toolId || (baseType === "tool" ? "filesystem.write_text" : "")).trim(),
+    prompt: String(step?.prompt || "").trim(),
+    model: String(step?.model || "").trim(),
+    input: step?.input && typeof step.input === "object" ? step.input : {},
+    requiresApproval: Boolean(step?.requiresApproval),
+    dependsOn: Array.isArray(step?.dependsOn) ? step.dependsOn.map((x) => String(x || "").trim()).filter(Boolean) : []
+  };
+}
+
+function initAgenticStepDrafts(steps) {
+  const source = Array.isArray(steps) && steps.length ? steps : getDefaultAgenticSteps();
+  state.agentic.stepDrafts = source.map((step, idx) => normalizeAgenticStepDraft(step, idx));
+}
+
+function getAgenticBuilderRowsFromDom() {
+  const container = byId("agentic-step-builder");
+  const rows = [...container.querySelectorAll(".agentic-step-row")];
+  return rows.map((row, idx) => {
+    let parsedInput = {};
+    const inputRaw = row.querySelector(".agentic-step-input").value.trim();
+    if (inputRaw) {
+      try {
+        parsedInput = JSON.parse(inputRaw);
+      } catch {
+        parsedInput = { raw: inputRaw };
+      }
+    }
+    return normalizeAgenticStepDraft(
+      {
+        id: row.querySelector(".agentic-step-id").value.trim(),
+        name: row.querySelector(".agentic-step-name").value.trim(),
+        type: row.querySelector(".agentic-step-type").value,
+        toolId: row.querySelector(".agentic-step-toolid").value.trim(),
+        prompt: row.querySelector(".agentic-step-prompt").value.trim(),
+        model: row.querySelector(".agentic-step-model").value.trim(),
+        input: parsedInput,
+        requiresApproval: row.querySelector(".agentic-step-approval").checked,
+        dependsOn: parseCsv(row.querySelector(".agentic-step-depends").value)
+      },
+      idx
+    );
+  });
+}
+
+function refreshAgenticJsonFromBuilder({ silent = true } = {}) {
+  state.agentic.stepDrafts = getAgenticBuilderRowsFromDom();
+  byId("agentic-steps-json").value = toPrettyJson(state.agentic.stepDrafts);
+  if (!silent) {
+    byId("agentic-task-status").textContent = "Applied builder changes to JSON.";
+  }
+}
+
+function renderAgenticStepBuilder() {
+  const container = byId("agentic-step-builder");
+  if (!container) return;
+  const drafts = state.agentic.stepDrafts || [];
+  container.innerHTML = "";
+  if (!drafts.length) {
+    container.textContent = "No steps yet. Add one.";
+    return;
+  }
+
+  drafts.forEach((step, idx) => {
+    const row = document.createElement("div");
+    row.className = "card agentic-step-row";
+    row.innerHTML = `
+      <div class="row">
+        <strong>Step ${idx + 1}</strong>
+        <button type="button" class="agentic-step-remove">Remove</button>
+      </div>
+      <div class="grid two">
+        <label>Id<input class="agentic-step-id" type="text" value="${step.id}"></label>
+        <label>Name<input class="agentic-step-name" type="text" value="${step.name}"></label>
+      </div>
+      <div class="grid two">
+        <label>Type
+          <select class="agentic-step-type">
+            <option value="tool"${step.type === "tool" ? " selected" : ""}>tool</option>
+            <option value="llm"${step.type === "llm" ? " selected" : ""}>llm</option>
+            <option value="job"${step.type === "job" ? " selected" : ""}>job</option>
+          </select>
+        </label>
+        <label>Depends On (comma-separated)<input class="agentic-step-depends" type="text" value="${step.dependsOn.join(", ")}"></label>
+      </div>
+      <label>Tool Id (tool only)<input class="agentic-step-toolid" type="text" value="${step.toolId || ""}" placeholder="filesystem.read_text"></label>
+      <label>Prompt (llm only)<textarea class="agentic-step-prompt" rows="2" placeholder="Summarize {{steps.step-1.result.bodyPreview}}">${step.prompt || ""}</textarea></label>
+      <div class="grid two">
+        <label>Model (optional)<input class="agentic-step-model" type="text" value="${step.model || ""}" placeholder="gpt-4.1-mini"></label>
+        <label class="inline"><input class="agentic-step-approval" type="checkbox"${step.requiresApproval ? " checked" : ""}> Requires approval</label>
+      </div>
+      <label>Input JSON<textarea class="agentic-step-input" rows="4">${toPrettyJson(step.input || {})}</textarea></label>
+    `;
+
+    row.querySelector(".agentic-step-remove").addEventListener("click", () => {
+      state.agentic.stepDrafts.splice(idx, 1);
+      if (!state.agentic.stepDrafts.length) {
+        state.agentic.stepDrafts.push(normalizeAgenticStepDraft({}, 0));
+      }
+      renderAgenticStepBuilder();
+      refreshAgenticJsonFromBuilder({ silent: true });
+    });
+    row.querySelectorAll("input,textarea,select").forEach((el) => {
+      el.addEventListener("change", () => refreshAgenticJsonFromBuilder({ silent: true }));
+      el.addEventListener("input", () => refreshAgenticJsonFromBuilder({ silent: true }));
+    });
+
+    container.appendChild(row);
+  });
+}
+
+function getAgenticStepsFromForm() {
+  const raw = byId("agentic-steps-json").value.trim();
+  if (!raw) return getDefaultAgenticSteps();
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Steps JSON must be an array.");
+  }
+  return parsed;
+}
+
+function agenticTaskSummary(task) {
+  const done = (task.steps || []).filter((s) => s.status === "completed").length;
+  const total = (task.steps || []).length;
+  return `${task.id} | ${task.status || "unknown"} | ${done}/${total} steps`;
+}
+
+function renderAgenticTaskSelect() {
+  const select = byId("agentic-task-select");
+  if (!select) return;
+  const tasks = state.agentic.tasks || [];
+  const active = state.agentic.activeTaskId || select.value;
+  select.innerHTML = "";
+  if (!tasks.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No tasks yet";
+    select.appendChild(opt);
+    state.agentic.activeTaskId = "";
+    byId("agentic-task-detail").textContent = "No task selected.";
+    return;
+  }
+  tasks.forEach((task) => {
+    const opt = document.createElement("option");
+    opt.value = task.id;
+    opt.textContent = agenticTaskSummary(task);
+    if ((active && active === task.id) || (!active && tasks[0].id === task.id)) {
+      opt.selected = true;
+      state.agentic.activeTaskId = task.id;
+    }
+    select.appendChild(opt);
+  });
+}
+
+function renderAgenticTaskDetail() {
+  const detail = byId("agentic-task-detail");
+  const taskId = state.agentic.activeTaskId || byId("agentic-task-select").value;
+  const task = (state.agentic.tasks || []).find((t) => t.id === taskId);
+  if (!task) {
+    detail.textContent = "No task selected.";
+    return;
+  }
+  const summary = {
+    id: task.id,
+    title: task.title,
+    objective: task.objective,
+    status: task.status,
+    selectedPersonaIds: task.routing?.selectedPersonaIds || [],
+    routingReasoning: task.routing?.reasoning || "",
+    updatedAt: task.updatedAt,
+    steps: (task.steps || []).map((step) => ({
+      id: step.id,
+      name: step.name,
+      type: step.type,
+      status: step.status,
+      requiresApproval: step.requiresApproval,
+      approvalId: step.approvalId,
+      error: step.error || null
+    })),
+    summary: task.summary || ""
+  };
+  detail.textContent = toPrettyJson(summary);
+}
+
+function renderAgenticTools() {
+  const list = byId("agentic-tools-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const tools = state.agentic.tools || [];
+  if (!tools.length) {
+    list.textContent = "No tools found.";
+    return;
+  }
+  tools.forEach((tool) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${tool.id}</div>
+      <div class="muted">${tool.description || "No description."}</div>
+      <pre class="knowledge-content-preview">${toPrettyJson(tool.inputSchema || {})}</pre>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function renderAgenticApprovals() {
+  const list = byId("agentic-approvals-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const approvals = (state.agentic.approvals || []).filter((a) => a.status === "pending");
+  if (!approvals.length) {
+    list.textContent = "No pending approvals.";
+    return;
+  }
+  approvals.forEach((approval) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${approval.title || approval.id}</div>
+      <div>task: ${approval.taskId}</div>
+      <div>step: ${approval.stepId}</div>
+      <div class="muted">requested: ${approval.createdAt || "n/a"}</div>
+    `;
+    const row = document.createElement("div");
+    row.className = "row";
+    const approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.textContent = "Approve";
+    approveBtn.addEventListener("click", async () => {
+      byId("agentic-task-status").textContent = `Approving ${approval.id}...`;
+      try {
+        const data = await apiSend(`/api/agentic/approvals/${encodeURIComponent(approval.id)}/decision`, "POST", {
+          decision: "approved",
+          notes: "Approved via UI."
+        });
+        state.agentic.activeTaskId = data.task?.id || approval.taskId;
+        byId("agentic-task-status").textContent = `Approved ${approval.id}.`;
+        await loadAgenticData();
+      } catch (error) {
+        byId("agentic-task-status").textContent = `Approval failed: ${error.message}`;
+      }
+    });
+    const rejectBtn = document.createElement("button");
+    rejectBtn.type = "button";
+    rejectBtn.textContent = "Reject";
+    rejectBtn.addEventListener("click", async () => {
+      const notes = window.prompt("Optional rejection notes:", "Rejected from UI.");
+      if (notes === null) return;
+      byId("agentic-task-status").textContent = `Rejecting ${approval.id}...`;
+      try {
+        const data = await apiSend(`/api/agentic/approvals/${encodeURIComponent(approval.id)}/decision`, "POST", {
+          decision: "rejected",
+          notes: notes || "Rejected from UI."
+        });
+        state.agentic.activeTaskId = data.task?.id || approval.taskId;
+        byId("agentic-task-status").textContent = `Rejected ${approval.id}.`;
+        await loadAgenticData();
+      } catch (error) {
+        byId("agentic-task-status").textContent = `Rejection failed: ${error.message}`;
+      }
+    });
+    row.append(approveBtn, rejectBtn);
+    card.appendChild(row);
+    list.appendChild(card);
+  });
+}
+
+function renderAgenticMetrics() {
+  const cards = byId("agentic-metrics-cards");
+  const jobsList = byId("agentic-jobs-list");
+  const taskEvents = byId("agentic-task-events");
+  const toolEvents = byId("agentic-tool-events");
+  const mcpStatus = byId("agentic-mcp-status");
+  if (!cards || !jobsList || !taskEvents || !toolEvents || !mcpStatus) return;
+
+  cards.innerHTML = "";
+  const totals = state.agentic.metrics?.totals || {};
+  [
+    ["Tasks", totals.tasks || 0],
+    ["Approvals", totals.approvals || 0],
+    ["Jobs", totals.jobs || 0],
+    ["Task Events", totals.taskEvents || 0],
+    ["Tool Runs", totals.toolExecutions || 0],
+    ["Avg Task ms", totals.avgTaskDurationMs || 0]
+  ].forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "metric-card";
+    card.innerHTML = `<div class="metric-label">${label}</div><div class="metric-value">${value}</div>`;
+    cards.appendChild(card);
+  });
+
+  jobsList.innerHTML = "";
+  const jobs = state.agentic.jobs || [];
+  if (!jobs.length) {
+    jobsList.textContent = "No queued jobs.";
+  } else {
+    jobs.forEach((job) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="card-title">${job.name || job.id}</div>
+        <div>status: ${job.status || "unknown"}</div>
+        <div class="muted">created: ${job.createdAt || "n/a"}</div>
+      `;
+      jobsList.appendChild(card);
+    });
+  }
+
+  taskEvents.textContent = toPrettyJson((state.agentic.events?.task || []).slice(-20));
+  toolEvents.textContent = toPrettyJson((state.agentic.events?.tool || []).slice(-20));
+
+  const mcp = state.agentic.mcp || {};
+  mcpStatus.textContent = `MCP: ${mcp.phase || "unknown"} | enabled=${Boolean(mcp.enabled)} | transport=${mcp.transport || "n/a"} | servers=${mcp.serverCount || 0}`;
+}
+
+async function loadAgenticData() {
+  if (!state.auth.authenticated) return;
+  byId("agentic-task-status").textContent = "Loading agentic workspace...";
+  try {
+    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, templates] = await Promise.all([
+      apiGet("/api/agentic/tools"),
+      apiGet("/api/agentic/tasks"),
+      apiGet("/api/agentic/approvals"),
+      apiGet("/api/agentic/jobs"),
+      apiGet("/api/agentic/metrics/overview"),
+      apiGet("/api/agentic/events?type=task&limit=200"),
+      apiGet("/api/agentic/events?type=tool&limit=200"),
+      apiGet("/api/agentic/mcp/status"),
+      apiGet("/api/agentic/templates")
+    ]);
+    state.agentic.tools = tools.tools || [];
+    state.agentic.tasks = tasks.tasks || [];
+    state.agentic.approvals = approvals.approvals || [];
+    state.agentic.jobs = jobs.jobs || [];
+    state.agentic.metrics = metrics || null;
+    state.agentic.events.task = taskEvents.events || [];
+    state.agentic.events.tool = toolEvents.events || [];
+    state.agentic.mcp = mcp || null;
+    state.agentic.templates = templates.templates || [];
+
+    if (state.agentic.activeTaskId && !state.agentic.tasks.some((t) => t.id === state.agentic.activeTaskId)) {
+      state.agentic.activeTaskId = "";
+    }
+    if (!state.agentic.activeTaskId && state.agentic.tasks.length) {
+      state.agentic.activeTaskId = state.agentic.tasks[0].id;
+    }
+
+    renderAgenticTaskSelect();
+    renderAgenticTaskDetail();
+    renderAgenticTools();
+    renderAgenticApprovals();
+    renderAgenticMetrics();
+    renderAgenticPresetSelect();
+    byId("agentic-task-status").textContent = "Agentic workspace loaded.";
+  } catch (error) {
+    byId("agentic-task-status").textContent = `Failed to load agentic data: ${error.message}`;
+  }
+}
+
+async function createAgenticTaskFromUi() {
+  const status = byId("agentic-task-status");
+  let steps = [];
+  try {
+    refreshAgenticJsonFromBuilder({ silent: true });
+    steps = getAgenticStepsFromForm();
+  } catch (error) {
+    status.textContent = `Invalid steps JSON: ${error.message}`;
+    return;
+  }
+
+  const payload = {
+    title: byId("agentic-task-title").value.trim() || "Agentic Task",
+    objective: byId("agentic-task-objective").value.trim(),
+    team: {
+      mode: byId("agentic-team-mode").value || "auto",
+      personaIds: parseCsv(byId("agentic-team-persona-ids").value),
+      tags: parseCsv(byId("agentic-team-tags").value),
+      maxAgents: safeNumberInput(byId("agentic-team-max-agents").value, 3, {
+        min: 1,
+        max: 8,
+        integer: true
+      })
+    },
+    settings: {
+      model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+      temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
+    },
+    steps,
+    runImmediately: byId("agentic-run-immediately").checked
+  };
+
+  status.textContent = "Creating task...";
+  try {
+    const data = await apiSend("/api/agentic/tasks", "POST", payload);
+    const task = data.task;
+    state.agentic.activeTaskId = task?.id || "";
+    status.textContent = `Task created: ${task?.id || "unknown"} (${task?.status || "pending"})`;
+    await loadAgenticData();
+  } catch (error) {
+    status.textContent = `Task creation failed: ${error.message}`;
+  }
+}
+
+async function runSelectedAgenticTask() {
+  const status = byId("agentic-task-status");
+  const taskId = byId("agentic-task-select").value.trim();
+  if (!taskId) {
+    status.textContent = "Select a task first.";
+    return;
+  }
+  status.textContent = `Running ${taskId}...`;
+  try {
+    const data = await apiSend(`/api/agentic/tasks/${encodeURIComponent(taskId)}/run`, "POST", {
+      maxSteps: 200
+    });
+    state.agentic.activeTaskId = data.task?.id || taskId;
+    status.textContent = `Run finished: ${data.task?.status || "unknown"}.`;
+    await loadAgenticData();
+  } catch (error) {
+    status.textContent = `Run failed: ${error.message}`;
+  }
+}
+
+async function previewAgenticRouting() {
+  const status = byId("agentic-task-status");
+  const output = byId("agentic-router-result");
+  const payload = {
+    mode: byId("agentic-team-mode").value || "auto",
+    personaIds: parseCsv(byId("agentic-team-persona-ids").value),
+    tags: parseCsv(byId("agentic-team-tags").value),
+    maxAgents: safeNumberInput(byId("agentic-team-max-agents").value, 3, { min: 1, max: 8, integer: true })
+  };
+  status.textContent = "Previewing team routing...";
+  try {
+    const data = await apiSend("/api/agentic/router/preview", "POST", payload);
+    output.textContent = toPrettyJson(data);
+    status.textContent = "Routing preview ready.";
+  } catch (error) {
+    output.textContent = "";
+    status.textContent = `Routing preview failed: ${error.message}`;
+  }
+}
+
+async function generateAgenticPlanFromGoal() {
+  const status = byId("agentic-task-status");
+  const reasoningEl = byId("agentic-plan-reasoning");
+  const goal = byId("agentic-goal").value.trim();
+  if (!goal) {
+    status.textContent = "Describe your goal first.";
+    return;
+  }
+
+  const payload = {
+    goal,
+    constraints: byId("agentic-constraints").value.trim(),
+    maxSteps: safeNumberInput(byId("agentic-plan-max-steps").value, 6, { min: 1, max: 12, integer: true }),
+    team: {
+      mode: byId("agentic-team-mode").value || "auto",
+      personaIds: parseCsv(byId("agentic-team-persona-ids").value),
+      tags: parseCsv(byId("agentic-team-tags").value),
+      maxAgents: safeNumberInput(byId("agentic-team-max-agents").value, 3, { min: 1, max: 8, integer: true })
+    }
+  };
+
+  status.textContent = "Generating plan from goal...";
+  try {
+    const data = await apiSend("/api/agentic/plan", "POST", payload);
+    const plan = data.plan || {};
+    byId("agentic-task-title").value = plan.title || byId("agentic-task-title").value;
+    byId("agentic-task-objective").value = plan.objective || byId("agentic-task-objective").value;
+    byId("agentic-team-mode").value = plan.team?.mode || byId("agentic-team-mode").value;
+    byId("agentic-team-persona-ids").value = (plan.team?.personaIds || []).join(", ");
+    byId("agentic-team-tags").value = (plan.team?.tags || []).join(", ");
+    byId("agentic-team-max-agents").value = String(
+      safeNumberInput(plan.team?.maxAgents, 3, { min: 1, max: 8, integer: true })
+    );
+    initAgenticStepDrafts(plan.steps || []);
+    renderAgenticStepBuilder();
+    refreshAgenticJsonFromBuilder({ silent: true });
+    reasoningEl.textContent = toPrettyJson({
+      reasoning: plan.reasoning || "",
+      generatedAt: new Date().toISOString()
+    });
+    status.textContent = "Plan generated. Review/edit steps, then create task.";
+  } catch (error) {
+    status.textContent = `Plan generation failed: ${error.message}`;
+  }
+}
+
+function loadSelectedAgenticPreset() {
+  const chosen = findSelectedAgenticPreset();
+  if (!chosen) {
+    byId("agentic-task-status").textContent = "Select a preset first.";
+    return;
+  }
+  applyAgenticTemplate(chosen.template);
+  byId("agentic-task-status").textContent = `Loaded preset: ${chosen.name}.`;
+}
+
+function resetAgenticWorkflow() {
+  resetAgenticBuilderToBlank();
+  byId("agentic-goal").value = "";
+  byId("agentic-constraints").value = "";
+  byId("agentic-plan-reasoning").textContent = "";
+  byId("agentic-router-result").textContent = "";
+  byId("agentic-task-status").textContent = "Builder reset to blank.";
+}
+
+async function saveCurrentAgenticTemplate() {
+  const status = byId("agentic-task-status");
+  try {
+    refreshAgenticJsonFromBuilder({ silent: true });
+    const steps = getAgenticStepsFromForm();
+    const suggestedName = byId("agentic-task-title").value.trim() || "Agentic Template";
+    const name = window.prompt("Template name:", suggestedName);
+    if (!name || !name.trim()) return;
+    const payload = {
+      name: name.trim(),
+      template: {
+        title: byId("agentic-task-title").value.trim() || "Agentic Task",
+        objective: byId("agentic-task-objective").value.trim(),
+        team: {
+          mode: byId("agentic-team-mode").value || "auto",
+          personaIds: parseCsv(byId("agentic-team-persona-ids").value),
+          tags: parseCsv(byId("agentic-team-tags").value),
+          maxAgents: safeNumberInput(byId("agentic-team-max-agents").value, 3, {
+            min: 1,
+            max: 8,
+            integer: true
+          })
+        },
+        settings: {
+          model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+          temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
+        },
+        steps
+      }
+    };
+    status.textContent = "Saving template...";
+    await apiSend("/api/agentic/templates", "POST", payload);
+    await loadAgenticData();
+    status.textContent = `Template saved: ${name.trim()}`;
+  } catch (error) {
+    status.textContent = `Template save failed: ${error.message}`;
+  }
+}
+
 async function uploadKnowledgeFile(event) {
   event.preventDefault();
   const status = byId("knowledge-upload-status");
@@ -3463,6 +4271,7 @@ function wireEvents() {
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
+  byId("config-view-agentic").addEventListener("click", () => setConfigView("agentic"));
   byId("config-view-security").addEventListener("click", () => setConfigView("security"));
   byId("system-menu-toggle").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -3537,6 +4346,35 @@ function wireEvents() {
     } catch (error) {
       byId("security-user-status").textContent = `Failed: ${error.message}`;
     }
+  });
+  byId("agentic-create-task").addEventListener("click", createAgenticTaskFromUi);
+  byId("agentic-generate-plan").addEventListener("click", generateAgenticPlanFromGoal);
+  byId("agentic-load-preset").addEventListener("click", loadSelectedAgenticPreset);
+  byId("agentic-reset-blank").addEventListener("click", resetAgenticWorkflow);
+  byId("agentic-save-template").addEventListener("click", saveCurrentAgenticTemplate);
+  byId("agentic-refresh").addEventListener("click", loadAgenticData);
+  byId("agentic-run-selected").addEventListener("click", runSelectedAgenticTask);
+  byId("agentic-router-preview").addEventListener("click", previewAgenticRouting);
+  byId("agentic-step-add").addEventListener("click", () => {
+    state.agentic.stepDrafts = getAgenticBuilderRowsFromDom();
+    state.agentic.stepDrafts.push(normalizeAgenticStepDraft({}, state.agentic.stepDrafts.length));
+    renderAgenticStepBuilder();
+    refreshAgenticJsonFromBuilder({ silent: true });
+  });
+  byId("agentic-step-load-json").addEventListener("click", () => {
+    try {
+      const parsed = getAgenticStepsFromForm();
+      initAgenticStepDrafts(parsed);
+      renderAgenticStepBuilder();
+      byId("agentic-task-status").textContent = "Loaded steps from JSON into builder.";
+    } catch (error) {
+      byId("agentic-task-status").textContent = `Cannot load JSON: ${error.message}`;
+    }
+  });
+  byId("agentic-step-apply-json").addEventListener("click", () => refreshAgenticJsonFromBuilder({ silent: false }));
+  byId("agentic-task-select").addEventListener("change", () => {
+    state.agentic.activeTaskId = byId("agentic-task-select").value || "";
+    renderAgenticTaskDetail();
   });
   byId("rai-save").addEventListener("click", saveResponsibleAiPolicy);
   byId("rai-reset-defaults").addEventListener("click", resetResponsibleAiPolicyDefaults);
@@ -3827,6 +4665,12 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+  initAgenticStepDrafts(getDefaultAgenticSteps());
+  renderAgenticStepBuilder();
+  byId("agentic-steps-json").value = toPrettyJson(state.agentic.stepDrafts);
+  renderAgenticPresetSelect();
+  byId("agentic-router-result").textContent = "";
+  byId("agentic-plan-reasoning").textContent = "";
   const authed = await loadAuthState();
   renderSessionSummary();
   switchTab("chats");

@@ -46,6 +46,7 @@
     <button id="config-view-personas" class="subtab-btn active" type="button">Personas</button>
     <button id="config-view-knowledge" class="subtab-btn" type="button">Knowledge Studio</button>
     <button id="config-view-rai" class="subtab-btn" type="button">Responsible AI</button>
+    <button id="config-view-agentic" class="subtab-btn" type="button">Agentic</button>
     <button id="config-view-security" class="subtab-btn" type="button">Users & Access</button>
   </nav>
 
@@ -197,6 +198,93 @@
           <div id="security-users" class="list"></div>
           <h3>Usage by User</h3>
           <div id="security-usage" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-agentic" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Agentic Task Builder <span class="tip" tabindex="0">?<span class="tip-flyout">Create scaffold tasks with tool, LLM, or job steps. Use “requires approval” per step in the JSON.</span></span></h2>
+          <div class="hint">This is scaffolding for agentic workflows. Start with a simple tool step, then add approvals and router tags.</div>
+          <label>Goal Description<textarea id="agentic-goal" rows="3" placeholder="Describe what you want the system to do end-to-end."></textarea></label>
+          <label>Planner Constraints<textarea id="agentic-constraints" rows="2" placeholder="Optional: keep under 5 steps, require approval before writes, etc."></textarea></label>
+          <div class="row">
+            <label>Planner Max Steps<input id="agentic-plan-max-steps" type="number" min="1" max="12" value="6"></label>
+            <button id="agentic-generate-plan" type="button">Generate Plan from Goal</button>
+          </div>
+          <div class="row">
+            <label>Workflow Preset
+              <select id="agentic-preset-select"></select>
+            </label>
+            <button id="agentic-load-preset" type="button">Load Preset</button>
+            <button id="agentic-reset-blank" type="button">Reset to Blank</button>
+            <button id="agentic-save-template" type="button">Save Current as Template</button>
+          </div>
+          <pre id="agentic-plan-reasoning" class="preview"></pre>
+          <label>Title<input id="agentic-task-title" type="text" value="Agentic Task"></label>
+          <label>Objective<textarea id="agentic-task-objective" rows="3" placeholder="What should this task accomplish?"></textarea></label>
+          <div class="grid two">
+            <label>Team Mode
+              <select id="agentic-team-mode">
+                <option value="auto" selected>Auto</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <label>Max Agents<input id="agentic-team-max-agents" type="number" min="1" max="8" value="3"></label>
+          </div>
+          <label>Manual Persona IDs (comma-separated)<input id="agentic-team-persona-ids" type="text" placeholder="big-tex, policy-analyst"></label>
+          <label>Router Tags (comma-separated)<input id="agentic-team-tags" type="text" placeholder="governance, finance, poker"></label>
+          <div class="grid two">
+            <label>Model<input id="agentic-task-model" type="text" value="gpt-4.1-mini"></label>
+            <label>Temperature<input id="agentic-task-temperature" type="number" min="0" max="2" step="0.1" value="0.3"></label>
+          </div>
+          <h3>Step Builder</h3>
+          <div class="hint">Build steps visually, then create task. You can reference prior outputs with templates like <code>{{steps.step-1.result.bodyPreview}}</code>.</div>
+          <div class="row">
+            <button id="agentic-step-add" type="button">Add Step</button>
+            <button id="agentic-step-load-json" type="button">Load from JSON</button>
+            <button id="agentic-step-apply-json" type="button">Apply Builder to JSON</button>
+          </div>
+          <div id="agentic-step-builder" class="list"></div>
+          <label>Steps JSON<textarea id="agentic-steps-json" rows="12"></textarea></label>
+          <div class="row">
+            <button id="agentic-create-task" type="button">Create Task</button>
+            <label class="inline"><input id="agentic-run-immediately" type="checkbox"> Run immediately</label>
+            <button id="agentic-router-preview" type="button">Preview Team Routing</button>
+          </div>
+          <pre id="agentic-router-result" class="preview"></pre>
+          <div id="agentic-task-status" class="status"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Task Monitor</h2>
+          <div class="row">
+            <button id="agentic-refresh" type="button">Refresh</button>
+            <button id="agentic-run-selected" type="button">Run Selected Task</button>
+          </div>
+          <label>Task<select id="agentic-task-select"></select></label>
+          <pre id="agentic-task-detail" class="preview"></pre>
+          <h3>Pending Approvals</h3>
+          <div id="agentic-approvals-list" class="list"></div>
+          <h3>Tool Catalog</h3>
+          <div id="agentic-tools-list" class="list"></div>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Metrics</h2>
+          <div id="agentic-metrics-cards" class="summary-cards"></div>
+          <div id="agentic-jobs-list" class="list"></div>
+        </div>
+        <div class="panel stack">
+          <h2>Events + MCP Readiness</h2>
+          <div id="agentic-mcp-status" class="status">MCP status not loaded.</div>
+          <h3>Recent Task Events</h3>
+          <pre id="agentic-task-events" class="preview"></pre>
+          <h3>Recent Tool Usage</h3>
+          <pre id="agentic-tool-events" class="preview"></pre>
         </div>
       </div>
     </section>

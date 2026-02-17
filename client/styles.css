@@ -323,6 +323,14 @@ button[type="submit"]:hover {
   border-style: dashed;
 }
 
+.agentic-step-row {
+  background: linear-gradient(180deg, #f9fbff 0%, #fffefb 100%);
+}
+
+.agentic-step-row .row strong {
+  color: #0b5060;
+}
+
 .card-title {
   font-weight: 600;
 }
