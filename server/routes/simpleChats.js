@@ -58,8 +58,13 @@ function knowledgePromptBlock(packs, maxChars = 3000) {
   return body.length > maxChars ? `${body.slice(0, maxChars)}...` : body;
 }
 
-function detectImageIntent(message) {
+function detectImageIntent(message, { force = false } = {}) {
   const text = String(message || "").trim();
+  if (force) {
+    const forcedPrompt = text.replace(/^\/image\s+/i, "").trim();
+    if (forcedPrompt) return { mode: "clear", prompt: forcedPrompt };
+    return { mode: "ambiguous", prompt: "", reason: "missing_prompt" };
+  }
   if (!text) return { mode: "none", prompt: "" };
   if (/^\/image\s+/i.test(text)) {
     const prompt = text.replace(/^\/image\s+/i, "").trim();
@@ -73,12 +78,12 @@ function detectImageIntent(message) {
     return { mode: "clear", prompt };
   }
   const clearMatch = text.match(
-    /^(?:please\s+)?(?:generate|create|draw|make)\s+(?:an?\s+)?(?:image|diagram|schematic)(?:\s+of|\s+for)?\s*(.+)$/i
+    /^(?:please\s+)?(?:generate|create|draw|make|render|illustrate|sketch)\s+(?:an?\s+)?(?:image|diagram|schematic|picture|illustration|visual)(?:\s+of|\s+for)?\s*(.+)$/i
   );
   if (clearMatch && clearMatch[1] && clearMatch[1].trim()) {
     return { mode: "clear", prompt: clearMatch[1].trim() };
   }
-  const mentionsVisual = /\b(image|diagram|schematic|visual)\b/i.test(text);
+  const mentionsVisual = /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text);
   if (mentionsVisual) {
     return {
       mode: "ambiguous",
@@ -198,7 +203,9 @@ router.post("/:chatId/messages", async (req, res) => {
 
   const knowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
   const citations = buildKnowledgeCitations(userEntry.content, knowledgePacks);
-  const imageIntent = detectImageIntent(userEntry.content);
+  const imageIntent = detectImageIntent(userEntry.content, {
+    force: Boolean(req.body?.forceImage)
+  });
 
   if (imageIntent.mode === "ambiguous") {
     const assistantEntry = {

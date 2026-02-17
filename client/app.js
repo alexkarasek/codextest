@@ -976,7 +976,7 @@ function startNewPersonaChatDraft() {
   renderPersonaChatHistory();
 }
 
-async function sendPersonaChatMessage() {
+async function sendPersonaChatMessage({ forceImage = false } = {}) {
   const status = byId("persona-chat-status");
   const input = byId("persona-chat-message");
   const explicitChatId = byId("persona-chat-id").value.trim();
@@ -1007,7 +1007,8 @@ async function sendPersonaChatMessage() {
 
   try {
     const data = await apiSend(`/api/persona-chats/${encodeURIComponent(chatId)}/messages`, "POST", {
-      message
+      message,
+      forceImage
     });
     if (data.orchestration?.content) {
       state.personaChat.historyByChat[chatId].push({
@@ -1039,13 +1040,12 @@ function prepareImageCommand(inputEl) {
 
 async function sendPersonaChatImageMessage() {
   const input = byId("persona-chat-message");
-  const cmd = prepareImageCommand(input);
-  if (!cmd) {
+  const prompt = String(input.value || "").trim();
+  if (!prompt) {
     byId("persona-chat-status").textContent = "Enter an image prompt first.";
     return;
   }
-  input.value = cmd;
-  await sendPersonaChatMessage();
+  await sendPersonaChatMessage({ forceImage: true });
 }
 
 function renderSimpleChatKnowledgeList() {
@@ -1222,7 +1222,7 @@ function startNewSimpleChatDraft() {
   renderSimpleChatHistory();
 }
 
-async function sendSimpleChatMessage() {
+async function sendSimpleChatMessage({ forceImage = false } = {}) {
   const status = byId("simple-chat-status");
   const input = byId("simple-chat-message");
   const chatId = state.simpleChat.activeChatId || byId("simple-chat-id").value.trim();
@@ -1242,7 +1242,10 @@ async function sendSimpleChatMessage() {
   status.textContent = "Thinking...";
 
   try {
-    const data = await apiSend(`/api/simple-chats/${encodeURIComponent(chatId)}/messages`, "POST", { message });
+    const data = await apiSend(`/api/simple-chats/${encodeURIComponent(chatId)}/messages`, "POST", {
+      message,
+      forceImage
+    });
     if (data.assistant) {
       state.simpleChat.historyByChat[chatId].push(data.assistant);
     }
@@ -1256,13 +1259,12 @@ async function sendSimpleChatMessage() {
 
 async function sendSimpleChatImageMessage() {
   const input = byId("simple-chat-message");
-  const cmd = prepareImageCommand(input);
-  if (!cmd) {
+  const prompt = String(input.value || "").trim();
+  if (!prompt) {
     byId("simple-chat-status").textContent = "Enter an image prompt first.";
     return;
   }
-  input.value = cmd;
-  await sendSimpleChatMessage();
+  await sendSimpleChatMessage({ forceImage: true });
 }
 
 function setSubtabActive(group, value) {
