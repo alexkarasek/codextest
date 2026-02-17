@@ -344,6 +344,7 @@ async function apiSend(url, method, body) {
 
 function showAuthGate(statusMessage = "") {
   closeSystemMenu();
+  document.body.classList.add("auth-locked");
   byId("auth-gate").classList.remove("hidden");
   byId("bootstrap-status").textContent = "";
   byId("auth-status").textContent = statusMessage || "";
@@ -352,6 +353,7 @@ function showAuthGate(statusMessage = "") {
 }
 
 function hideAuthGate() {
+  document.body.classList.remove("auth-locked");
   byId("auth-gate").classList.add("hidden");
 }
 
@@ -1289,6 +1291,10 @@ function setConfigView(view) {
 }
 
 function switchTab(tabName) {
+  if (!state.auth.authenticated) {
+    showAuthGate(state.auth.bootstrapRequired ? "Create the first admin account." : "Please log in.");
+    return;
+  }
   state.mainTab = tabName;
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);

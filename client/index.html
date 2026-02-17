@@ -51,19 +51,21 @@
   </nav>
 
   <section id="auth-gate" class="panel stack auth-gate hidden">
-    <h2>Sign In</h2>
-    <div id="auth-bootstrap-panel" class="stack hidden">
-      <div class="hint">No users exist yet. Create the first admin account.</div>
-      <label>Admin Username<input id="bootstrap-username" type="text" placeholder="admin"></label>
-      <label>Admin Password<input id="bootstrap-password" type="password" placeholder="at least 8 characters"></label>
-      <button id="bootstrap-create" type="button">Create Admin</button>
-      <div id="bootstrap-status" class="status"></div>
-    </div>
-    <div id="auth-login-panel" class="stack">
-      <label>Username<input id="auth-username" type="text"></label>
-      <label>Password<input id="auth-password" type="password"></label>
-      <button id="auth-login" type="button">Login</button>
-      <div id="auth-status" class="status"></div>
+    <div class="auth-gate-card stack">
+      <h2>Sign In</h2>
+      <div id="auth-bootstrap-panel" class="stack hidden">
+        <div class="hint">No users exist yet. Create the first admin account.</div>
+        <label>Admin Username<input id="bootstrap-username" type="text" placeholder="admin"></label>
+        <label>Admin Password<input id="bootstrap-password" type="password" placeholder="at least 8 characters"></label>
+        <button id="bootstrap-create" type="button">Create Admin</button>
+        <div id="bootstrap-status" class="status"></div>
+      </div>
+      <div id="auth-login-panel" class="stack">
+        <label>Username<input id="auth-username" type="text"></label>
+        <label>Password<input id="auth-password" type="password"></label>
+        <button id="auth-login" type="button">Login</button>
+        <div id="auth-status" class="status"></div>
+      </div>
     </div>
   </section>
 

@@ -215,7 +215,37 @@ main {
 }
 
 .auth-gate {
-  margin: 14px 18px 0 18px;
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: rgba(15, 23, 42, 0.52);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.auth-gate-card {
+  width: min(460px, 94vw);
+  background: #fffefb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.auth-gate-card > h2 {
+  margin: 0 0 8px 0;
+}
+
+body.auth-locked .topbar,
+body.auth-locked .tabs,
+body.auth-locked .subtabs,
+body.auth-locked main {
+  display: none !important;
 }
 
 .stack {
