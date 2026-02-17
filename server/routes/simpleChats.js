@@ -15,6 +15,7 @@ import {
 } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
 import { chatCompletion } from "../../lib/llm.js";
+import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 
 const router = express.Router();
@@ -55,6 +56,37 @@ function knowledgePromptBlock(packs, maxChars = 3000) {
     .map((p, i) => `Knowledge ${i + 1} [${p.id}] ${p.title}\n${p.content}`)
     .join("\n\n---\n\n");
   return body.length > maxChars ? `${body.slice(0, maxChars)}...` : body;
+}
+
+function detectImageIntent(message) {
+  const text = String(message || "").trim();
+  if (!text) return { mode: "none", prompt: "" };
+  if (/^\/image\s+/i.test(text)) {
+    const prompt = text.replace(/^\/image\s+/i, "").trim();
+    if (!prompt) {
+      return {
+        mode: "ambiguous",
+        prompt: "",
+        reason: "missing_prompt"
+      };
+    }
+    return { mode: "clear", prompt };
+  }
+  const clearMatch = text.match(
+    /^(?:please\s+)?(?:generate|create|draw|make)\s+(?:an?\s+)?(?:image|diagram|schematic)(?:\s+of|\s+for)?\s*(.+)$/i
+  );
+  if (clearMatch && clearMatch[1] && clearMatch[1].trim()) {
+    return { mode: "clear", prompt: clearMatch[1].trim() };
+  }
+  const mentionsVisual = /\b(image|diagram|schematic|visual)\b/i.test(text);
+  if (mentionsVisual) {
+    return {
+      mode: "ambiguous",
+      prompt: "",
+      reason: "unclear_intent"
+    };
+  }
+  return { mode: "none", prompt: "" };
 }
 
 router.post("/", async (req, res) => {
@@ -166,6 +198,72 @@ router.post("/:chatId/messages", async (req, res) => {
 
   const knowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
   const citations = buildKnowledgeCitations(userEntry.content, knowledgePacks);
+  const imageIntent = detectImageIntent(userEntry.content);
+
+  if (imageIntent.mode === "ambiguous") {
+    const assistantEntry = {
+      ts: new Date().toISOString(),
+      role: "assistant",
+      content:
+        "I can generate an image. Please clarify what you want shown, style, and optional size (e.g., 'generate image of a sunrise in watercolor, 1024x1024').",
+      usage: null,
+      citations: []
+    };
+    await appendSimpleChatMessage(req.params.chatId, assistantEntry);
+    await updateSimpleChatSession(req.params.chatId, (current) => ({
+      ...current,
+      updatedAt: new Date().toISOString(),
+      messageCount: Number(current.messageCount || 0) + 2
+    }));
+    sendOk(res, {
+      user: userEntry,
+      assistant: assistantEntry,
+      citations: []
+    });
+    return;
+  }
+
+  if (imageIntent.mode === "clear") {
+    try {
+      const image = await generateAndStoreImage({
+        prompt: imageIntent.prompt,
+        user: req.auth?.user || null,
+        contextType: "simple-chat",
+        contextId: req.params.chatId
+      });
+      const assistantEntry = {
+        ts: new Date().toISOString(),
+        role: "assistant",
+        content: `Generated image for: ${imageIntent.prompt}`,
+        usage: null,
+        citations: [],
+        image
+      };
+      await appendSimpleChatMessage(req.params.chatId, assistantEntry);
+      await updateSimpleChatSession(req.params.chatId, (current) => ({
+        ...current,
+        updatedAt: new Date().toISOString(),
+        messageCount: Number(current.messageCount || 0) + 2
+      }));
+      sendOk(res, {
+        user: userEntry,
+        assistant: assistantEntry,
+        citations: []
+      });
+      return;
+    } catch (error) {
+      if (error.code === "MISSING_API_KEY") {
+        sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
+        return;
+      }
+      if (error.code === "UNSUPPORTED_PROVIDER") {
+        sendError(res, 400, "UNSUPPORTED_PROVIDER", error.message);
+        return;
+      }
+      sendError(res, 502, "IMAGE_ERROR", `Image generation failed: ${error.message}`);
+      return;
+    }
+  }
 
   try {
     const completion = await chatCompletion({

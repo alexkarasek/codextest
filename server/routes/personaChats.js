@@ -21,6 +21,7 @@ import {
 } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
 import { chatCompletion } from "../../lib/llm.js";
+import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 
 const router = express.Router();
@@ -446,6 +447,37 @@ function personaUserPrompt({
   ].join("\n\n");
 }
 
+function detectImageIntent(message) {
+  const text = String(message || "").trim();
+  if (!text) return { mode: "none", prompt: "" };
+  if (/^\/image\s+/i.test(text)) {
+    const prompt = text.replace(/^\/image\s+/i, "").trim();
+    if (!prompt) {
+      return {
+        mode: "ambiguous",
+        prompt: "",
+        reason: "missing_prompt"
+      };
+    }
+    return { mode: "clear", prompt };
+  }
+  const clearMatch = text.match(
+    /^(?:please\s+)?(?:generate|create|draw|make)\s+(?:an?\s+)?(?:image|diagram|schematic)(?:\s+of|\s+for)?\s*(.+)$/i
+  );
+  if (clearMatch && clearMatch[1] && clearMatch[1].trim()) {
+    return { mode: "clear", prompt: clearMatch[1].trim() };
+  }
+  const mentionsVisual = /\b(image|diagram|schematic|visual)\b/i.test(text);
+  if (mentionsVisual) {
+    return {
+      mode: "ambiguous",
+      prompt: "",
+      reason: "unclear_intent"
+    };
+  }
+  return { mode: "none", prompt: "" };
+}
+
 router.post("/", async (req, res) => {
   const parsed = createPersonaChatSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -562,6 +594,153 @@ router.post("/:chatId/messages", async (req, res) => {
     turnId: Number(session.turnIndex || 0) + 1
   };
   await appendPersonaChatMessage(req.params.chatId, userEntry);
+
+  const imageIntent = detectImageIntent(userEntry.content);
+  if (imageIntent.mode === "ambiguous") {
+    const orchestration = chooseResponders({
+      personas: session.personas || [],
+      knowledgeByPersona: session.knowledgeByPersona || {},
+      userMessage: userEntry.content,
+      history,
+      engagementMode: session.settings?.engagementMode || "chat"
+    });
+    const leadPersona = orchestration.selectedPersonas?.[0] || (session.personas || [])[0];
+    if (!leadPersona) {
+      sendError(res, 400, "VALIDATION_ERROR", "No persona available for clarification.");
+      return;
+    }
+    const orchestrationEntry = {
+      ts: new Date().toISOString(),
+      role: "orchestrator",
+      turnId: userEntry.turnId,
+      selectedSpeakerIds: [leadPersona.id],
+      omittedCount: Math.max(0, (session.personas || []).length - 1),
+      rationale: [
+        {
+          speakerId: leadPersona.id,
+          displayName: leadPersona.displayName,
+          relevance: 1,
+          outOfScope: false,
+          reason: "Ambiguous image intent: route to a clarifying response."
+        }
+      ],
+      content: `Orchestrator selected ${leadPersona.displayName} to clarify image request.`
+    };
+    const personaEntry = {
+      ts: new Date().toISOString(),
+      role: "persona",
+      speakerId: leadPersona.id,
+      displayName: leadPersona.displayName,
+      content:
+        "I can generate that visual. Please clarify what should be shown, desired style, and optional size (for example: 'diagram of microservice architecture, clean blueprint style, 1024x1024').",
+      turnId: userEntry.turnId
+    };
+    await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    await appendPersonaChatMessage(req.params.chatId, personaEntry);
+    await updatePersonaChatSession(req.params.chatId, (current) => ({
+      ...current,
+      updatedAt: new Date().toISOString(),
+      messageCount: Number(current.messageCount || 0) + 3,
+      turnIndex: Number(current.turnIndex || 0) + 1,
+      lastSpeakerIds: [leadPersona.id]
+    }));
+    sendOk(res, {
+      user: userEntry,
+      orchestration: {
+        selectedSpeakerIds: [leadPersona.id],
+        omittedCount: orchestrationEntry.omittedCount,
+        rationale: orchestrationEntry.rationale,
+        content: orchestrationEntry.content
+      },
+      responses: [personaEntry]
+    });
+    return;
+  }
+
+  if (imageIntent.mode === "clear") {
+    const orchestration = chooseResponders({
+      personas: session.personas || [],
+      knowledgeByPersona: session.knowledgeByPersona || {},
+      userMessage: userEntry.content,
+      history,
+      engagementMode: session.settings?.engagementMode || "chat"
+    });
+    const leadPersona = orchestration.selectedPersonas?.[0] || (session.personas || [])[0];
+    if (!leadPersona) {
+      sendError(res, 400, "VALIDATION_ERROR", "No persona available to generate image.");
+      return;
+    }
+    const orchestrationEntry = {
+      ts: new Date().toISOString(),
+      role: "orchestrator",
+      turnId: userEntry.turnId,
+      selectedSpeakerIds: [leadPersona.id],
+      omittedCount: Math.max(0, (session.personas || []).length - 1),
+      rationale: [
+        {
+          speakerId: leadPersona.id,
+          displayName: leadPersona.displayName,
+          relevance: 1,
+          outOfScope: false,
+          reason: "Image request routed to lead persona for visual output."
+        }
+      ],
+      content: `Orchestrator selected ${leadPersona.displayName} for image generation.`
+    };
+    await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    try {
+      const styledPrompt = [
+        `Visual style from persona ${leadPersona.displayName}${leadPersona.role ? ` (${leadPersona.role})` : ""}.`,
+        `Persona traits: ${(leadPersona.expertiseTags || []).join(", ") || "general"}.`,
+        `User request: ${imageIntent.prompt}`
+      ].join("\n");
+      const image = await generateAndStoreImage({
+        prompt: styledPrompt,
+        user: req.auth?.user || null,
+        contextType: "persona-chat",
+        contextId: req.params.chatId
+      });
+      const personaEntry = {
+        ts: new Date().toISOString(),
+        role: "persona",
+        speakerId: leadPersona.id,
+        displayName: leadPersona.displayName,
+        content: `Generated image based on your request: ${imageIntent.prompt}`,
+        image,
+        turnId: userEntry.turnId
+      };
+      await appendPersonaChatMessage(req.params.chatId, personaEntry);
+      await updatePersonaChatSession(req.params.chatId, (current) => ({
+        ...current,
+        updatedAt: new Date().toISOString(),
+        messageCount: Number(current.messageCount || 0) + 3,
+        turnIndex: Number(current.turnIndex || 0) + 1,
+        lastSpeakerIds: [leadPersona.id]
+      }));
+      sendOk(res, {
+        user: userEntry,
+        orchestration: {
+          selectedSpeakerIds: [leadPersona.id],
+          omittedCount: orchestrationEntry.omittedCount,
+          rationale: orchestrationEntry.rationale,
+          content: orchestrationEntry.content
+        },
+        responses: [personaEntry]
+      });
+      return;
+    } catch (error) {
+      if (error.code === "MISSING_API_KEY") {
+        sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
+        return;
+      }
+      if (error.code === "UNSUPPORTED_PROVIDER") {
+        sendError(res, 400, "UNSUPPORTED_PROVIDER", error.message);
+        return;
+      }
+      sendError(res, 502, "IMAGE_ERROR", `Image generation failed: ${error.message}`);
+      return;
+    }
+  }
 
   const orchestration = chooseResponders({
     personas: session.personas || [],

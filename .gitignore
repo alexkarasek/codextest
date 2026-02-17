@@ -25,6 +25,10 @@ data/personas/**
 data/settings/**
 !data/settings/.gitkeep
 
+!data/images/
+data/images/**
+!data/images/.gitkeep
+
 !data/simple-chats/
 data/simple-chats/**
 !data/simple-chats/.gitkeep

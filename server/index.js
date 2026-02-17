@@ -11,6 +11,7 @@ import simpleChatsRouter from "./routes/simpleChats.js";
 import settingsRouter from "./routes/settings.js";
 import authRouter from "./routes/auth.js";
 import agenticRouter from "./routes/agentic.js";
+import imagesRouter from "./routes/images.js";
 import { ensureDataDirs } from "../lib/storage.js";
 import { ensureAuthFiles } from "../lib/auth.js";
 import { sendError } from "./response.js";
@@ -56,6 +57,7 @@ app.use("/api/persona-chats", requireAuth, personaChatsRouter);
 app.use("/api/simple-chats", requireAuth, simpleChatsRouter);
 app.use("/api/settings", requireAuth, settingsRouter);
 app.use("/api/agentic", requireAuth, requirePermission("viewGovernance"), agenticRouter);
+app.use("/api/images", requireAuth, imagesRouter);
 
 app.use((req, res) => {
   sendError(res, 404, "NOT_FOUND", `Route ${req.method} ${req.path} not found.`);

@@ -47,13 +47,15 @@ const state = {
     activeChatId: null,
     historyByChat: {},
     activeSessionPersonaIds: [],
-    dirtyConfig: false
+    dirtyConfig: false,
+    sidebarCollapsed: false
   },
   simpleChat: {
     selectedKnowledgePackIds: [],
     sessions: [],
     activeChatId: null,
-    historyByChat: {}
+    historyByChat: {},
+    sidebarCollapsed: false
   },
   agentic: {
     tools: [],
@@ -277,7 +279,7 @@ function assessExchange(content) {
   return { stoplight, sentiment };
 }
 
-function renderExchangeMessage(container, { roleClass, title, content }) {
+function renderExchangeMessage(container, { roleClass, title, content, image = null }) {
   const signal = assessExchange(content);
   const el = document.createElement("div");
   el.className = `chat-msg ${roleClass}`;
@@ -297,6 +299,15 @@ function renderExchangeMessage(container, { roleClass, title, content }) {
   head.append(titleEl, badges);
   const body = document.createElement("div");
   body.textContent = String(content || "");
+  if (image?.url) {
+    const media = document.createElement("img");
+    media.className = "chat-image";
+    media.src = String(image.url);
+    media.alt = String(image.prompt || "Generated image");
+    media.loading = "lazy";
+    body.appendChild(document.createElement("br"));
+    body.appendChild(media);
+  }
   el.append(head, body);
   container.appendChild(el);
 }
@@ -816,24 +827,17 @@ function renderPersonaChatSessionList() {
   }
 
   state.personaChat.sessions.forEach((session) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="card-title">${session.title || "Persona Chat"}</div>
-      <div class="muted">${session.chatId}</div>
-      <div>Mode: ${session.engagementMode || "chat"}</div>
-      <div>Participants: ${(session.participants || []).join(", ") || "none"}</div>
-      <div>Messages: ${session.messageCount || 0}</div>
+    const active = state.personaChat.activeChatId === session.chatId;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `session-item ${active ? "active" : ""}`;
+    item.innerHTML = `
+      <div class="session-title">${session.title || "Persona Chat"}</div>
+      <div class="session-meta">${session.chatId}</div>
+      <div class="session-meta">mode: ${session.engagementMode || "chat"} | messages: ${session.messageCount || 0}</div>
     `;
-    const row = document.createElement("div");
-    row.className = "row";
-    const loadBtn = document.createElement("button");
-    loadBtn.type = "button";
-    loadBtn.textContent = "Load Chat";
-    loadBtn.addEventListener("click", () => loadPersonaChatSession(session.chatId));
-    row.appendChild(loadBtn);
-    card.appendChild(row);
-    container.appendChild(card);
+    item.addEventListener("click", () => loadPersonaChatSession(session.chatId));
+    container.appendChild(item);
   });
 }
 
@@ -860,7 +864,8 @@ function renderPersonaChatHistory() {
     renderExchangeMessage(container, {
       roleClass: role,
       title,
-      content: msg.content
+      content: msg.content,
+      image: msg.image || null
     });
   });
 
@@ -907,6 +912,8 @@ async function loadPersonaChatSession(chatId) {
     }
     renderPersonaChatPersonaList();
     renderPersonaChatHistory();
+    const configDetails = byId("persona-chat-config-details");
+    if (configDetails) configDetails.open = false;
     status.textContent = `Loaded chat ${chatId}`;
   } catch (error) {
     status.textContent = `Failed to load chat: ${error.message}`;
@@ -945,6 +952,8 @@ async function createPersonaChatSession() {
     state.personaChat.dirtyConfig = false;
     await loadPersonaChatSessions();
     await loadPersonaChatSession(chatId);
+    const configDetails = byId("persona-chat-config-details");
+    if (configDetails) configDetails.open = false;
   } catch (error) {
     status.textContent = `Create failed: ${error.message}`;
   }
@@ -962,6 +971,8 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-max-words").value = "140";
   byId("persona-chat-mode").value = "chat";
   byId("persona-chat-status").textContent = "Draft reset. Select personas/settings and click Create Chat Session.";
+  const configDetails = byId("persona-chat-config-details");
+  if (configDetails) configDetails.open = true;
   renderPersonaChatHistory();
 }
 
@@ -1019,6 +1030,24 @@ async function sendPersonaChatMessage() {
   }
 }
 
+function prepareImageCommand(inputEl) {
+  const raw = String(inputEl.value || "").trim();
+  if (!raw) return "";
+  if (/^\/image\s+/i.test(raw)) return raw;
+  return `/image ${raw}`;
+}
+
+async function sendPersonaChatImageMessage() {
+  const input = byId("persona-chat-message");
+  const cmd = prepareImageCommand(input);
+  if (!cmd) {
+    byId("persona-chat-status").textContent = "Enter an image prompt first.";
+    return;
+  }
+  input.value = cmd;
+  await sendPersonaChatMessage();
+}
+
 function renderSimpleChatKnowledgeList() {
   const container = byId("simple-chat-knowledge-list");
   if (!container) return;
@@ -1067,23 +1096,17 @@ function renderSimpleChatSessionList() {
   }
 
   sessions.forEach((session) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="card-title">${session.title || "Simple Chat"}</div>
-      <div class="muted">${session.chatId}</div>
-      <div>Model: ${session.model || "unknown"} | Messages: ${session.messageCount || 0}</div>
-      <div>Knowledge: ${(session.knowledgePackIds || []).join(", ") || "none"}</div>
+    const active = state.simpleChat.activeChatId === session.chatId;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `session-item ${active ? "active" : ""}`;
+    item.innerHTML = `
+      <div class="session-title">${session.title || "Simple Chat"}</div>
+      <div class="session-meta">${session.chatId}</div>
+      <div class="session-meta">messages: ${session.messageCount || 0}</div>
     `;
-    const row = document.createElement("div");
-    row.className = "row";
-    const loadBtn = document.createElement("button");
-    loadBtn.type = "button";
-    loadBtn.textContent = "Load Chat";
-    loadBtn.addEventListener("click", () => loadSimpleChatSession(session.chatId));
-    row.appendChild(loadBtn);
-    card.appendChild(row);
-    container.appendChild(card);
+    item.addEventListener("click", () => loadSimpleChatSession(session.chatId));
+    container.appendChild(item);
   });
 }
 
@@ -1112,7 +1135,8 @@ function renderSimpleChatHistory() {
     renderExchangeMessage(container, {
       roleClass: role,
       title,
-      content: `${msg.content || ""}${citations}`
+      content: `${msg.content || ""}${citations}`,
+      image: msg.image || null
     });
   });
 
@@ -1144,6 +1168,8 @@ async function loadSimpleChatSession(chatId) {
     state.simpleChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
     byId("simple-chat-id").value = chatId;
     renderSimpleChatHistory();
+    const configDetails = byId("simple-chat-config-details");
+    if (configDetails) configDetails.open = false;
     status.textContent = `Loaded simple chat ${chatId}`;
   } catch (error) {
     status.textContent = `Failed to load simple chat: ${error.message}`;
@@ -1173,9 +1199,27 @@ async function createSimpleChatSession() {
     status.textContent = `Created simple chat ${chatId}`;
     await loadSimpleChatSessions();
     await loadSimpleChatSession(chatId);
+    const configDetails = byId("simple-chat-config-details");
+    if (configDetails) configDetails.open = false;
   } catch (error) {
     status.textContent = `Create failed: ${error.message}`;
   }
+}
+
+function startNewSimpleChatDraft() {
+  state.simpleChat.activeChatId = null;
+  byId("simple-chat-id").value = "";
+  byId("simple-chat-title").value = "Simple Chat";
+  byId("simple-chat-context").value = "";
+  byId("simple-chat-model").value = "gpt-4.1-mini";
+  byId("simple-chat-temperature").value = "0.4";
+  byId("simple-chat-max-words").value = "220";
+  byId("simple-chat-status").textContent =
+    "Draft reset. Configure settings and click New Chat to create a fresh session.";
+  const configDetails = byId("simple-chat-config-details");
+  if (configDetails) configDetails.open = true;
+  renderSimpleChatKnowledgeList();
+  renderSimpleChatHistory();
 }
 
 async function sendSimpleChatMessage() {
@@ -1210,6 +1254,17 @@ async function sendSimpleChatMessage() {
   }
 }
 
+async function sendSimpleChatImageMessage() {
+  const input = byId("simple-chat-message");
+  const cmd = prepareImageCommand(input);
+  if (!cmd) {
+    byId("simple-chat-status").textContent = "Enter an image prompt first.";
+    return;
+  }
+  input.value = cmd;
+  await sendSimpleChatMessage();
+}
+
 function setSubtabActive(group, value) {
   const map = {
     chats: {
@@ -1240,6 +1295,9 @@ function setGroupWorkspace(view) {
   byId("group-work-live").classList.toggle("active", state.groupWorkspace === "live");
   byId("group-work-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
   byId("group-work-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
+  byId("group-nav-live").classList.toggle("active", state.groupWorkspace === "live");
+  byId("group-nav-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
+  byId("group-nav-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
   if (groupActive && state.groupWorkspace === "debate-viewer") {
     const type = byId("viewer-conversation-type").value || "debate";
     loadViewerHistory(type).catch((error) => {
@@ -1254,6 +1312,7 @@ function setChatsView(view) {
   byId("tab-persona-chat").classList.remove("active");
   byId("tab-new-debate").classList.remove("active");
   byId("tab-viewer").classList.remove("active");
+  byId("subnav-group-work").classList.toggle("hidden", !(state.mainTab === "chats" && state.chatsView === "group"));
   setSubtabActive("chats", state.chatsView);
   if (state.mainTab === "chats" && state.chatsView === "simple") {
     renderSimpleChatKnowledgeList();
@@ -1266,6 +1325,22 @@ function setChatsView(view) {
     renderPersonaChatHistory();
     loadPersonaChatSessions();
   }
+}
+
+function setSimpleSidebarCollapsed(collapsed) {
+  state.simpleChat.sidebarCollapsed = Boolean(collapsed);
+  const shell = byId("tab-simple-chat");
+  if (!shell) return;
+  shell.classList.toggle("sidebar-collapsed-simple", state.simpleChat.sidebarCollapsed);
+  byId("simple-chat-show-sidebar").classList.toggle("hidden", !state.simpleChat.sidebarCollapsed);
+}
+
+function setPersonaSidebarCollapsed(collapsed) {
+  state.personaChat.sidebarCollapsed = Boolean(collapsed);
+  const shell = byId("tab-persona-chat");
+  if (!shell) return;
+  shell.classList.toggle("sidebar-collapsed-persona", state.personaChat.sidebarCollapsed);
+  byId("persona-chat-show-sidebar").classList.toggle("hidden", !state.personaChat.sidebarCollapsed);
 }
 
 function setConfigView(view) {
@@ -1305,6 +1380,7 @@ function switchTab(tabName) {
   });
 
   byId("subnav-chats").classList.toggle("hidden", tabName !== "chats");
+  byId("subnav-group-work").classList.toggle("hidden", !(tabName === "chats" && state.chatsView === "group"));
   byId("subnav-config").classList.toggle("hidden", tabName !== "config");
 
   if (tabName === "chats") {
@@ -4042,7 +4118,8 @@ function normalizeViewerMessagesFromChat(chat) {
       id: `${m.turnId || 0}-${idx}`,
       roleClass,
       title,
-      content: m.content || ""
+      content: m.content || "",
+      image: m.image || null
     };
   });
 }
@@ -4059,7 +4136,8 @@ function renderViewerExchanges(entries) {
     renderExchangeMessage(container, {
       roleClass: entry.roleClass,
       title: entry.title,
-      content: entry.content
+      content: entry.content,
+      image: entry.image || null
     });
   });
 }
@@ -4274,6 +4352,9 @@ function wireEvents() {
   byId("group-work-live").addEventListener("click", () => setGroupWorkspace("live"));
   byId("group-work-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
   byId("group-work-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
+  byId("group-nav-live").addEventListener("click", () => setGroupWorkspace("live"));
+  byId("group-nav-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
+  byId("group-nav-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
@@ -4550,11 +4631,15 @@ function wireEvents() {
   byId("knowledge-refresh").addEventListener("click", loadKnowledgePacks);
   byId("persona-chat-create").addEventListener("click", createPersonaChatSession);
   byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
+  byId("persona-chat-new-draft-main").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-refresh-list").addEventListener("click", loadPersonaChatSessions);
+  byId("persona-chat-toggle-sidebar").addEventListener("click", () => setPersonaSidebarCollapsed(true));
+  byId("persona-chat-show-sidebar").addEventListener("click", () => setPersonaSidebarCollapsed(false));
   byId("persona-chat-load").addEventListener("click", () => {
     loadPersonaChatSession(byId("persona-chat-id").value.trim());
   });
   byId("persona-chat-send").addEventListener("click", sendPersonaChatMessage);
+  byId("persona-chat-image").addEventListener("click", sendPersonaChatImageMessage);
   byId("persona-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -4572,11 +4657,15 @@ function wireEvents() {
     });
   });
   byId("simple-chat-create").addEventListener("click", createSimpleChatSession);
+  byId("simple-chat-new-draft").addEventListener("click", startNewSimpleChatDraft);
   byId("simple-chat-refresh-list").addEventListener("click", loadSimpleChatSessions);
+  byId("simple-chat-toggle-sidebar").addEventListener("click", () => setSimpleSidebarCollapsed(true));
+  byId("simple-chat-show-sidebar").addEventListener("click", () => setSimpleSidebarCollapsed(false));
   byId("simple-chat-load").addEventListener("click", () => {
     loadSimpleChatSession(byId("simple-chat-id").value.trim());
   });
   byId("simple-chat-send").addEventListener("click", sendSimpleChatMessage);
+  byId("simple-chat-image").addEventListener("click", sendSimpleChatImageMessage);
   byId("simple-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -4697,6 +4786,8 @@ async function init() {
   setViewerTypeUI(byId("viewer-conversation-type").value || "debate");
   renderGovernanceChatSessions();
   renderGovernanceChatHistory();
+  setSimpleSidebarCollapsed(false);
+  setPersonaSidebarCollapsed(false);
   if (!authed) {
     return;
   }

@@ -42,9 +42,11 @@ A local-first web application to create/edit personas and run multi-round debate
   - Engagement mode is configurable per group session: `chat`, `panel`, `debate-work-order`
   - Sends each user message through a transparent turn orchestrator that selects only the most relevant personas for that turn
   - Scope guardrails prevent personas from answering outside their defined expertise/knowledge
+  - Supports inline persona-routed image generation (`Generate Image` button or `/image ...`)
   - Persists chat sessions and message history to `data/persona-chats/<chatId>/`
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding
+  - Supports inline image generation (`Generate Image` button or `/image ...`)
   - Persists chat sessions to `data/simple-chats/<chatId>/`
 - Topic Discovery + Persona Generation
   - Search current events and select a topic from live web results
@@ -376,6 +378,11 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `GET /api/agentic/metrics/overview`
 - `GET /api/agentic/mcp/status`
 
+### Images
+
+- `POST /api/images/generate`
+- `GET /api/images/:imageId`
+
 ## Data Folder Behavior
 
 - Personas are saved as both JSON and Markdown.
@@ -386,6 +393,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - Debate runs create timestamped folders under `data/debates`.
 - `messages.jsonl` stores request/response logs for debugging each LLM turn.
 - `chat.jsonl` stores persisted transcript-chat follow-up messages per debate.
+- Generated images are stored under `data/images/` and served via `/api/images/:imageId`.
 - `data/agentic/tasks/*.json` stores task runner state.
 - `data/agentic/approvals/*.json` stores approval requests and decisions.
 - `data/agentic/jobs/*.json` stores queued/background job metadata.
