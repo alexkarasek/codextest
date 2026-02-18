@@ -690,6 +690,46 @@ function closeHelpPopout() {
   popout.setAttribute("aria-hidden", "true");
 }
 
+function citationHref(citation) {
+  const file = String(citation?.file || "").trim();
+  if (!file) return "#";
+  let pathPart = "";
+  if (file === "README.md") {
+    pathPart = "README.md";
+  } else if (file.startsWith("docs/")) {
+    pathPart = file.slice("docs/".length);
+  } else {
+    return "#";
+  }
+  return `/docs/${encodeURI(pathPart)}`;
+}
+
+function truncateCitationExcerpt(text, max = 180) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, Math.max(0, max - 1)).trim()}...`;
+}
+
+function normalizeCitations(citations, limit = 6) {
+  const seen = new Set();
+  const rows = [];
+  for (const citation of Array.isArray(citations) ? citations : []) {
+    const file = String(citation?.file || "").trim() || "doc";
+    const heading = String(citation?.heading || "").trim() || "section";
+    const key = `${file}::${heading}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      file,
+      heading,
+      href: citationHref(citation),
+      excerpt: truncateCitationExcerpt(citation?.excerpt || "", 180)
+    });
+    if (rows.length >= limit) break;
+  }
+  return rows;
+}
+
 function renderSupportPopout() {
   const historyEl = byId("support-history");
   const citationsEl = byId("support-citations");
@@ -711,7 +751,7 @@ function renderSupportPopout() {
   }
 
   citationsEl.innerHTML = "";
-  const citations = state.supportConcierge.citations || [];
+  const citations = normalizeCitations(state.supportConcierge.citations || []);
   if (!citations.length) {
     citationsEl.textContent = "No citations yet.";
     return;
@@ -719,7 +759,15 @@ function renderSupportPopout() {
   citations.forEach((citation) => {
     const card = document.createElement("div");
     card.className = "citation-card";
-    card.textContent = `${citation.file || "doc"} -> ${citation.heading || "section"}\n\n${citation.excerpt || ""}`;
+    const link = document.createElement("a");
+    link.href = citation.href || "#";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `${citation.file} -> ${citation.heading}`;
+    const excerpt = document.createElement("div");
+    excerpt.className = "muted";
+    excerpt.textContent = citation.excerpt;
+    card.append(link, excerpt);
     citationsEl.appendChild(card);
   });
 }
