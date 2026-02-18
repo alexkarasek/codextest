@@ -36,11 +36,12 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="chats">1. Chats</button>
+    <button class="tab-btn active tab-expandable" data-tab="chats">1. Chats <span class="tab-caret">▾</span></button>
     <button class="tab-btn" data-tab="governance">2. Governance</button>
     <button class="tab-btn" data-tab="config">3. Admin & Config</button>
   </nav>
-  <nav id="subnav-chats" class="subtabs hidden">
+  <nav id="subnav-chats" class="subtabs">
+    <span class="subtabs-hint">Choose chat mode:</span>
     <button id="chats-view-simple" class="subtab-btn active" type="button">Simple Chat</button>
     <button id="chats-view-group" class="subtab-btn" type="button">Group Chat</button>
   </nav>

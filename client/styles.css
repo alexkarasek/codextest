@@ -134,6 +134,18 @@ body {
   gap: 8px;
   padding: 8px 22px 0;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.subtabs-hint {
+  font-size: 0.86rem;
+  color: #64748b;
+}
+
+.tab-expandable .tab-caret {
+  font-size: 0.82rem;
+  margin-left: 4px;
+  opacity: 0.9;
 }
 
 .subtab-btn {
