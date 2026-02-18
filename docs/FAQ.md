@@ -21,6 +21,15 @@ Use `Chats -> Group Chat -> History Explorer` to browse sessions and inspect ris
 ## Where do I configure personas and knowledge packs?
 Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
 
+## How do I ingest a web page into a knowledge pack?
+Go to `Admin & Config -> Knowledge Studio`, use **Web Ingest**, paste the URL, and choose create/append/overwrite.
+
+## How do I restrict which domains can be fetched?
+Open `Admin & Config -> Knowledge Studio` and set the Web Access Policy allowlist/denylist.
+
+## How do I change the UI theme?
+Open `Admin & Config -> Theme` and edit the theme variables/typography JSON.
+
 ## Where do I find platform metrics and cost/risk views?
 Open the `Governance` tab.
 

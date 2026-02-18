@@ -64,10 +64,17 @@ A local-first web application to create/edit personas and run multi-round debate
   - Search current events and select a topic from live web results
   - Generate topic-appropriate persona drafts and add/save them directly to debates
   - Persona generation also works from manually entered topic/context (without discovery results)
-- Knowledge Studio (Upload -> Knowledge Pack)
+- Knowledge Studio (Upload + Web Ingest -> Knowledge Pack)
   - Upload `.txt`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, or `.docx`
+  - Ingest web pages into knowledge packs (create/append/overwrite)
   - Convert extracted content into structured knowledge pack format
   - Manage knowledge pack library from dedicated tab
+- UI Theme Settings
+  - Theme variables and typography are configurable via `data/settings/theme.json` or `PUT /api/settings/theme`
+- Agentic + MCP (Scaffold + Demo)
+  - Embedded MCP server exposes platform tools (knowledge, personas, events)
+  - MCP tool registry and runner UI in Agentic workspace
+  - MCP calls appear in tool usage events
 - Safety and reliability
   - Runtime prompt guardrail: do not reveal system prompts
   - API retries with exponential backoff (max 2 retries)
@@ -368,6 +375,18 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `PUT /api/knowledge/:id`
 - `DELETE /api/knowledge/:id`
 - `POST /api/knowledge/ingest` (multipart file upload + conversion)
+- `POST /api/knowledge/ingest-url` (web URL ingest)
+- `POST /api/knowledge/preview-url` (web URL preview)
+
+### Settings
+
+- `GET /api/settings/responsible-ai`
+- `PUT /api/settings/responsible-ai`
+- `GET /api/settings/web`
+- `PUT /api/settings/web`
+- `GET /api/settings/theme`
+- `PUT /api/settings/theme`
+ - `GET /theme` (public, read-only theme)
 
 ### Admin
 
@@ -400,6 +419,9 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `GET /api/agentic/events?type=task|tool&limit=<n>`
 - `GET /api/agentic/metrics/overview`
 - `GET /api/agentic/mcp/status`
+- `GET /api/agentic/mcp/servers?includeTools=true`
+- `GET /api/agentic/mcp/servers/:serverId/tools`
+- `POST /api/agentic/mcp/servers/:serverId/call`
 
 ### Images
 
@@ -433,7 +455,14 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - Duplicate it with a different id.
    - Delete the duplicate.
    - Confirm files appear/remove in `data/personas/`.
-4. In **New Debate**:
+4. In **Knowledge Studio**:
+   - Upload a small `.txt` file.
+   - Use **Web Ingest** with a public URL.
+   - Confirm both packs appear in the library.
+5. In **Agentic**:
+   - Run the MCP tool runner to list knowledge packs.
+   - Confirm tool usage appears in events.
+6. In **New Debate**:
    - Set a topic and optional context.
    - Optionally use **Topic Discovery** to search current events and select one result.
    - Optionally click **Generate Personas from Topic** and add/save generated drafts.
@@ -441,13 +470,13 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - Optionally add one ad-hoc persona (with and without save enabled).
    - Reorder personas with Up/Down controls.
    - Click **Run Debate**.
-5. In **Debate Viewer**:
+7. In **Debate Viewer**:
    - Verify progress updates show round and current speaker.
    - Verify transcript updates while running.
    - Download transcript using the download link.
-6. Verify disk outputs:
+8. Verify disk outputs:
    - A new folder in `data/debates/<timestamp>-<slug>/`
    - `session.json`, `transcript.md`, and `messages.jsonl` exist and contain data.
-7. Failure checks:
+9. Failure checks:
    - Remove LLM credentials and run debate: verify clear error/failure state.
    - Introduce malformed JSON in one persona file and refresh persona list: verify corrupted file warning.

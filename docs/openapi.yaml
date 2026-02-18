@@ -537,6 +537,61 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/knowledge/ingest-url:
+    post:
+      tags: [Knowledge]
+      summary: Ingest a URL into a knowledge pack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+                id: { type: string }
+                title: { type: string }
+                description: { type: string }
+                tags:
+                  description: Optional comma-separated tags or array
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: string }
+                mode:
+                  type: string
+                  description: create, append, or overwrite
+                summarize:
+                  type: boolean
+      responses:
+        '201':
+          description: Ingested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/knowledge/preview-url:
+    post:
+      tags: [Knowledge]
+      summary: Preview a URL before ingest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+                maxChars: { type: integer }
+      responses:
+        '200':
+          description: Preview
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
   /api/debates:
     post:
       tags: [Debates]
@@ -848,6 +903,97 @@ paths:
       responses:
         '200':
           description: Saved policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/settings/web:
+    get:
+      tags: [Settings]
+      summary: Get web fetch policy
+      responses:
+        '200':
+          description: Policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    put:
+      tags: [Settings]
+      summary: Update web fetch policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    allowlist:
+                      type: array
+                      items: { type: string }
+                    denylist:
+                      type: array
+                      items: { type: string }
+                - type: object
+                  properties:
+                    policy:
+                      type: object
+                      properties:
+                        allowlist:
+                          type: array
+                          items: { type: string }
+                        denylist:
+                          type: array
+                          items: { type: string }
+      responses:
+        '200':
+          description: Saved policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/settings/theme:
+    get:
+      tags: [Settings]
+      summary: Get UI theme settings
+      responses:
+        '200':
+          description: Theme
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    put:
+      tags: [Settings]
+      summary: Update UI theme settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                variables:
+                  type: object
+                  additionalProperties: { type: string }
+                typography:
+                  type: object
+                  properties:
+                    body: { type: string }
+                    display: { type: string }
+      responses:
+        '200':
+          description: Saved theme
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /theme:
+    get:
+      tags: [Settings]
+      summary: Public theme settings
+      responses:
+        '200':
+          description: Theme
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
@@ -1215,6 +1361,51 @@ paths:
       summary: MCP readiness status
       responses:
         '200': { description: MCP status, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/mcp/servers:
+    get:
+      tags: [Agentic]
+      summary: List MCP servers
+      parameters:
+        - in: query
+          name: includeTools
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { description: MCP servers, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/mcp/servers/{serverId}/tools:
+    get:
+      tags: [Agentic]
+      summary: List tools for an MCP server
+      parameters:
+        - in: path
+          name: serverId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: MCP tools, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/mcp/servers/{serverId}/call:
+    post:
+      tags: [Agentic]
+      summary: Execute an MCP tool
+      parameters:
+        - in: path
+          name: serverId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tool]
+              properties:
+                tool: { type: string }
+                input: { type: object }
+      responses:
+        '200': { description: MCP tool output, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
 
   /api/support/messages:
     post:

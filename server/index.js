@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs/promises";
 import { fileURLToPath, pathToFileURL } from "url";
 import personasRouter from "./routes/personas.js";
 import debatesRouter from "./routes/debates.js";
@@ -13,8 +14,10 @@ import authRouter from "./routes/auth.js";
 import agenticRouter from "./routes/agentic.js";
 import imagesRouter from "./routes/images.js";
 import supportRouter from "./routes/support.js";
-import { ensureDataDirs } from "../lib/storage.js";
+import { ensureDataDirs, IMAGES_DIR } from "../lib/storage.js";
+import { getThemeSettings } from "../lib/themeSettings.js";
 import { ensureAuthFiles } from "../lib/auth.js";
+import { ensureDefaultAgenticTemplates } from "../lib/agenticTemplateDefaults.js";
 import { sendError } from "./response.js";
 import docsRouter from "../src/docs/docsRouter.js";
 import {
@@ -39,6 +42,7 @@ const PORT = getServerPort();
 
 await ensureDataDirs();
 await ensureAuthFiles();
+await ensureDefaultAgenticTemplates();
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(clientDir));
@@ -48,6 +52,52 @@ app.use("/docs", docsRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, data: { status: "up" } });
+});
+
+app.get("/theme", async (_req, res) => {
+  try {
+    const theme = await getThemeSettings();
+    res.json({ ok: true, data: { theme } });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: { code: "THEME_LOAD_FAILED", message: error.message } });
+  }
+});
+
+app.get("/media/logo", async (_req, res) => {
+  try {
+    const explicitLogo = path.join(IMAGES_DIR, "logo", "IMG_7310.jpg");
+    try {
+      await fs.access(explicitLogo);
+      res.sendFile(explicitLogo);
+      return;
+    } catch {
+      // fall through
+    }
+
+    const files = await fs.readdir(IMAGES_DIR);
+    const match = files.find((file) => {
+      const lower = String(file || "").toLowerCase();
+      return lower === "logo" || lower.startsWith("logo.");
+    });
+    if (match) {
+      res.sendFile(path.join(IMAGES_DIR, match));
+      return;
+    }
+    const logoDir = path.join(IMAGES_DIR, "logo");
+    const dirFiles = await fs.readdir(logoDir);
+    const image = dirFiles.find((file) => {
+      const lower = String(file || "").toLowerCase();
+      if (lower.includes("zone.identifier")) return false;
+      return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].some((ext) => lower.endsWith(ext));
+    });
+    if (!image) {
+      res.status(404).end();
+      return;
+    }
+    res.sendFile(path.join(logoDir, image));
+  } catch {
+    res.status(404).end();
+  }
 });
 
 app.get("/support", (_req, res) => {

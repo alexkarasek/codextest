@@ -20,7 +20,7 @@ Tip: keep the prompt simple for first test, then iterate.
 
 ## 3:00-5:00 Create one knowledge pack
 1. Go to `Admin & Config -> Knowledge Studio`.
-2. Upload a `.txt` or `.pdf`.
+2. Upload a `.txt` or `.pdf`, or use **Web Ingest** with a URL.
 3. Confirm it appears in the library.
 
 ## 5:00-7:00 Run a quick group chat
@@ -54,5 +54,6 @@ Expected result:
 - `User Guide`
 - `Troubleshooting`
 2. Configure `Responsible AI` keywords.
-3. Add more personas and attach specialized knowledge packs.
-4. Use `Support Concierge` for grounded how-to help.
+3. Adjust the UI theme in `Admin & Config -> Theme`.
+4. Add more personas and attach specialized knowledge packs.
+5. Use `Support Concierge` for grounded how-to help.

@@ -9,11 +9,13 @@ import {
   listTaskTemplates,
   listTasks,
   listToolUsage,
+  appendToolUsage,
   saveTaskTemplate
 } from "../../lib/agenticStorage.js";
 import { listTools } from "../../lib/agenticTools.js";
 import { chatCompletion } from "../../lib/llm.js";
-import { getMcpReadinessStatus } from "../../lib/mcpStatus.js";
+import { getMcpReadinessStatus, listResolvedMcpServers } from "../../lib/mcpStatus.js";
+import { runMcpTool } from "../../lib/mcpRegistry.js";
 import { listPersonas } from "../../lib/storage.js";
 import { applyApprovalDecision, createTaskDraft, runTask } from "../../lib/taskRunner.js";
 import { routeTeam } from "../../lib/teamRouter.js";
@@ -447,6 +449,65 @@ router.get("/mcp/status", async (_req, res) => {
     sendOk(res, status);
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to load MCP status: ${error.message}`);
+  }
+});
+
+router.get("/mcp/servers", async (req, res) => {
+  const includeTools = String(req.query.includeTools || "") === "true";
+  try {
+    const servers = await listResolvedMcpServers({ includeTools });
+    sendOk(res, { servers });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP servers: ${error.message}`);
+  }
+});
+
+router.get("/mcp/servers/:serverId/tools", async (req, res) => {
+  try {
+    const servers = await listResolvedMcpServers({ includeTools: true });
+    const server = servers.find((item) => item.id === req.params.serverId);
+    if (!server) {
+      sendError(res, 404, "NOT_FOUND", `MCP server '${req.params.serverId}' not found.`);
+      return;
+    }
+    sendOk(res, { tools: server.tools || [] });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP tools: ${error.message}`);
+  }
+});
+
+router.post("/mcp/servers/:serverId/call", async (req, res) => {
+  const tool = String(req.body?.tool || "").trim();
+  const input = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
+  if (!tool) {
+    sendError(res, 400, "VALIDATION_ERROR", "tool is required.");
+    return;
+  }
+  try {
+    const started = Date.now();
+    const output = await runMcpTool(req.params.serverId, tool, input, { user: req.user || null });
+    await appendToolUsage({
+      ts: new Date().toISOString(),
+      toolId: `mcp.${req.params.serverId}.${tool}`,
+      durationMs: Date.now() - started,
+      ok: true,
+      metadata: {
+        source: "mcp",
+        serverId: req.params.serverId,
+        tool
+      }
+    });
+    sendOk(res, { output });
+  } catch (error) {
+    if (error.code === "MCP_SERVER_NOT_FOUND") {
+      sendError(res, 404, "NOT_FOUND", error.message);
+      return;
+    }
+    if (error.code === "MCP_TOOL_NOT_FOUND") {
+      sendError(res, 404, "NOT_FOUND", error.message);
+      return;
+    }
+    sendError(res, 500, "SERVER_ERROR", `Failed to run MCP tool: ${error.message}`);
   }
 });
 

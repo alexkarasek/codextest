@@ -115,9 +115,11 @@ Notes:
 
 ## F) Build knowledge packs
 1. Go to `Admin & Config` -> `Knowledge Studio`.
-2. Create manually or upload file:
-- `.txt`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, `.docx`
-3. Save and reuse packs in chats/debates/personas.
+2. Use either:
+- **Upload**: `.txt`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, `.docx`
+- **Web Ingest**: paste a URL, preview the extracted text, and choose create/append/overwrite
+3. Optionally set a web allowlist/denylist to control which domains can be fetched.
+4. Save and reuse packs in chats/debates/personas.
 
 ## G) Configure Responsible AI policy
 1. Go to `Admin & Config` -> `Responsible AI`.
@@ -127,7 +129,12 @@ Notes:
 
 This affects new rendering/analytics signals.
 
-## H) Manage users and access
+## H) Customize the UI theme
+1. Go to `Admin & Config` -> `Theme`.
+2. Edit theme variables or typography JSON.
+3. Save to apply immediately.
+
+## I) Manage users and access
 1. Go to `Admin & Config` -> `Users & Access`.
 2. Create users, set roles, reset credentials.
 3. Generate API keys when needed for external tools.
@@ -135,7 +142,7 @@ This affects new rendering/analytics signals.
 Reminder:
 - Raw API key is shown once at creation time.
 
-## I) Use Support and Documentation
+## J) Use Support and Documentation
 - Support Concierge: `Menu` -> `Support` or `/support`
 - Documentation module: `Menu` -> `Documentation` or `/documentation`
 - API reference: `/docs/api`
@@ -148,6 +155,7 @@ All state is file-based under `data/`:
 - Persona chats: `data/persona-chats/`
 - Simple chats: `data/simple-chats/`
 - Governance/auth/settings: `data/settings/`
+- UI theme: `data/settings/theme.json`
 - Support logs: `data/support/messages.jsonl`
 
 ## Practical usage guidance

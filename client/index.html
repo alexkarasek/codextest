@@ -6,8 +6,33 @@
   <title>Persona Debate Orchestrator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260218">
+  <style id="theme-vars"></style>
+  <script>
+    (function loadThemeEarly() {
+      const styleTag = document.getElementById("theme-vars");
+      function applyTheme(theme) {
+        if (!theme || typeof theme !== "object") return;
+        const vars = theme.variables && typeof theme.variables === "object" ? theme.variables : {};
+        const typography = theme.typography && typeof theme.typography === "object" ? theme.typography : {};
+        const lines = [":root {"];
+        Object.entries(vars).forEach(([key, value]) => {
+          if (!key || typeof value === "undefined") return;
+          lines.push(`  ${String(key)}: ${String(value)};`);
+        });
+        if (typography.body) lines.push(`  --font-body: ${String(typography.body)};`);
+        if (typography.display) lines.push(`  --font-display: ${String(typography.display)};`);
+        lines.push("}");
+        styleTag.textContent = lines.join("\\n");
+      }
+
+      fetch("/theme", { credentials: "include" })
+        .then((res) => res.json())
+        .then((payload) => applyTheme(payload?.data?.theme || payload?.theme || null))
+        .catch(() => {});
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
@@ -31,7 +56,7 @@
         <h1>Persona Debate Orchestrator</h1>
         <p class="muted">Local-first persona manager, debate runner, and transcript-aware chat.</p>
       </div>
-      <img class="hero-art" src="/assets/debate-wave.svg" alt="Abstract illustration of connected debate nodes">
+      <img class="hero-art" src="/media/logo" alt="Product logo">
     </div>
   </header>
 
@@ -55,6 +80,7 @@
     <button id="config-view-knowledge" class="subtab-btn" type="button">Knowledge Studio</button>
     <button id="config-view-rai" class="subtab-btn" type="button">Responsible AI</button>
     <button id="config-view-agentic" class="subtab-btn" type="button">Agentic</button>
+    <button id="config-view-theme" class="subtab-btn" type="button">Theme</button>
     <button id="config-view-security" class="subtab-btn" type="button">Users & Access</button>
   </nav>
 
@@ -79,7 +105,7 @@
 
   <main>
     <section id="tab-personas" class="tab-section">
-      <div class="grid two">
+      <div class="grid three">
         <div class="panel">
           <h2>Persona List <span class="tip" tabindex="0">?<span class="tip-flyout">Search, filter by tag, then use actions on each card to edit, duplicate, delete, or add to debate.</span></span></h2>
           <div class="row">
@@ -140,6 +166,51 @@
           <div id="knowledge-upload-status" class="status"></div>
         </div>
         <div class="panel stack">
+          <h2>Web Ingest</h2>
+          <div class="hint">Fetch a web page and convert it into a knowledge pack.</div>
+          <form id="knowledge-url-form" class="stack">
+            <label>URL<input id="knowledge-url" type="url" placeholder="https://example.com" required></label>
+            <label>Title (optional)<input id="knowledge-url-title" type="text" placeholder="Auto-derived from page title"></label>
+            <label>Id (optional slug)<input id="knowledge-url-id" type="text" placeholder="Auto-generated if empty"></label>
+            <label>Tags (comma-separated)<input id="knowledge-url-tags" type="text" placeholder="web, reports, benchmarks"></label>
+            <label>Description (optional)<textarea id="knowledge-url-description" rows="3" placeholder="Optional description for this pack"></textarea></label>
+            <label>Mode
+              <select id="knowledge-url-mode">
+                <option value="create" selected>Create new</option>
+                <option value="append">Append to existing</option>
+                <option value="overwrite">Overwrite existing</option>
+              </select>
+            </label>
+            <label class="inline">
+              <input id="knowledge-url-summarize" type="checkbox" checked>
+              Summarize content
+            </label>
+            <div class="row">
+              <button type="submit">Ingest URL</button>
+              <button id="knowledge-url-preview" type="button">Preview URL</button>
+              <button id="knowledge-url-reset" type="button">Reset</button>
+            </div>
+          </form>
+          <div id="knowledge-url-status" class="status"></div>
+          <details id="knowledge-url-preview-panel">
+            <summary>Preview fetched text</summary>
+            <div class="hint">Preview extracts readable text only; it is not stored unless you ingest.</div>
+            <pre id="knowledge-url-preview-output" class="preview"></pre>
+          </details>
+          <h3>Web Access Policy</h3>
+          <div class="hint">Optionally restrict domains that can be fetched during web ingest or agent tools.</div>
+          <label>Allowlist domains (one per line)
+            <textarea id="knowledge-web-allowlist" rows="4" placeholder="example.com&#10;docs.example.org"></textarea>
+          </label>
+          <label>Denylist domains (one per line)
+            <textarea id="knowledge-web-denylist" rows="4" placeholder="ads.example.com"></textarea>
+          </label>
+          <div class="row">
+            <button id="knowledge-web-policy-save" type="button">Save Web Policy</button>
+          </div>
+          <div id="knowledge-web-policy-status" class="status"></div>
+        </div>
+        <div class="panel stack">
           <h2>Knowledge Pack Library</h2>
           <div id="knowledge-studio-list" class="list"></div>
         </div>
@@ -168,6 +239,31 @@
           <h2>Policy Preview</h2>
           <div class="hint">Changes apply to newly rendered exchanges and governance calculations.</div>
           <pre id="rai-preview" class="preview"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-theme" class="tab-section">
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Theme Editor</h2>
+          <div class="hint">Edit theme variables and typography. Changes apply immediately after saving.</div>
+          <label>Theme Variables (JSON)
+            <textarea id="theme-variables-json" rows="12" placeholder='{"--bg":"#f6f8f7","--ink":"#1b2631"}'></textarea>
+          </label>
+          <label>Typography (JSON)
+            <textarea id="theme-typography-json" rows="6" placeholder='{"body":"Space Grotesk, sans-serif","display":"Fraunces, serif"}'></textarea>
+          </label>
+          <div class="row">
+            <button id="theme-save" type="button">Save Theme</button>
+            <button id="theme-reset" type="button">Reset to Defaults</button>
+          </div>
+          <div id="theme-status" class="status"></div>
+        </div>
+        <div class="panel stack">
+          <h2>Live Preview</h2>
+          <div class="hint">Preview the current theme tokens.</div>
+          <pre id="theme-preview" class="preview"></pre>
         </div>
       </div>
     </section>
@@ -291,6 +387,20 @@
         <div class="panel stack">
           <h2>Events + MCP Readiness</h2>
           <div id="agentic-mcp-status" class="status">MCP status not loaded.</div>
+          <h3>MCP Registry</h3>
+          <div id="agentic-mcp-servers" class="list"></div>
+          <h3>MCP Tool Runner</h3>
+          <div class="row">
+            <label>MCP Tool
+              <select id="agentic-mcp-tool-select"></select>
+            </label>
+            <button id="agentic-mcp-tool-run" type="button">Run MCP Tool</button>
+          </div>
+          <label>Tool Input (JSON)
+            <textarea id="agentic-mcp-tool-input" rows="4" placeholder='{"limit": 25}'></textarea>
+          </label>
+          <div id="agentic-mcp-tool-status" class="status"></div>
+          <pre id="agentic-mcp-tool-output" class="preview"></pre>
           <h3>Recent Task Events</h3>
           <pre id="agentic-task-events" class="preview"></pre>
           <h3>Recent Tool Usage</h3>

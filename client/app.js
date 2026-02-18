@@ -61,6 +61,8 @@ const state = {
     history: [],
     citations: []
   },
+  theme: null,
+  webPolicy: null,
   agentic: {
     tools: [],
     tasks: [],
@@ -69,6 +71,7 @@ const state = {
     jobs: [],
     metrics: null,
     mcp: null,
+    mcpServers: [],
     events: {
       task: [],
       tool: []
@@ -507,6 +510,7 @@ async function logout() {
 
 async function refreshAfterAuth() {
   renderSessionSummary();
+  await loadThemeSettings();
   await loadPersonas();
   await loadKnowledgePacks();
   await loadResponsibleAiPolicy();
@@ -1477,6 +1481,7 @@ function setSubtabActive(group, value) {
       knowledge: "config-view-knowledge",
       rai: "config-view-rai",
       agentic: "config-view-agentic",
+      theme: "config-view-theme",
       security: "config-view-security"
     }
   };
@@ -1545,21 +1550,27 @@ function setPersonaSidebarCollapsed(collapsed) {
 }
 
 function setConfigView(view) {
-  state.configView = ["knowledge", "rai", "agentic", "security"].includes(view) ? view : "personas";
+  state.configView = ["knowledge", "rai", "agentic", "theme", "security"].includes(view) ? view : "personas";
   byId("tab-personas").classList.toggle("active", state.mainTab === "config" && state.configView === "personas");
   byId("tab-knowledge").classList.toggle("active", state.mainTab === "config" && state.configView === "knowledge");
   byId("tab-rai").classList.toggle("active", state.mainTab === "config" && state.configView === "rai");
   byId("tab-agentic").classList.toggle("active", state.mainTab === "config" && state.configView === "agentic");
+  byId("tab-theme").classList.toggle("active", state.mainTab === "config" && state.configView === "theme");
   byId("tab-security").classList.toggle("active", state.mainTab === "config" && state.configView === "security");
   setSubtabActive("config", state.configView);
   if (state.mainTab === "config" && state.configView === "knowledge") {
     loadKnowledgePacks();
+    loadWebPolicy();
   }
   if (state.mainTab === "config" && state.configView === "rai") {
     loadResponsibleAiPolicy();
   }
   if (state.mainTab === "config" && state.configView === "agentic") {
     loadAgenticData();
+  }
+  if (state.mainTab === "config" && state.configView === "theme") {
+    loadThemeSettings();
+    renderThemeEditor();
   }
   if (state.mainTab === "config" && state.configView === "security") {
     loadSecurityData();
@@ -3209,6 +3220,91 @@ function renderResponsibleAiPolicyForm() {
   byId("rai-preview").textContent = JSON.stringify(policy, null, 2);
 }
 
+function applyThemeSettings(theme) {
+  if (!theme || typeof theme !== "object") return;
+  const root = document.documentElement;
+  const variables = theme.variables && typeof theme.variables === "object" ? theme.variables : {};
+  Object.entries(variables).forEach(([key, value]) => {
+    if (!key || typeof value === "undefined") return;
+    root.style.setProperty(String(key), String(value));
+  });
+  const typography = theme.typography && typeof theme.typography === "object" ? theme.typography : {};
+  if (typography.body) root.style.setProperty("--font-body", String(typography.body));
+  if (typography.display) root.style.setProperty("--font-display", String(typography.display));
+}
+
+function renderThemeEditor() {
+  const variablesEl = byId("theme-variables-json");
+  const typographyEl = byId("theme-typography-json");
+  const previewEl = byId("theme-preview");
+  if (!variablesEl || !typographyEl || !previewEl) return;
+  const theme = state.theme || {};
+  variablesEl.value = JSON.stringify(theme.variables || {}, null, 2);
+  typographyEl.value = JSON.stringify(theme.typography || {}, null, 2);
+  previewEl.textContent = JSON.stringify(theme, null, 2);
+}
+
+async function saveThemeEditor() {
+  const status = byId("theme-status");
+  if (!status) return;
+  const variablesEl = byId("theme-variables-json");
+  const typographyEl = byId("theme-typography-json");
+  let variables = {};
+  let typography = {};
+  try {
+    variables = variablesEl.value.trim() ? JSON.parse(variablesEl.value) : {};
+  } catch (error) {
+    status.textContent = `Invalid variables JSON: ${error.message}`;
+    return;
+  }
+  try {
+    typography = typographyEl.value.trim() ? JSON.parse(typographyEl.value) : {};
+  } catch (error) {
+    status.textContent = `Invalid typography JSON: ${error.message}`;
+    return;
+  }
+
+  status.textContent = "Saving theme...";
+  try {
+    const data = await apiSend("/api/settings/theme", "PUT", { theme: { variables, typography } });
+    state.theme = data.theme || null;
+    applyThemeSettings(state.theme);
+    renderThemeEditor();
+    status.textContent = "Theme saved.";
+  } catch (error) {
+    status.textContent = `Failed to save theme: ${error.message}`;
+  }
+}
+
+async function resetThemeEditor() {
+  const status = byId("theme-status");
+  if (!status) return;
+  status.textContent = "Resetting theme...";
+  try {
+    const data = await apiSend("/api/settings/theme", "PUT", { theme: {} });
+    state.theme = data.theme || null;
+    applyThemeSettings(state.theme);
+    renderThemeEditor();
+    status.textContent = "Theme reset to defaults.";
+  } catch (error) {
+    status.textContent = `Failed to reset theme: ${error.message}`;
+  }
+}
+
+async function loadThemeSettings() {
+  try {
+    const res = await fetch("/theme", { credentials: "include" });
+    const payload = await res.json().catch(() => ({}));
+    const theme = payload?.data?.theme || payload?.theme || null;
+    if (theme) {
+      state.theme = theme;
+      applyThemeSettings(theme);
+    }
+  } catch {
+    // ignore if not authenticated or unavailable
+  }
+}
+
 async function loadResponsibleAiPolicy() {
   const status = byId("rai-status");
   if (!status) return;
@@ -3950,13 +4046,110 @@ function renderAgenticMetrics() {
 
   const mcp = state.agentic.mcp || {};
   mcpStatus.textContent = `MCP: ${mcp.phase || "unknown"} | enabled=${Boolean(mcp.enabled)} | transport=${mcp.transport || "n/a"} | servers=${mcp.serverCount || 0}`;
+  renderMcpRegistry();
+}
+
+function renderMcpRegistry() {
+  const container = byId("agentic-mcp-servers");
+  if (!container) return;
+  const servers = state.agentic.mcpServers || [];
+  container.innerHTML = "";
+  if (!servers.length) {
+    container.textContent = "No MCP servers registered.";
+    renderMcpToolSelect([]);
+    return;
+  }
+  servers.forEach((server) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    const tools = Array.isArray(server.tools) ? server.tools : [];
+    const toolNames = tools.map((tool) => tool.name).filter(Boolean);
+    card.innerHTML = `
+      <div class="card-title">${server.name || server.id}</div>
+      <div>id: ${server.id}</div>
+      <div>transport: ${server.transport || "n/a"}</div>
+      <div>source: ${server.source || "unknown"}</div>
+      <div>tools: ${server.toolCount ?? toolNames.length}</div>
+      <div class="muted">${toolNames.length ? toolNames.join(", ") : "Tools not loaded."}</div>
+    `;
+    container.appendChild(card);
+  });
+  renderMcpToolSelect(servers);
+}
+
+function renderMcpToolSelect(servers) {
+  const select = byId("agentic-mcp-tool-select");
+  if (!select) return;
+  const options = [];
+  servers.forEach((server) => {
+    (server.tools || []).forEach((tool) => {
+      options.push({
+        value: `${server.id}::${tool.name}`,
+        label: `${server.name || server.id} / ${tool.name}`
+      });
+    });
+  });
+  select.innerHTML = "";
+  if (!options.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No MCP tools available";
+    select.appendChild(opt);
+    return;
+  }
+  options.forEach((item, idx) => {
+    const opt = document.createElement("option");
+    opt.value = item.value;
+    opt.textContent = item.label;
+    if (idx === 0) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+async function runSelectedMcpTool() {
+  const status = byId("agentic-mcp-tool-status");
+  const output = byId("agentic-mcp-tool-output");
+  const select = byId("agentic-mcp-tool-select");
+  const inputEl = byId("agentic-mcp-tool-input");
+  if (!status || !output || !select || !inputEl) return;
+
+  const value = select.value || "";
+  if (!value || !value.includes("::")) {
+    status.textContent = "Select an MCP tool first.";
+    return;
+  }
+  const [serverId, tool] = value.split("::");
+  let input = {};
+  const raw = inputEl.value.trim();
+  if (raw) {
+    try {
+      input = JSON.parse(raw);
+    } catch (error) {
+      status.textContent = `Invalid JSON input: ${error.message}`;
+      return;
+    }
+  }
+
+  status.textContent = `Running ${serverId}.${tool}...`;
+  output.textContent = "";
+  try {
+    const result = await apiSend(`/api/agentic/mcp/servers/${encodeURIComponent(serverId)}/call`, "POST", {
+      tool,
+      input
+    });
+    output.textContent = toPrettyJson(result.output || {});
+    status.textContent = `Completed ${serverId}.${tool}.`;
+    await loadAgenticData();
+  } catch (error) {
+    status.textContent = `MCP tool failed: ${error.message}`;
+  }
 }
 
 async function loadAgenticData() {
   if (!state.auth.authenticated) return;
   byId("agentic-task-status").textContent = "Loading agentic workspace...";
   try {
-    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, templates] = await Promise.all([
+    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates] = await Promise.all([
       apiGet("/api/agentic/tools"),
       apiGet("/api/agentic/tasks"),
       apiGet("/api/agentic/approvals"),
@@ -3965,6 +4158,7 @@ async function loadAgenticData() {
       apiGet("/api/agentic/events?type=task&limit=200"),
       apiGet("/api/agentic/events?type=tool&limit=200"),
       apiGet("/api/agentic/mcp/status"),
+      apiGet("/api/agentic/mcp/servers?includeTools=true"),
       apiGet("/api/agentic/templates")
     ]);
     state.agentic.tools = tools.tools || [];
@@ -3975,6 +4169,7 @@ async function loadAgenticData() {
     state.agentic.events.task = taskEvents.events || [];
     state.agentic.events.tool = toolEvents.events || [];
     state.agentic.mcp = mcp || null;
+    state.agentic.mcpServers = mcpServers.servers || [];
     state.agentic.templates = templates.templates || [];
 
     if (state.agentic.activeTaskId && !state.agentic.tasks.some((t) => t.id === state.agentic.activeTaskId)) {
@@ -4222,6 +4417,110 @@ async function uploadKnowledgeFile(event) {
     await loadKnowledgePacks();
   } catch (error) {
     status.textContent = `Upload failed: ${error.message}`;
+  }
+}
+
+async function ingestKnowledgeUrl(event) {
+  event.preventDefault();
+  const status = byId("knowledge-url-status");
+  const url = byId("knowledge-url").value.trim();
+  if (!url) {
+    status.textContent = "URL is required.";
+    return;
+  }
+
+  const payload = {
+    url,
+    title: byId("knowledge-url-title").value.trim() || undefined,
+    id: byId("knowledge-url-id").value.trim() || undefined,
+    tags: byId("knowledge-url-tags").value.trim() || undefined,
+    description: byId("knowledge-url-description").value.trim() || undefined,
+    mode: byId("knowledge-url-mode").value || "create",
+    summarize: byId("knowledge-url-summarize").checked
+  };
+
+  status.textContent = "Fetching and ingesting URL...";
+  try {
+    const res = await apiSend("/api/knowledge/ingest-url", "POST", payload);
+    status.textContent = `Ingested '${res.pack?.id || "knowledge pack"}' from ${payload.url}.`;
+    byId("knowledge-url-form").reset();
+    byId("knowledge-url-summarize").checked = true;
+    const preview = byId("knowledge-url-preview-output");
+    if (preview) preview.textContent = "";
+    await loadKnowledgePacks();
+  } catch (error) {
+    status.textContent = `URL ingest failed: ${error.message}`;
+  }
+}
+
+async function previewKnowledgeUrl() {
+  const status = byId("knowledge-url-status");
+  const url = byId("knowledge-url").value.trim();
+  if (!url) {
+    status.textContent = "URL is required for preview.";
+    return;
+  }
+  status.textContent = "Fetching preview...";
+  try {
+    const res = await apiSend("/api/knowledge/preview-url", "POST", { url, maxChars: 4000 });
+    const preview = byId("knowledge-url-preview-output");
+    if (preview) preview.textContent = res.preview?.text || "";
+    const titleEl = byId("knowledge-url-title");
+    if (titleEl && !titleEl.value.trim() && res.preview?.title) {
+      titleEl.value = res.preview.title;
+    }
+    status.textContent = "Preview loaded.";
+    const panel = byId("knowledge-url-preview-panel");
+    if (panel && panel.open === false) panel.open = true;
+  } catch (error) {
+    status.textContent = `Preview failed: ${error.message}`;
+  }
+}
+
+function renderWebPolicyForm() {
+  if (!state.webPolicy) return;
+  const allowlist = byId("knowledge-web-allowlist");
+  const denylist = byId("knowledge-web-denylist");
+  if (!allowlist || !denylist) return;
+  allowlist.value = (state.webPolicy.allowlist || []).join("\n");
+  denylist.value = (state.webPolicy.denylist || []).join("\n");
+}
+
+async function loadWebPolicy() {
+  const status = byId("knowledge-web-policy-status");
+  if (!status) return;
+  status.textContent = "Loading web policy...";
+  try {
+    const data = await apiGet("/api/settings/web");
+    state.webPolicy = data.policy || null;
+    renderWebPolicyForm();
+    status.textContent = "Web policy loaded.";
+  } catch (error) {
+    status.textContent = `Failed to load web policy: ${error.message}`;
+  }
+}
+
+async function saveWebPolicy() {
+  const status = byId("knowledge-web-policy-status");
+  if (!status) return;
+  const allowlist = (byId("knowledge-web-allowlist").value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const denylist = (byId("knowledge-web-denylist").value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  status.textContent = "Saving web policy...";
+  try {
+    const data = await apiSend("/api/settings/web", "PUT", {
+      policy: { allowlist, denylist }
+    });
+    state.webPolicy = data.policy || null;
+    renderWebPolicyForm();
+    status.textContent = "Web policy saved.";
+  } catch (error) {
+    status.textContent = `Failed to save web policy: ${error.message}`;
   }
 }
 
@@ -4570,6 +4869,7 @@ function wireEvents() {
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
   byId("config-view-agentic").addEventListener("click", () => setConfigView("agentic"));
+  byId("config-view-theme").addEventListener("click", () => setConfigView("theme"));
   byId("config-view-security").addEventListener("click", () => setConfigView("security"));
   byId("system-menu-toggle").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -4668,6 +4968,7 @@ function wireEvents() {
   byId("agentic-save-template").addEventListener("click", saveCurrentAgenticTemplate);
   byId("agentic-refresh").addEventListener("click", loadAgenticData);
   byId("agentic-run-selected").addEventListener("click", runSelectedAgenticTask);
+  byId("agentic-mcp-tool-run").addEventListener("click", runSelectedMcpTool);
   byId("agentic-router-preview").addEventListener("click", previewAgenticRouting);
   byId("agentic-step-add").addEventListener("click", () => {
     state.agentic.stepDrafts = getAgenticBuilderRowsFromDom();
@@ -4855,7 +5156,19 @@ function wireEvents() {
   });
   byId("topic-generate-personas").addEventListener("click", generatePersonasFromSelectedTopic);
   byId("knowledge-upload-form").addEventListener("submit", uploadKnowledgeFile);
+  byId("knowledge-url-form").addEventListener("submit", ingestKnowledgeUrl);
+  byId("knowledge-url-preview").addEventListener("click", previewKnowledgeUrl);
+  byId("knowledge-url-reset").addEventListener("click", () => {
+    byId("knowledge-url-form").reset();
+    byId("knowledge-url-summarize").checked = true;
+    byId("knowledge-url-status").textContent = "";
+    const preview = byId("knowledge-url-preview-output");
+    if (preview) preview.textContent = "";
+  });
+  byId("knowledge-web-policy-save").addEventListener("click", saveWebPolicy);
   byId("knowledge-refresh").addEventListener("click", loadKnowledgePacks);
+  byId("theme-save").addEventListener("click", saveThemeEditor);
+  byId("theme-reset").addEventListener("click", resetThemeEditor);
   byId("persona-chat-create").addEventListener("click", createPersonaChatSession);
   byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-new-draft-main").addEventListener("click", startNewPersonaChatDraft);
@@ -4989,6 +5302,7 @@ function wireEvents() {
 }
 
 async function init() {
+  await loadThemeSettings();
   wireEvents();
   initAgenticStepDrafts(getDefaultAgenticSteps());
   renderAgenticStepBuilder();

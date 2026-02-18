@@ -50,6 +50,8 @@ Response envelope:
 - `PUT /:id`
 - `DELETE /:id`
 - `POST /ingest` (multipart upload)
+- `POST /ingest-url`
+- `POST /preview-url`
 
 ### Topics (`/api/topics`) - auth required
 - `GET /current-events?query=&limit=&recencyDays=&provider=`
@@ -77,6 +79,10 @@ Response envelope:
 ### Settings (`/api/settings`) - auth required
 - `GET /responsible-ai`
 - `PUT /responsible-ai`
+- `GET /web`
+- `PUT /web`
+- `GET /theme`
+- `PUT /theme`
 
 ### Images (`/api/images`) - auth required
 - `POST /generate`
@@ -111,6 +117,9 @@ Response envelope:
 - `GET /events`
 - `GET /metrics/overview`
 - `GET /mcp/status`
+- `GET /mcp/servers?includeTools=true`
+- `GET /mcp/servers/:serverId/tools`
+- `POST /mcp/servers/:serverId/call`
 
 ### Support (`/api/support`) - auth required (session or API key)
 - `POST /messages`

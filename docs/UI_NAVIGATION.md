@@ -48,11 +48,17 @@ Main areas:
 
 ### Knowledge Studio
 - Upload -> convert into knowledge pack
+- Web ingest -> preview URL and convert into knowledge pack
+- Web access policy -> allowlist/denylist domains
 - Knowledge pack library list
 
 ### Responsible AI
 - Red/yellow keyword configuration
 - Sentiment keyword and threshold configuration
+
+### Theme
+- Theme editor for UI variables + typography
+- Live preview of current theme tokens
 
 ### Agentic
 - Task builder

@@ -5,4 +5,6 @@ npm-debug.log*
 .DS_Store
 settings.local.json
 data/debates
+data/settings/theme.json
+data/images
 README.md

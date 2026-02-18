@@ -62,6 +62,16 @@ Common mistakes:
 Fix:
 - Inspect `error.details` in response.
 
+## Web ingest blocked
+
+### `BLOCKED_DOMAIN` or `BLOCKED_HOSTNAME`
+Cause:
+- URL is on denylist, not on allowlist, or points to localhost.
+
+Fix:
+- Update Web Access Policy in `Admin & Config -> Knowledge Studio`.
+- Use a public domain and avoid `localhost` or `.local`.
+
 ## LLM configuration errors
 
 ### `MISSING_API_KEY`
