@@ -80,6 +80,18 @@ export function requirePermission(permission) {
   };
 }
 
+export function requireApiKeyAuth(req, res, next) {
+  if (!req.auth?.user) {
+    sendError(res, 401, "UNAUTHORIZED", "Authentication required.");
+    return;
+  }
+  if (req.auth?.method !== "api_key") {
+    sendError(res, 401, "UNAUTHORIZED", "x-api-key authentication required for this endpoint.");
+    return;
+  }
+  next();
+}
+
 export function usageAudit() {
   return (req, res, next) => {
     const started = Date.now();

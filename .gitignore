@@ -25,6 +25,10 @@ data/personas/**
 data/settings/**
 !data/settings/.gitkeep
 
+!data/support/
+data/support/**
+!data/support/.gitkeep
+
 !data/images/
 data/images/**
 !data/images/.gitkeep

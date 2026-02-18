@@ -1,0 +1,1537 @@
+openapi: 3.0.3
+info:
+  title: Persona Debate Local API
+  version: 1.0.0
+  description: |
+    Local-first Node.js API for persona/debate/chat/governance workflows.
+    All responses use a standard envelope:
+    - success: { ok: true, data: ... }
+    - error: { ok: false, error: { code, message, details } }
+servers:
+  - url: http://localhost:3000
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+  - apiKeyAuth: []
+tags:
+  - name: Auth
+  - name: Personas
+  - name: Debates
+  - name: Persona Chats
+  - name: Simple Chats
+  - name: Knowledge
+  - name: Topics
+  - name: Admin
+  - name: Agentic
+  - name: Settings
+  - name: Images
+  - name: Support
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Auth bootstrap/user status
+      security: []
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+
+  /api/auth/sso/status:
+    get:
+      tags: [Auth]
+      summary: SSO status
+      security: []
+      responses:
+        '200':
+          description: SSO status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+
+  /api/auth/bootstrap:
+    post:
+      tags: [Auth]
+      summary: Create first admin user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, example: AdminPass123! }
+      responses:
+        '201':
+          description: Bootstrapped
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with username/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current session/token
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/auth/users:
+    get:
+      tags: [Auth]
+      summary: List users (manageUsers required)
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Auth]
+      summary: Create user (manageUsers required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+                role: { type: string, enum: [admin, user], default: user }
+                permissions:
+                  type: object
+                  additionalProperties: { type: boolean }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/auth/users/{userId}:
+    put:
+      tags: [Auth]
+      summary: Update user (manageUsers required)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [admin, user] }
+                password: { type: string }
+                permissions:
+                  type: object
+                  additionalProperties: { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Auth]
+      summary: Delete user (manageUsers required)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/auth/api-keys:
+    get:
+      tags: [Auth]
+      summary: List API keys
+      parameters:
+        - in: query
+          name: scope
+          schema: { type: string, enum: [mine, all], default: mine }
+      responses:
+        '200':
+          description: Keys
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    post:
+      tags: [Auth]
+      summary: Create API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: { type: string }
+                name: { type: string }
+      responses:
+        '201':
+          description: Key created (rawKey is shown only at creation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/auth/api-keys/{keyId}:
+    delete:
+      tags: [Auth]
+      summary: Revoke API key
+      parameters:
+        - in: path
+          name: keyId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/auth/usage:
+    get:
+      tags: [Auth]
+      summary: Usage summary (viewGovernance required)
+      responses:
+        '200':
+          description: Usage data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/personas:
+    get:
+      tags: [Personas]
+      summary: List personas
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: tag
+          schema: { type: string }
+      responses:
+        '200':
+          description: Personas list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    post:
+      tags: [Personas]
+      summary: Create persona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Persona' }
+            examples:
+              sample:
+                value:
+                  id: frank-bot
+                  displayName: Franck
+                  role: Planner
+                  description: Event-planning specialist persona
+                  systemPrompt: You are Franck, practical and expressive.
+                  speakingStyle:
+                    tone: friendly
+                    verbosity: concise
+                    quirks: [theatrical emphasis]
+                  expertiseTags: [event planning, aesthetics]
+                  biasValues: [quality-first]
+                  debateBehavior: Steelman first, then challenge assumptions.
+                  knowledgePackIds: []
+      responses:
+        '201':
+          description: Persona created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/personas/{id}:
+    get:
+      tags: [Personas]
+      summary: Get persona
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Persona
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Personas]
+      summary: Update persona
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Persona' }
+      responses:
+        '200':
+          description: Persona updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Personas]
+      summary: Delete persona
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Persona deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/personas/{id}/duplicate:
+    post:
+      tags: [Personas]
+      summary: Duplicate persona
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                displayName: { type: string }
+      responses:
+        '201':
+          description: Duplicated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/personas/generate-from-topic:
+    post:
+      tags: [Personas]
+      summary: Generate persona drafts from topic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic]
+              properties:
+                topic: { type: string }
+                context: { type: string, default: '' }
+                count: { type: integer, minimum: 1, maximum: 6, default: 3 }
+                model: { type: string, default: gpt-4.1-mini }
+                sources:
+                  type: array
+                  items: { $ref: '#/components/schemas/TopicSource' }
+      responses:
+        '200':
+          description: Draft personas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/topics/current-events:
+    get:
+      tags: [Topics]
+      summary: Discover current event topics
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema: { type: string, minLength: 2 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 20, default: 8 }
+        - in: query
+          name: recencyDays
+          schema: { type: integer, minimum: 1, maximum: 30, default: 7 }
+        - in: query
+          name: provider
+          schema: { type: string }
+      responses:
+        '200':
+          description: Topic list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/knowledge:
+    get:
+      tags: [Knowledge]
+      summary: List knowledge packs
+      responses:
+        '200':
+          description: Knowledge packs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    post:
+      tags: [Knowledge]
+      summary: Create knowledge pack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgePack' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/knowledge/{id}:
+    get:
+      tags: [Knowledge]
+      summary: Get knowledge pack
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Knowledge pack
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    put:
+      tags: [Knowledge]
+      summary: Update knowledge pack
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgePack' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    delete:
+      tags: [Knowledge]
+      summary: Delete knowledge pack
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/knowledge/ingest:
+    post:
+      tags: [Knowledge]
+      summary: Ingest uploaded file into knowledge pack
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                id: { type: string }
+                title: { type: string }
+                description: { type: string }
+                tags:
+                  description: Optional comma-separated tags
+                  type: string
+      responses:
+        '201':
+          description: Ingested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/debates:
+    post:
+      tags: [Debates]
+      summary: Create and queue debate run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDebateRequest' }
+            examples:
+              withManualPersonas:
+                value:
+                  topic: Should we adopt a four-day work week?
+                  context: Compare productivity and burnout outcomes.
+                  selectedPersonas:
+                    - type: saved
+                      id: big-tex
+                  knowledgePackIds: []
+                  settings:
+                    rounds: 3
+                    maxWordsPerTurn: 120
+                    moderationStyle: neutral
+                    sourceGroundingMode: light
+                    model: gpt-4.1-mini
+                    temperature: 0.7
+                    includeModerator: true
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+    get:
+      tags: [Debates]
+      summary: List debates
+      responses:
+        '200':
+          description: Debate list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/debates/{debateId}:
+    get:
+      tags: [Debates]
+      summary: Get debate metadata and transcript text
+      parameters:
+        - in: path
+          name: debateId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Debate detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/debates/{debateId}/transcript:
+    get:
+      tags: [Debates]
+      summary: Download transcript markdown
+      parameters:
+        - in: path
+          name: debateId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Markdown transcript
+          content:
+            text/markdown:
+              schema:
+                type: string
+
+  /api/debates/{debateId}/chat:
+    post:
+      tags: [Debates]
+      summary: Ask follow-up question grounded in transcript excerpts
+      parameters:
+        - in: path
+          name: debateId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      content: { type: string }
+                model: { type: string, default: gpt-4.1-mini }
+                temperature: { type: number, default: 0.3 }
+      responses:
+        '200':
+          description: Answer with citations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    get:
+      tags: [Debates]
+      summary: Get persisted follow-up chat history for debate
+      parameters:
+        - in: path
+          name: debateId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/persona-chats:
+    post:
+      tags: [Persona Chats]
+      summary: Create persona collaboration chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePersonaChatRequest' }
+            examples:
+              savedPersona:
+                value:
+                  title: Team Chat
+                  context: Planning discussion
+                  selectedPersonas:
+                    - type: saved
+                      id: big-tex
+                  settings:
+                    model: gpt-4.1-mini
+                    temperature: 0.6
+                    maxWordsPerTurn: 140
+                    engagementMode: chat
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+    get:
+      tags: [Persona Chats]
+      summary: List persona chats
+      responses:
+        '200':
+          description: Chat list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/persona-chats/{chatId}:
+    get:
+      tags: [Persona Chats]
+      summary: Get persona chat session + messages
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Chat detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/persona-chats/{chatId}/messages:
+    post:
+      tags: [Persona Chats]
+      summary: Send message to persona collaboration chat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+                historyLimit: { type: integer, minimum: 4, maximum: 40, default: 14 }
+                forceImage: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Orchestrated persona responses
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/simple-chats:
+    post:
+      tags: [Simple Chats]
+      summary: Create simple chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSimpleChatRequest' }
+            examples:
+              basic:
+                value:
+                  title: Simple Chat
+                  context: General help
+                  knowledgePackIds: []
+                  settings:
+                    model: gpt-4.1-mini
+                    temperature: 0.4
+                    maxResponseWords: 220
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    get:
+      tags: [Simple Chats]
+      summary: List simple chats
+      responses:
+        '200':
+          description: Chat list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/simple-chats/{chatId}:
+    get:
+      tags: [Simple Chats]
+      summary: Get simple chat session + messages
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Chat detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/simple-chats/{chatId}/messages:
+    post:
+      tags: [Simple Chats]
+      summary: Send message to simple chat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, example: hello }
+                historyLimit: { type: integer, minimum: 4, maximum: 60, default: 14 }
+                forceImage: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Assistant message
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/settings/responsible-ai:
+    get:
+      tags: [Settings]
+      summary: Get Responsible AI policy
+      responses:
+        '200':
+          description: Policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+    put:
+      tags: [Settings]
+      summary: Update Responsible AI policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ResponsibleAiPolicy'
+                - type: object
+                  properties:
+                    policy:
+                      $ref: '#/components/schemas/ResponsibleAiPolicy'
+      responses:
+        '200':
+          description: Saved policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/images/generate:
+    post:
+      tags: [Images]
+      summary: Generate image via configured LLM provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt: { type: string }
+                model: { type: string, default: gpt-image-1 }
+                size: { type: string, default: 1024x1024 }
+                quality: { type: string, enum: [low, medium, high, auto], default: auto }
+                contextType: { type: string, default: direct }
+                contextId: { type: string }
+      responses:
+        '201':
+          description: Generated image metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/images/{imageId}:
+    get:
+      tags: [Images]
+      summary: Read generated image binary
+      parameters:
+        - in: path
+          name: imageId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Image binary
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /api/admin/overview:
+    get:
+      tags: [Admin]
+      summary: Governance overview
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Overview metrics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /api/admin/debates/{debateId}:
+    get:
+      tags: [Admin]
+      summary: Debate analytics detail
+      parameters:
+        - in: path
+          name: debateId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Detail, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/personas:
+    get:
+      tags: [Admin]
+      summary: Persona analytics
+      responses:
+        '200': { description: Persona analytics, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/chats:
+    get:
+      tags: [Admin]
+      summary: Chat analytics overview
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200': { description: Chat analytics, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/chats/{chatId}:
+    get:
+      tags: [Admin]
+      summary: Chat analytics detail
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Chat detail, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/governance-chat/session:
+    post:
+      tags: [Admin]
+      summary: Create governance chat session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/governance-chat:
+    get:
+      tags: [Admin]
+      summary: List governance chats
+      responses:
+        '200': { description: List, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/governance-chat/{chatId}:
+    get:
+      tags: [Admin]
+      summary: Get governance chat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Chat, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/governance-chat/{chatId}/messages:
+    post:
+      tags: [Admin]
+      summary: Send governance chat message
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+      responses:
+        '200': { description: Reply, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/admin/governance-chat/refresh-assets:
+    post:
+      tags: [Admin]
+      summary: Refresh hidden governance assets
+      responses:
+        '200': { description: Refreshed, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/tools:
+    get:
+      tags: [Agentic]
+      summary: List available tools
+      responses:
+        '200': { description: Tool list, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/router/preview:
+    post:
+      tags: [Agentic]
+      summary: Preview persona team routing
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgenticTeam'
+      responses:
+        '200': { description: Preview, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/plan:
+    post:
+      tags: [Agentic]
+      summary: Generate task plan from goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgenticPlanRequest'
+      responses:
+        '200': { description: Planned, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/templates:
+    get:
+      tags: [Agentic]
+      summary: List task templates
+      responses:
+        '200': { description: Templates, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+    post:
+      tags: [Agentic]
+      summary: Save task template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, template]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                template:
+                  type: object
+                  required: [steps]
+                  properties:
+                    title: { type: string }
+                    objective: { type: string }
+                    team: { type: object, additionalProperties: true }
+                    settings: { type: object, additionalProperties: true }
+                    steps:
+                      type: array
+                      items: { $ref: '#/components/schemas/AgenticTaskStep' }
+      responses:
+        '201': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/templates/{templateId}:
+    delete:
+      tags: [Agentic]
+      summary: Delete task template
+      parameters:
+        - in: path
+          name: templateId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/tasks:
+    get:
+      tags: [Agentic]
+      summary: List tasks
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: Task list, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+    post:
+      tags: [Agentic]
+      summary: Create task draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgenticTaskRequest'
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/tasks/{taskId}:
+    get:
+      tags: [Agentic]
+      summary: Get task
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Task detail, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/tasks/{taskId}/run:
+    post:
+      tags: [Agentic]
+      summary: Run task
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxSteps: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200': { description: Task run result, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/approvals:
+    get:
+      tags: [Agentic]
+      summary: List approvals
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: Approvals, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/approvals/{approvalId}/decision:
+    post:
+      tags: [Agentic]
+      summary: Approve/reject pending step
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                notes: { type: string, default: '' }
+      responses:
+        '200': { description: Decision applied, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/jobs:
+    get:
+      tags: [Agentic]
+      summary: List jobs
+      responses:
+        '200': { description: Jobs, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/events:
+    get:
+      tags: [Agentic]
+      summary: List task/tool events
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string, enum: [task, tool], default: task }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 200 }
+      responses:
+        '200': { description: Events, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/metrics/overview:
+    get:
+      tags: [Agentic]
+      summary: Agentic metrics summary
+      responses:
+        '200': { description: Metrics, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/mcp/status:
+    get:
+      tags: [Agentic]
+      summary: MCP readiness status
+      responses:
+        '200': { description: MCP status, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/support/messages:
+    post:
+      tags: [Support]
+      summary: Ask Support Concierge (grounded docs)
+      description: Requires authentication (session cookie, bearer token, or API key).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  example: How do I create a persona chat?
+      responses:
+        '200':
+          description: Grounded support reply with citations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      reply: { type: string }
+                      citations:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SupportCitation'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: pd_session
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+        data:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details:
+              nullable: true
+              oneOf:
+                - type: 'null'
+                - type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      message: { type: string }
+    SpeakingStyle:
+      type: object
+      properties:
+        tone: { type: string, default: '' }
+        verbosity: { type: string, default: '' }
+        quirks:
+          type: array
+          items: { type: string }
+      required: [tone, verbosity, quirks]
+    Persona:
+      type: object
+      required: [id, displayName, systemPrompt, speakingStyle, expertiseTags, biasValues, debateBehavior, knowledgePackIds]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+        displayName: { type: string }
+        role: { type: string, default: '' }
+        description: { type: string, default: '' }
+        systemPrompt: { type: string }
+        speakingStyle: { $ref: '#/components/schemas/SpeakingStyle' }
+        expertiseTags:
+          type: array
+          items: { type: string }
+        biasValues:
+          oneOf:
+            - type: array
+              items: { type: string }
+            - type: string
+        debateBehavior: { type: string, default: '' }
+        knowledgePackIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdHocPersona:
+      allOf:
+        - $ref: '#/components/schemas/Persona'
+      required: [displayName, systemPrompt, speakingStyle, expertiseTags, biasValues, debateBehavior, knowledgePackIds]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+    SelectedPersona:
+      oneOf:
+        - type: object
+          required: [type, id]
+          properties:
+            type: { type: string, enum: [saved] }
+            id: { type: string }
+        - type: object
+          required: [type, persona]
+          properties:
+            type: { type: string, enum: [adhoc] }
+            savePersona: { type: boolean, default: false }
+            persona: { $ref: '#/components/schemas/AdHocPersona' }
+    TopicSource:
+      type: object
+      required: [title, url]
+      properties:
+        title: { type: string }
+        source: { type: string, default: '' }
+        url: { type: string, format: uri }
+        publishedAt:
+          oneOf:
+            - type: string
+            - type: 'null'
+        snippet: { type: string, default: '' }
+    DebateSettings:
+      type: object
+      properties:
+        rounds: { type: integer, minimum: 1, maximum: 8, default: 3 }
+        maxWordsPerTurn: { type: integer, minimum: 40, maximum: 400, default: 120 }
+        moderationStyle: { type: string, default: neutral }
+        sourceGroundingMode: { type: string, enum: [off, light, strict], default: light }
+        model: { type: string, default: gpt-4.1-mini }
+        temperature: { type: number, minimum: 0, maximum: 2, default: 0.7 }
+        includeModerator: { type: boolean, default: true }
+    CreateDebateRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic: { type: string }
+        context: { type: string, default: '' }
+        selectedPersonas:
+          type: array
+          items: { $ref: '#/components/schemas/SelectedPersona' }
+          default: []
+        settings: { $ref: '#/components/schemas/DebateSettings' }
+        knowledgePackIds:
+          type: array
+          items: { type: string }
+          default: []
+        topicDiscovery:
+          type: object
+          properties:
+            query: { type: string, default: '' }
+            selectedTitle: { type: string, default: '' }
+            selectedSummary: { type: string, default: '' }
+            sources:
+              type: array
+              items: { $ref: '#/components/schemas/TopicSource' }
+    PersonaChatSettings:
+      type: object
+      properties:
+        model: { type: string, default: gpt-4.1-mini }
+        temperature: { type: number, minimum: 0, maximum: 2, default: 0.6 }
+        maxWordsPerTurn: { type: integer, minimum: 40, maximum: 400, default: 140 }
+        engagementMode: { type: string, enum: [chat, panel, debate-work-order], default: chat }
+    CreatePersonaChatRequest:
+      type: object
+      required: [selectedPersonas]
+      properties:
+        title: { type: string, default: Persona Collaboration Chat }
+        context: { type: string, default: '' }
+        selectedPersonas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SelectedPersona' }
+        settings: { $ref: '#/components/schemas/PersonaChatSettings' }
+    SimpleChatSettings:
+      type: object
+      properties:
+        model: { type: string, default: gpt-4.1-mini }
+        temperature: { type: number, minimum: 0, maximum: 2, default: 0.4 }
+        maxResponseWords: { type: integer, minimum: 40, maximum: 800, default: 220 }
+    CreateSimpleChatRequest:
+      type: object
+      properties:
+        title: { type: string, default: Simple Chat }
+        context: { type: string, default: '' }
+        knowledgePackIds:
+          type: array
+          items: { type: string }
+          default: []
+        settings: { $ref: '#/components/schemas/SimpleChatSettings' }
+    KnowledgePack:
+      type: object
+      required: [id, title, content]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+        title: { type: string }
+        description: { type: string, default: '' }
+        tags:
+          type: array
+          items: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ResponsibleAiPolicy:
+      type: object
+      properties:
+        stoplight:
+          type: object
+          properties:
+            redKeywords:
+              type: array
+              items: { type: string }
+            yellowKeywords:
+              type: array
+              items: { type: string }
+        sentiment:
+          type: object
+          properties:
+            positiveKeywords:
+              type: array
+              items: { type: string }
+            negativeKeywords:
+              type: array
+              items: { type: string }
+            threshold:
+              type: integer
+              minimum: 1
+              maximum: 5
+    AgenticTeam:
+      type: object
+      properties:
+        mode: { type: string, enum: [auto, manual], default: auto }
+        personaIds:
+          type: array
+          items: { type: string }
+          default: []
+        tags:
+          type: array
+          items: { type: string }
+          default: []
+        maxAgents: { type: integer, minimum: 1, maximum: 8, default: 3 }
+    AgenticPlanRequest:
+      type: object
+      required: [goal]
+      properties:
+        goal: { type: string }
+        constraints: { type: string, default: '' }
+        maxSteps: { type: integer, minimum: 1, maximum: 12, default: 6 }
+        team: { $ref: '#/components/schemas/AgenticTeam' }
+    AgenticTaskStep:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [tool, llm, job], default: tool }
+        toolId: { type: string, default: '' }
+        prompt: { type: string, default: '' }
+        model: { type: string, default: '' }
+        input: { type: object, additionalProperties: true, default: {} }
+        requiresApproval: { type: boolean, default: false }
+        dependsOn:
+          type: array
+          items: { type: string }
+          default: []
+    CreateAgenticTaskRequest:
+      type: object
+      required: [steps]
+      properties:
+        title: { type: string, default: Agentic Task }
+        objective: { type: string, default: '' }
+        team: { $ref: '#/components/schemas/AgenticTeam' }
+        settings:
+          type: object
+          properties:
+            model: { type: string, default: gpt-4.1-mini }
+            temperature: { type: number, minimum: 0, maximum: 2, default: 0.3 }
+        steps:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/AgenticTaskStep' }
+        runImmediately: { type: boolean, default: false }
+    SupportCitation:
+      type: object
+      required: [file, heading, excerpt]
+      properties:
+        file: { type: string, example: docs/API_GUIDE.md }
+        heading: { type: string, example: Working examples (curl) }
+        excerpt: { type: string }
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

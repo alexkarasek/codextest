@@ -2,6 +2,18 @@
 
 A local-first web application to create/edit personas and run multi-round debate sessions with OpenAI Chat Completions.
 
+## Docs Index
+
+- User Guide: `docs/USER_GUIDE.md`
+- First 10 Minutes: `docs/FIRST_10_MINUTES.md`
+- UI Navigation Map: `docs/UI_NAVIGATION.md`
+- API Guide: `docs/API_GUIDE.md`
+- Troubleshooting: `docs/TROUBLESHOOTING.md`
+- FAQ: `docs/FAQ.md`
+- OpenAPI spec: `docs/openapi.yaml`
+- Browser API docs: `http://localhost:3000/docs/api`
+- Documentation module (rendered guides): `http://localhost:3000/documentation`
+
 ## Features
 
 - Security Baseline (local-first)
@@ -135,6 +147,8 @@ npm start
 Open in browser:
 
 - `http://localhost:3000`
+- `http://localhost:3000/docs/api` (Swagger/OpenAPI docs)
+- `http://localhost:3000/documentation` (rendered user/API/troubleshooting docs)
 
 ## Authentication Quick Start
 
@@ -152,6 +166,15 @@ For API clients (Postman/Copilot), send:
 All authenticated API requests are logged with user attribution in:
 
 - `data/settings/usage.jsonl`
+
+Support Chat API (requires authentication: session or API key):
+
+```bash
+curl -X POST http://localhost:3000/api/support/messages \
+  -H 'Content-Type: application/json' \
+  -H 'x-api-key: <YOUR_KEY>' \
+  -d '{"message":"How do I create a persona chat?"}'
+```
 
 ## Run with Docker
 

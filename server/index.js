@@ -1,6 +1,6 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import personasRouter from "./routes/personas.js";
 import debatesRouter from "./routes/debates.js";
 import adminRouter from "./routes/admin.js";
@@ -12,9 +12,11 @@ import settingsRouter from "./routes/settings.js";
 import authRouter from "./routes/auth.js";
 import agenticRouter from "./routes/agentic.js";
 import imagesRouter from "./routes/images.js";
+import supportRouter from "./routes/support.js";
 import { ensureDataDirs } from "../lib/storage.js";
 import { ensureAuthFiles } from "../lib/auth.js";
 import { sendError } from "./response.js";
+import docsRouter from "../src/docs/docsRouter.js";
 import {
   getLlmProvider,
   getAzureOpenAIDeployment,
@@ -42,9 +44,17 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.static(clientDir));
 app.use(attachAuth);
 app.use(usageAudit());
+app.use("/docs", docsRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, data: { status: "up" } });
+});
+
+app.get("/support", (_req, res) => {
+  res.sendFile(path.join(clientDir, "support.html"));
+});
+app.get("/documentation", (_req, res) => {
+  res.sendFile(path.join(clientDir, "documentation.html"));
 });
 
 app.use("/api/auth", authRouter);
@@ -58,6 +68,7 @@ app.use("/api/simple-chats", requireAuth, simpleChatsRouter);
 app.use("/api/settings", requireAuth, settingsRouter);
 app.use("/api/agentic", requireAuth, requirePermission("viewGovernance"), agenticRouter);
 app.use("/api/images", requireAuth, imagesRouter);
+app.use("/api/support", requireAuth, supportRouter);
 
 app.use((req, res) => {
   sendError(res, 404, "NOT_FOUND", `Route ${req.method} ${req.path} not found.`);
@@ -67,8 +78,9 @@ app.use((error, _req, res, _next) => {
   sendError(res, 500, "SERVER_ERROR", error.message || "Unexpected server error.");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+export function startServer(port = PORT) {
+  return app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
   if (!isLlmConfigured()) {
     if (getLlmProvider() === "azure") {
       console.warn(
@@ -86,4 +98,12 @@ app.listen(PORT, () => {
       `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "per-request model"})`
     );
   }
-});
+  });
+}
+
+export { app };
+
+const isEntrypoint = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (isEntrypoint) {
+  startServer(PORT);
+}

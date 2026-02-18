@@ -21,6 +21,8 @@
               <div id="auth-user-chip" class="muted">Guest</div>
               <button id="auth-open-login" type="button">Login / Switch User</button>
               <button id="auth-quick-logout" type="button">Logout</button>
+              <button id="open-documentation-page" type="button">Documentation</button>
+              <button id="open-support-page" type="button">Support</button>
               <button id="open-help-flyout" type="button">Help & Guides</button>
               <button id="open-security-tab" type="button">Users & Access</button>
             </div>
@@ -490,7 +492,12 @@
               </label>
             </div>
             <h3>Select Personas (One or More)</h3>
-            <div id="persona-chat-persona-list" class="list"></div>
+            <div class="row">
+              <input id="persona-chat-persona-filter" type="text" placeholder="Filter personas by name or id">
+              <button id="persona-chat-select-all" type="button">Select Visible</button>
+              <button id="persona-chat-clear-all" type="button">Clear</button>
+            </div>
+            <div id="persona-chat-persona-list" class="list persona-chat-persona-list"></div>
             <div class="row">
               <button id="persona-chat-create" type="button">New Chat</button>
               <button id="persona-chat-new-draft" type="button">Reset Draft</button>
@@ -628,6 +635,24 @@
       <button id="help-close" type="button">Close</button>
     </div>
     <div id="help-body" class="citations-list"></div>
+  </aside>
+
+  <aside id="support-popout" class="citations-popout support-popout" aria-hidden="true">
+    <div class="citations-header">
+      <h3>Support Concierge</h3>
+      <button id="support-close" type="button">Close</button>
+    </div>
+    <div id="support-status" class="status">Ask a question about UI usage, troubleshooting, or APIs.</div>
+    <div id="support-history" class="chat-history support-history"></div>
+    <div class="row"><button id="support-clear" type="button">Clear</button></div>
+    <div class="row">
+      <input id="support-message" type="text" placeholder="How do I run a formal debate?">
+      <button id="support-send" type="button">Send</button>
+    </div>
+    <div>
+      <strong class="muted">Latest citations</strong>
+      <div id="support-citations" class="citations-list"></div>
+    </div>
   </aside>
 
   <script type="module" src="/app.js"></script>

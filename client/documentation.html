@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Documentation</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: "Work Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }
+    .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+    .sidebar { background: #0f172a; color: #e2e8f0; padding: 16px; display: grid; gap: 10px; align-content: start; }
+    .sidebar h1 { font-size: 18px; margin: 0; color: #f8fafc; }
+    .sidebar .muted { color: #94a3b8; font-size: 12px; }
+    .doc-btn, .link-btn { width: 100%; text-align: left; border: 1px solid #1e293b; background: #111827; color: #e5e7eb; border-radius: 10px; padding: 10px; cursor: pointer; }
+    .doc-btn.active { background: #1d4ed8; border-color: #1d4ed8; }
+    .link-btn { background: #0b1220; }
+    .content { padding: 18px; display: grid; gap: 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .toolbar a { text-decoration: none; color: #0f766e; font-weight: 600; }
+    .card { background: #fff; border: 1px solid #dbe3ec; border-radius: 14px; padding: 16px; }
+    .markdown-body { line-height: 1.6; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 { line-height: 1.25; margin-top: 1.2em; }
+    .markdown-body pre { background: #0b1220; color: #e2e8f0; padding: 10px; border-radius: 10px; overflow: auto; }
+    .markdown-body code { background: #edf2f7; padding: 2px 5px; border-radius: 6px; }
+    .markdown-body pre code { background: transparent; padding: 0; }
+    .status { color: #64748b; font-size: 12px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .sidebar { position: sticky; top: 0; z-index: 10; } }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Documentation</h1>
+      <div class="muted">Read guides in a rendered, easy-to-scan format.</div>
+      <button class="doc-btn active" data-doc="FIRST_10_MINUTES.md">First 10 Minutes</button>
+      <button class="doc-btn" data-doc="USER_GUIDE.md">User Guide</button>
+      <button class="doc-btn" data-doc="UI_NAVIGATION.md">UI Navigation Map</button>
+      <button class="doc-btn" data-doc="API_GUIDE.md">API Guide</button>
+      <button class="doc-btn" data-doc="TROUBLESHOOTING.md">Troubleshooting</button>
+      <button class="doc-btn" data-doc="FAQ.md">FAQ</button>
+      <button class="doc-btn" data-doc="../README.md">README</button>
+      <hr style="border-color:#1e293b; width:100%" />
+      <a class="link-btn" href="/docs/api" target="_blank" rel="noopener">Open Swagger API Docs</a>
+      <a class="link-btn" href="/docs/openapi.yaml" target="_blank" rel="noopener">Open OpenAPI YAML</a>
+      <a class="link-btn" href="/support" target="_blank" rel="noopener">Open Support Concierge</a>
+    </aside>
+
+    <main class="content">
+      <div class="toolbar card">
+        <a id="open-raw" href="/docs/FIRST_10_MINUTES.md" target="_blank" rel="noopener">Open Raw Markdown</a>
+        <span id="doc-status" class="status">Loaded: FIRST_10_MINUTES.md</span>
+      </div>
+      <article class="card markdown-body" id="doc-render">Loading documentation...</article>
+    </main>
+  </div>
+
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const docButtons = Array.from(document.querySelectorAll('.doc-btn'));
+
+    function safeHtml(text) {
+      return String(text || '').replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, '');
+    }
+
+    async function loadDoc(docPath) {
+      const url = docPath === '../README.md' ? '/docs/README.md' : `/docs/${docPath}`;
+      byId('doc-status').textContent = `Loading: ${docPath}`;
+      byId('open-raw').href = url;
+      try {
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const markdown = await res.text();
+        const html = marked.parse(markdown || '');
+        byId('doc-render').innerHTML = safeHtml(html);
+        byId('doc-status').textContent = `Loaded: ${docPath}`;
+      } catch (error) {
+        byId('doc-render').innerHTML = `<p>Failed to load documentation: ${String(error.message || error)}</p>`;
+        byId('doc-status').textContent = `Failed: ${docPath}`;
+      }
+    }
+
+    docButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        docButtons.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadDoc(btn.dataset.doc || 'FIRST_10_MINUTES.md');
+      });
+    });
+
+    loadDoc('FIRST_10_MINUTES.md');
+  </script>
+</body>
+</html>

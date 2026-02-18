@@ -57,6 +57,10 @@ const state = {
     historyByChat: {},
     sidebarCollapsed: false
   },
+  supportConcierge: {
+    history: [],
+    citations: []
+  },
   agentic: {
     tools: [],
     tasks: [],
@@ -667,6 +671,7 @@ function currentHelpGuide() {
 
 function openHelpPopout() {
   closeSystemMenu();
+  closeSupportPopout();
   const popout = byId("help-popout");
   const title = byId("help-title");
   const body = byId("help-body");
@@ -683,6 +688,102 @@ function closeHelpPopout() {
   const popout = byId("help-popout");
   popout.classList.remove("open");
   popout.setAttribute("aria-hidden", "true");
+}
+
+function renderSupportPopout() {
+  const historyEl = byId("support-history");
+  const citationsEl = byId("support-citations");
+  if (!historyEl || !citationsEl) return;
+
+  historyEl.innerHTML = "";
+  const rows = state.supportConcierge.history || [];
+  if (!rows.length) {
+    historyEl.textContent = "No support messages yet.";
+  } else {
+    rows.forEach((row) => {
+      renderExchangeMessage(historyEl, {
+        roleClass: row.role === "user" ? "user" : "assistant",
+        title: row.role === "user" ? "You" : "Support Concierge",
+        content: row.content || ""
+      });
+    });
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  citationsEl.innerHTML = "";
+  const citations = state.supportConcierge.citations || [];
+  if (!citations.length) {
+    citationsEl.textContent = "No citations yet.";
+    return;
+  }
+  citations.forEach((citation) => {
+    const card = document.createElement("div");
+    card.className = "citation-card";
+    card.textContent = `${citation.file || "doc"} -> ${citation.heading || "section"}\n\n${citation.excerpt || ""}`;
+    citationsEl.appendChild(card);
+  });
+}
+
+function openSupportPopout() {
+  closeSystemMenu();
+  closeHelpPopout();
+  const popout = byId("support-popout");
+  popout.classList.add("open");
+  popout.setAttribute("aria-hidden", "false");
+  renderSupportPopout();
+}
+
+function closeSupportPopout() {
+  const popout = byId("support-popout");
+  popout.classList.remove("open");
+  popout.setAttribute("aria-hidden", "true");
+}
+
+async function sendSupportPopoutMessage() {
+  const input = byId("support-message");
+  const status = byId("support-status");
+  const message = String(input.value || "").trim();
+  if (!message) return;
+
+  state.supportConcierge.history.push({ role: "user", content: message });
+  input.value = "";
+  status.textContent = "Support Concierge is thinking...";
+  renderSupportPopout();
+
+  try {
+    const res = await fetch("/api/support/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.ok) {
+      if (res.status === 401) handleUnauthorized(payload);
+      throw new Error(apiErrorMessage(payload, "Support request failed"));
+    }
+    const data = payload.data || {};
+    state.supportConcierge.history.push({
+      role: "assistant",
+      content: String(data.reply || "(No reply returned)")
+    });
+    state.supportConcierge.citations = Array.isArray(data.citations) ? data.citations : [];
+    status.textContent = "Support reply ready.";
+    renderSupportPopout();
+  } catch (error) {
+    state.supportConcierge.history.push({
+      role: "assistant",
+      content: `I hit an issue while processing that request: ${error.message}`
+    });
+    status.textContent = `Failed: ${error.message}`;
+    renderSupportPopout();
+  }
+}
+
+function clearSupportPopoutHistory() {
+  state.supportConcierge.history = [];
+  state.supportConcierge.citations = [];
+  byId("support-status").textContent = "Support conversation cleared.";
+  renderSupportPopout();
 }
 
 function renderChatHistory() {
@@ -779,13 +880,29 @@ function renderPersonaChatPersonaList() {
   const container = byId("persona-chat-persona-list");
   if (!container) return;
   container.innerHTML = "";
+  const filter = String(byId("persona-chat-persona-filter")?.value || "")
+    .trim()
+    .toLowerCase();
 
   if (!state.personas.length) {
     container.textContent = "No personas available. Create personas first.";
     return;
   }
 
-  state.personas.forEach((persona) => {
+  const visible = state.personas.filter((persona) => {
+    if (!filter) return true;
+    return (
+      String(persona.displayName || "").toLowerCase().includes(filter) ||
+      String(persona.id || "").toLowerCase().includes(filter)
+    );
+  });
+
+  if (!visible.length) {
+    container.textContent = "No personas match the current filter.";
+    return;
+  }
+
+  visible.forEach((persona) => {
     const row = document.createElement("label");
     row.className = "inline";
     const checked = state.personaChat.selectedPersonaIds.includes(persona.id);
@@ -814,6 +931,38 @@ function renderPersonaChatPersonaList() {
       }
     });
   });
+}
+
+function applyPersonaChatSelectionBulk(mode = "select") {
+  const filter = String(byId("persona-chat-persona-filter")?.value || "")
+    .trim()
+    .toLowerCase();
+  const visibleIds = state.personas
+    .filter((persona) => {
+      if (!filter) return true;
+      return (
+        String(persona.displayName || "").toLowerCase().includes(filter) ||
+        String(persona.id || "").toLowerCase().includes(filter)
+      );
+    })
+    .map((persona) => persona.id);
+
+  if (mode === "clear") {
+    state.personaChat.selectedPersonaIds = state.personaChat.selectedPersonaIds.filter(
+      (id) => !visibleIds.includes(id)
+    );
+  } else {
+    const next = new Set(state.personaChat.selectedPersonaIds);
+    visibleIds.forEach((id) => next.add(id));
+    state.personaChat.selectedPersonaIds = [...next];
+  }
+
+  if (state.personaChat.activeChatId) {
+    state.personaChat.dirtyConfig = true;
+    byId("persona-chat-status").textContent =
+      "Persona selection changed. Click Create Chat Session to start a fresh conversation.";
+  }
+  renderPersonaChatPersonaList();
 }
 
 function renderPersonaChatSessionList() {
@@ -970,9 +1119,11 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-temperature").value = "0.6";
   byId("persona-chat-max-words").value = "140";
   byId("persona-chat-mode").value = "chat";
+  byId("persona-chat-persona-filter").value = "";
   byId("persona-chat-status").textContent = "Draft reset. Select personas/settings and click Create Chat Session.";
   const configDetails = byId("persona-chat-config-details");
   if (configDetails) configDetails.open = true;
+  renderPersonaChatPersonaList();
   renderPersonaChatHistory();
 }
 
@@ -2188,8 +2339,8 @@ function buildAdminMatrixRows() {
 
   chats.forEach((chat) => {
     const model = chat.model || "unknown";
-    const kind = chat.kind === "simple" ? "simple" : "group";
-    const label = kind === "simple" ? "Simple Chat" : "Group Chat";
+    const kind = chat.kind === "simple" ? "simple" : chat.kind === "support" ? "support" : "group";
+    const label = kind === "simple" ? "Simple Chat" : kind === "support" ? "Support Chat" : "Group Chat";
     const tokens = Number(chat.tokenUsage?.totalTokens || 0);
     const cost = typeof chat.estimatedCostUsd === "number" ? chat.estimatedCostUsd : 0;
     const messages = Number(chat.messageCount || 0);
@@ -2696,6 +2847,10 @@ async function openChatInHistory(chatId, kind = "group") {
       await loadSimpleChatSession(chatId);
       return;
     }
+    if (kind === "support") {
+      window.open("/support", "_blank", "noopener");
+      return;
+    }
     setChatsView("group");
     setGroupWorkspace("live");
     await loadPersonaChatSession(chatId);
@@ -2734,6 +2889,7 @@ function applyChatFilter(chats) {
   if (filter.dimension === "channel") {
     if (filter.key === "group") return chats.filter((c) => c.kind === "group");
     if (filter.key === "simple") return chats.filter((c) => c.kind === "simple");
+    if (filter.key === "support") return chats.filter((c) => c.kind === "support");
     return [];
   }
   if (filter.dimension === "user") {
@@ -2878,7 +3034,7 @@ function renderAdminChatsList() {
         <strong>${chat.title || chat.chatId}</strong>
         <span class="admin-item-sub">${chat.kind || "chat"} | ${chat.chatId}</span>
       </div>
-      <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : "chat")}</div>
+      <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : chat.kind === "support" ? "support-chat" : "chat")}</div>
       <div class="admin-item-sub">Participants: ${(chat.participants || []).join(", ") || "n/a"}</div>
       <div class="admin-item-sub">Created by: ${chat.createdByUsername || "unknown"}</div>
       <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}</div>
@@ -2894,7 +3050,12 @@ function renderAdminChatsList() {
     actions.className = "row";
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = chat.kind === "simple" ? "Open in Simple Chat" : "Open in Group Chat";
+    open.textContent =
+      chat.kind === "simple"
+        ? "Open in Simple Chat"
+        : chat.kind === "support"
+          ? "Open in Support"
+          : "Open in Group Chat";
     open.addEventListener("click", () => openChatInHistory(chat.chatId, chat.kind));
     actions.appendChild(open);
     item.appendChild(actions);
@@ -4373,6 +4534,13 @@ function wireEvents() {
     closeSystemMenu();
   });
   byId("auth-quick-logout").addEventListener("click", logout);
+  byId("open-documentation-page").addEventListener("click", () => {
+    window.open("/documentation", "_blank", "noopener");
+    closeSystemMenu();
+  });
+  byId("open-support-page").addEventListener("click", () => {
+    openSupportPopout();
+  });
   byId("open-help-flyout").addEventListener("click", openHelpPopout);
   byId("open-security-tab").addEventListener("click", () => {
     switchTab("config");
@@ -4380,6 +4548,15 @@ function wireEvents() {
     closeSystemMenu();
   });
   byId("help-close").addEventListener("click", closeHelpPopout);
+  byId("support-close").addEventListener("click", closeSupportPopout);
+  byId("support-send").addEventListener("click", sendSupportPopoutMessage);
+  byId("support-clear").addEventListener("click", clearSupportPopoutHistory);
+  byId("support-message").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendSupportPopoutMessage();
+    }
+  });
   document.addEventListener("click", (event) => {
     const shell = byId("system-menu-popout");
     const toggle = byId("system-menu-toggle");
@@ -4635,6 +4812,9 @@ function wireEvents() {
   byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-new-draft-main").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-refresh-list").addEventListener("click", loadPersonaChatSessions);
+  byId("persona-chat-persona-filter").addEventListener("input", renderPersonaChatPersonaList);
+  byId("persona-chat-select-all").addEventListener("click", () => applyPersonaChatSelectionBulk("select"));
+  byId("persona-chat-clear-all").addEventListener("click", () => applyPersonaChatSelectionBulk("clear"));
   byId("persona-chat-toggle-sidebar").addEventListener("click", () => setPersonaSidebarCollapsed(true));
   byId("persona-chat-show-sidebar").addEventListener("click", () => setPersonaSidebarCollapsed(false));
   byId("persona-chat-load").addEventListener("click", () => {
