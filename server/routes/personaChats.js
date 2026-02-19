@@ -24,6 +24,7 @@ import { chatCompletion } from "../../lib/llm.js";
 import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 import { listTools, runTool } from "../../lib/agenticTools.js";
+import { appendToolUsage } from "../../lib/agenticStorage.js";
 
 const router = express.Router();
 const STOPWORDS = new Set([
@@ -458,6 +459,40 @@ function stripToolCallMarkup(text) {
   return String(text || "").replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "").trim();
 }
 
+function withTimeout(promise, ms, label) {
+  let timer = null;
+  return new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`${label} timed out after ${ms}ms`);
+      err.code = "TIMEOUT";
+      reject(err);
+    }, ms);
+    Promise.resolve(promise)
+      .then((value) => resolve(value))
+      .catch((error) => reject(error))
+      .finally(() => {
+        clearTimeout(timer);
+      });
+  });
+}
+
+function requestsLiveData(text) {
+  const low = String(text || "").toLowerCase();
+  return /\b(latest|current|today|now|recent|update|news|live)\b/.test(low);
+}
+
+function promisesFutureFetch(text) {
+  const low = String(text || "").toLowerCase();
+  return /\b(fetching|checking|looking up|stand by|just a sec|just a moment|one moment|one moment please|asap|get back|i'll get|i will get|let me pull|let me fetch|give me a moment|in a flash|hold tight)\b/.test(
+    low
+  );
+}
+
+function sanitizeNoToolPromise(content) {
+  if (!promisesFutureFetch(content)) return content;
+  return "I haven’t executed a fetch yet. Ask me to fetch a specific URL/source and I will run it now.";
+}
+
 function personaUserPrompt({
   session,
   persona,
@@ -641,6 +676,7 @@ router.post("/:chatId/messages", async (req, res) => {
     turnId: Number(session.turnIndex || 0) + 1
   };
   await appendPersonaChatMessage(req.params.chatId, userEntry);
+  const shouldEmitOrchestration = Array.isArray(session.personas) && session.personas.length > 1;
 
   const imageIntent = detectImageIntent(userEntry.content, {
     force: Boolean(req.body?.forceImage)
@@ -684,25 +720,30 @@ router.post("/:chatId/messages", async (req, res) => {
         "I can generate that visual. Please clarify what should be shown, desired style, and optional size (for example: 'diagram of microservice architecture, clean blueprint style, 1024x1024').",
       turnId: userEntry.turnId
     };
-    await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    if (shouldEmitOrchestration) {
+      await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    }
     await appendPersonaChatMessage(req.params.chatId, personaEntry);
     await updatePersonaChatSession(req.params.chatId, (current) => ({
       ...current,
       updatedAt: new Date().toISOString(),
-      messageCount: Number(current.messageCount || 0) + 3,
+      messageCount: Number(current.messageCount || 0) + (shouldEmitOrchestration ? 3 : 2),
       turnIndex: Number(current.turnIndex || 0) + 1,
       lastSpeakerIds: [leadPersona.id]
     }));
-    sendOk(res, {
+    const payload = {
       user: userEntry,
-      orchestration: {
+      responses: [personaEntry]
+    };
+    if (shouldEmitOrchestration) {
+      payload.orchestration = {
         selectedSpeakerIds: [leadPersona.id],
         omittedCount: orchestrationEntry.omittedCount,
         rationale: orchestrationEntry.rationale,
         content: orchestrationEntry.content
-      },
-      responses: [personaEntry]
-    });
+      };
+    }
+    sendOk(res, payload);
     return;
   }
 
@@ -736,7 +777,9 @@ router.post("/:chatId/messages", async (req, res) => {
       ],
       content: `Orchestrator selected ${leadPersona.displayName} for image generation.`
     };
-    await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    if (shouldEmitOrchestration) {
+      await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+    }
     try {
       const styledPrompt = [
         `Visual style from persona ${leadPersona.displayName}${leadPersona.role ? ` (${leadPersona.role})` : ""}.`,
@@ -762,20 +805,23 @@ router.post("/:chatId/messages", async (req, res) => {
       await updatePersonaChatSession(req.params.chatId, (current) => ({
         ...current,
         updatedAt: new Date().toISOString(),
-        messageCount: Number(current.messageCount || 0) + 3,
+        messageCount: Number(current.messageCount || 0) + (shouldEmitOrchestration ? 3 : 2),
         turnIndex: Number(current.turnIndex || 0) + 1,
         lastSpeakerIds: [leadPersona.id]
       }));
-      sendOk(res, {
+      const payload = {
         user: userEntry,
-        orchestration: {
+        responses: [personaEntry]
+      };
+      if (shouldEmitOrchestration) {
+        payload.orchestration = {
           selectedSpeakerIds: [leadPersona.id],
           omittedCount: orchestrationEntry.omittedCount,
           rationale: orchestrationEntry.rationale,
           content: orchestrationEntry.content
-        },
-        responses: [personaEntry]
-      });
+        };
+      }
+      sendOk(res, payload);
       return;
     } catch (error) {
       if (error.code === "MISSING_API_KEY") {
@@ -811,7 +857,9 @@ router.post("/:chatId/messages", async (req, res) => {
       session.settings?.engagementMode || "chat"
     }.`
   };
-  await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+  if (shouldEmitOrchestration) {
+    await appendPersonaChatMessage(req.params.chatId, orchestrationEntry);
+  }
 
   const newPersonaMessages = [];
   try {
@@ -851,78 +899,270 @@ router.post("/:chatId/messages", async (req, res) => {
         }
       ];
 
-      const completion = await chatCompletion({
-        model: session.settings?.model || "gpt-4.1-mini",
-        temperature: Number(session.settings?.temperature ?? 0.6),
-        messages
-      });
+      const firstCompletion = await withTimeout(
+        chatCompletion({
+          model: session.settings?.model || "gpt-4.1-mini",
+          temperature: Number(session.settings?.temperature ?? 0.6),
+          messages
+        }),
+        45000,
+        "Persona response generation"
+      );
 
       const allowedToolIds = Array.isArray(persona.toolIds)
         ? [...new Set(persona.toolIds.map((id) => String(id).trim()).filter(Boolean))]
         : [];
-      const toolCall = extractToolCall(completion.text);
-      let content = stripToolCallMarkup(completion.text);
+      let toolCall = extractToolCall(firstCompletion.text);
+      let content = stripToolCallMarkup(firstCompletion.text);
       let toolExecution = null;
 
+      const canFetchLive = allowedToolIds.some((id) => id === "web.fetch" || id === "http.request");
+      if (!toolCall && promisesFutureFetch(content)) {
+        if (!canFetchLive) {
+          content =
+            "I can't fetch live updates in this chat because my persona has no fetch-capable tool enabled. Please enable web.fetch or http.request for this persona.";
+          toolExecution = {
+            status: "error",
+            error: "NO_ALLOWED_FETCH_TOOL"
+          };
+          await appendToolUsage({
+            ts: new Date().toISOString(),
+            contextType: "persona-chat",
+            contextId: req.params.chatId,
+            turnId: userEntry.turnId,
+            personaId: persona.id,
+            toolId: "web.fetch",
+            ok: false,
+            error: "NO_ALLOWED_FETCH_TOOL",
+            durationMs: 0,
+            createdBy: req.auth?.user?.id || null,
+            createdByUsername: req.auth?.user?.username || null
+          });
+        } else {
+        const repair = await withTimeout(
+          chatCompletion({
+            model: session.settings?.model || "gpt-4.1-mini",
+            temperature: Number(session.settings?.temperature ?? 0.2),
+            messages: [
+              {
+                role: "system",
+                content: [
+                  "You must choose exactly one behavior:",
+                  "1) Emit ONLY <tool_call>{\"toolId\":\"...\",\"input\":{}}</tool_call> using an allowed tool to fetch live data now.",
+                  "2) Provide a final answer now with no promise of future fetching.",
+                  "Do not say you are 'checking' or 'fetching' unless you emit a tool_call.",
+                  "Any phrase like 'give me a moment', 'stand by', 'let me pull', or 'in a flash' counts as a promise and is disallowed without tool_call.",
+                  `Allowed tool ids: ${allowedToolIds.join(", ") || "(none)"}`
+                ].join("\n")
+              },
+              {
+                role: "user",
+                content: [
+                  `User message: ${userEntry.content}`,
+                  `Your draft response: ${content}`
+                ].join("\n\n")
+              }
+            ]
+          }),
+          20000,
+          "Persona tool decision repair"
+        );
+        toolCall = extractToolCall(repair.text);
+        content = stripToolCallMarkup(repair.text);
+        if (!toolCall && (promisesFutureFetch(content) || requestsLiveData(userEntry.content))) {
+          content =
+            "I can fetch live updates, but I did not execute a fetch on this turn. Please ask again with a specific source URL and I will run it immediately.";
+          toolExecution = {
+            status: "error",
+            error: "MODEL_NO_TOOL_CALL"
+          };
+          await appendToolUsage({
+            ts: new Date().toISOString(),
+            contextType: "persona-chat",
+            contextId: req.params.chatId,
+            turnId: userEntry.turnId,
+            personaId: persona.id,
+            toolId: "web.fetch",
+            ok: false,
+            error: "MODEL_NO_TOOL_CALL",
+            durationMs: 0,
+            createdBy: req.auth?.user?.id || null,
+            createdByUsername: req.auth?.user?.username || null
+          });
+        }
+        }
+      }
+
+      if (!toolCall) {
+        if (promisesFutureFetch(content) && !toolExecution) {
+          const assumedToolId = allowedToolIds.includes("web.fetch")
+            ? "web.fetch"
+            : allowedToolIds.includes("http.request")
+              ? "http.request"
+              : "web.fetch";
+          toolExecution = {
+            status: "error",
+            error: "MODEL_PROMISED_WITHOUT_TOOL",
+            source: {}
+          };
+          await appendToolUsage({
+            ts: new Date().toISOString(),
+            contextType: "persona-chat",
+            contextId: req.params.chatId,
+            turnId: userEntry.turnId,
+            personaId: persona.id,
+            toolId: assumedToolId,
+            ok: false,
+            error: "MODEL_PROMISED_WITHOUT_TOOL",
+            durationMs: 0,
+            createdBy: req.auth?.user?.id || null,
+            createdByUsername: req.auth?.user?.username || null
+          });
+        }
+        content = sanitizeNoToolPromise(content);
+      }
+
       if (toolCall) {
+        const requestedUrl = toolCall?.input?.url ? String(toolCall.input.url) : "";
         if (!allowedToolIds.includes(toolCall.toolId)) {
           content = `I cannot use tool '${toolCall.toolId}' because it is not enabled for my persona.`;
           toolExecution = {
             requested: toolCall,
-            status: "forbidden"
+            status: "forbidden",
+            source: {
+              requestedUrl
+            }
           };
+          await appendToolUsage({
+            ts: new Date().toISOString(),
+            contextType: "persona-chat",
+            contextId: req.params.chatId,
+            turnId: userEntry.turnId,
+            personaId: persona.id,
+            toolId: toolCall.toolId,
+            requestedUrl,
+            ok: false,
+            error: "TOOL_NOT_ALLOWED",
+            durationMs: 0,
+            createdBy: req.auth?.user?.id || null,
+            createdByUsername: req.auth?.user?.username || null
+          });
         } else {
+          const started = Date.now();
           try {
-            const result = await runTool(toolCall.toolId, toolCall.input || {}, {
-              user: req.auth?.user || null,
-              chatId: req.params.chatId,
-              personaId: persona.id
+            await appendToolUsage({
+              ts: new Date().toISOString(),
+              contextType: "persona-chat",
+              contextId: req.params.chatId,
+              turnId: userEntry.turnId,
+              personaId: persona.id,
+              toolId: toolCall.toolId,
+              requestedUrl,
+              phase: "start",
+              ok: null,
+              durationMs: 0,
+              createdBy: req.auth?.user?.id || null,
+              createdByUsername: req.auth?.user?.username || null
+            });
+            const result = await withTimeout(
+              runTool(toolCall.toolId, toolCall.input || {}, {
+                user: req.auth?.user || null,
+                chatId: req.params.chatId,
+                personaId: persona.id
+              }),
+              20000,
+              `Tool ${toolCall.toolId}`
+            );
+            await appendToolUsage({
+              ts: new Date().toISOString(),
+              contextType: "persona-chat",
+              contextId: req.params.chatId,
+              turnId: userEntry.turnId,
+              personaId: persona.id,
+              toolId: toolCall.toolId,
+              requestedUrl,
+              ok: true,
+              durationMs: Date.now() - started,
+              createdBy: req.auth?.user?.id || null,
+              createdByUsername: req.auth?.user?.username || null
             });
             toolExecution = {
               requested: toolCall,
               status: "ok",
-              resultPreview: truncateText(JSON.stringify(result), 1200)
+              resultPreview: truncateText(JSON.stringify(result), 1200),
+              source:
+                toolCall.toolId === "web.fetch"
+                  ? {
+                      requestedUrl: String(result?.requestedUrl || requestedUrl || ""),
+                      resolvedUrl: String(result?.url || ""),
+                      discoveredFrom: String(result?.discoveredFrom || ""),
+                      title: String(result?.title || "")
+                    }
+                  : {
+                      requestedUrl
+                    }
             };
-            const followUp = await chatCompletion({
-              model: session.settings?.model || "gpt-4.1-mini",
-              temperature: Number(session.settings?.temperature ?? 0.6),
-              messages: [
-                {
-                  role: "system",
-                  content: personaSystemPrompt(persona, session.settings || {}, personaPacks, session)
-                },
-                {
-                  role: "user",
-                  content: personaUserPrompt({
-                    session,
-                    persona,
-                    messages: [...history, userEntry, ...newPersonaMessages],
-                    userMessage: userEntry.content,
-                    alreadyThisTurn: newPersonaMessages,
-                    historyLimit: parsed.data.historyLimit,
-                    selectedPersonasThisTurn: orchestration.selectedPersonas
-                  })
-                },
-                {
-                  role: "assistant",
-                  content: String(completion.text || "")
-                },
-                {
-                  role: "user",
-                  content: [
-                    `Tool '${toolCall.toolId}' executed successfully.`,
-                    `Tool result JSON:\n${JSON.stringify(result, null, 2)}`,
-                    "Now provide your final user-facing response. Do not output <tool_call>."
-                  ].join("\n\n")
-                }
-              ]
-            });
-            content = stripToolCallMarkup(followUp.text);
+            const followUpFinal = await withTimeout(
+              chatCompletion({
+                model: session.settings?.model || "gpt-4.1-mini",
+                temperature: Number(session.settings?.temperature ?? 0.6),
+                messages: [
+                  {
+                    role: "system",
+                    content: personaSystemPrompt(persona, session.settings || {}, personaPacks, session)
+                  },
+                  {
+                    role: "user",
+                    content: personaUserPrompt({
+                      session,
+                      persona,
+                      messages: [...history, userEntry, ...newPersonaMessages],
+                      userMessage: userEntry.content,
+                      alreadyThisTurn: newPersonaMessages,
+                      historyLimit: parsed.data.historyLimit,
+                      selectedPersonasThisTurn: orchestration.selectedPersonas
+                    })
+                  },
+                  {
+                    role: "assistant",
+                    content: String(firstCompletion.text || "")
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      `Tool '${toolCall.toolId}' executed successfully.`,
+                      `Tool result JSON:\n${JSON.stringify(result, null, 2)}`,
+                      "Now provide your final user-facing response. Do not output <tool_call>."
+                    ].join("\n\n")
+                  }
+                ]
+              }),
+              45000,
+              "Persona post-tool response generation"
+            );
+            content = stripToolCallMarkup(followUpFinal.text);
           } catch (error) {
+            await appendToolUsage({
+              ts: new Date().toISOString(),
+              contextType: "persona-chat",
+              contextId: req.params.chatId,
+              turnId: userEntry.turnId,
+              personaId: persona.id,
+              toolId: toolCall.toolId,
+              requestedUrl,
+              ok: false,
+              error: String(error?.message || "TOOL_EXECUTION_FAILED"),
+              durationMs: Date.now() - started,
+              createdBy: req.auth?.user?.id || null,
+              createdByUsername: req.auth?.user?.username || null
+            });
             toolExecution = {
               requested: toolCall,
               status: "error",
-              error: error.message
+              error: error.message,
+              source: {
+                requestedUrl
+              }
             };
             content = `I attempted to use tool '${toolCall.toolId}', but it failed: ${error.message}`;
           }
@@ -930,7 +1170,8 @@ router.post("/:chatId/messages", async (req, res) => {
       }
 
       if (!content) {
-        content = "I don't have a useful response for that yet. Please clarify your request.";
+        const fallbackText = stripToolCallMarkup(firstCompletion.text);
+        content = fallbackText || "I don't have enough grounded info yet. Please provide a specific source URL.";
       }
       const personaEntry = {
         ts: new Date().toISOString(),
@@ -948,7 +1189,8 @@ router.post("/:chatId/messages", async (req, res) => {
     await updatePersonaChatSession(req.params.chatId, (current) => ({
       ...current,
       updatedAt: new Date().toISOString(),
-      messageCount: Number(current.messageCount || 0) + 2 + newPersonaMessages.length,
+      messageCount:
+        Number(current.messageCount || 0) + 1 + newPersonaMessages.length + (shouldEmitOrchestration ? 1 : 0),
       turnIndex: Number(current.turnIndex || 0) + 1,
       lastSpeakerIds: newPersonaMessages.map((m) => m.speakerId)
     }));
@@ -961,16 +1203,19 @@ router.post("/:chatId/messages", async (req, res) => {
     return;
   }
 
-  sendOk(res, {
+  const responsePayload = {
     user: userEntry,
-    orchestration: {
+    responses: newPersonaMessages
+  };
+  if (shouldEmitOrchestration) {
+    responsePayload.orchestration = {
       selectedSpeakerIds: orchestration.rationale.map((r) => r.speakerId),
       omittedCount: orchestration.omittedCount,
       rationale: orchestration.rationale,
       content: orchestrationEntry.content
-    },
-    responses: newPersonaMessages
-  });
+    };
+  }
+  sendOk(res, responsePayload);
 });
 
 export default router;

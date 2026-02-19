@@ -76,10 +76,10 @@
   <nav id="subnav-chats" class="subtabs">
     <span class="subtabs-hint">Choose chat mode:</span>
     <button id="chats-view-simple" class="subtab-btn active" type="button">Simple Chat</button>
-    <button id="chats-view-group" class="subtab-btn" type="button">Group Chat</button>
+    <button id="chats-view-group" class="subtab-btn" type="button">Persona Chat</button>
   </nav>
   <nav id="subnav-group-work" class="subtabs hidden">
-    <button id="group-nav-live" class="subtab-btn" type="button">Live Group Chat</button>
+    <button id="group-nav-live" class="subtab-btn" type="button">Live Persona Chat</button>
     <button id="group-nav-debate-setup" class="subtab-btn" type="button">Formal Debate Setup</button>
     <button id="group-nav-debate-viewer" class="subtab-btn" type="button">History Explorer</button>
   </nav>
@@ -703,6 +703,7 @@
             <button id="admin-view-debates" type="button">Debate View</button>
             <button id="admin-view-chats" type="button">Chat View</button>
             <button id="admin-view-personas" type="button">Persona View</button>
+            <button id="admin-view-tools" type="button">Tool Usage</button>
             <button id="admin-refresh" type="button">Refresh</button>
           </div>
           <div id="admin-pricing-note" class="hint"></div>
@@ -713,6 +714,29 @@
           <h2>Visual Analytics</h2>
           <div id="admin-chart-status" class="status">Charts update from current matrix filters.</div>
           <div id="admin-charts" class="stack"></div>
+          <h3>Tool Usage Monitor</h3>
+          <div class="row">
+            <label>Tool
+              <input id="admin-tool-filter-tool" type="text" placeholder="web.fetch">
+            </label>
+            <label>Context
+              <select id="admin-tool-filter-context">
+                <option value="">All</option>
+                <option value="persona-chat">Persona Chat</option>
+                <option value="task">Task Runner</option>
+              </select>
+            </label>
+            <label>Status
+              <select id="admin-tool-filter-status">
+                <option value="">All</option>
+                <option value="ok">Success</option>
+                <option value="error">Failed</option>
+              </select>
+            </label>
+            <button id="admin-tool-refresh" type="button">Refresh Tool Runs</button>
+          </div>
+          <div id="admin-tool-status" class="status">Loading tool usage...</div>
+          <div id="admin-tool-usage-list" class="list"></div>
           <div class="row">
             <button id="admin-nav-group-history" type="button">Open Group Chat History</button>
             <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>

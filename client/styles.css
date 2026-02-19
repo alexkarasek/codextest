@@ -788,6 +788,25 @@ button[type="submit"]:hover {
   display: block;
 }
 
+.chat-citation {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  padding: 6px 8px;
+}
+
+.chat-citation summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-citation a {
+  display: inline-block;
+  margin-top: 6px;
+  word-break: break-all;
+}
+
 .chat-msg-head {
   display: flex;
   justify-content: space-between;

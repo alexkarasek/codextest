@@ -22,6 +22,10 @@ const state = {
   adminPersonas: null,
   adminChats: null,
   adminUsage: null,
+  adminToolUsage: {
+    events: [],
+    loading: false
+  },
   adminMatrixDimension: "channel",
   adminFilter: null,
   adminMetricFocus: null,
@@ -286,7 +290,7 @@ function assessExchange(content) {
   return { stoplight, sentiment };
 }
 
-function renderExchangeMessage(container, { roleClass, title, content, image = null }) {
+function renderExchangeMessage(container, { roleClass, title, content, image = null, citation = null }) {
   const signal = assessExchange(content);
   const el = document.createElement("div");
   el.className = `chat-msg ${roleClass}`;
@@ -314,6 +318,35 @@ function renderExchangeMessage(container, { roleClass, title, content, image = n
     media.loading = "lazy";
     body.appendChild(document.createElement("br"));
     body.appendChild(media);
+  }
+  if (citation && citation.url) {
+    const details = document.createElement("details");
+    details.className = "chat-citation";
+    const summary = document.createElement("summary");
+    summary.textContent = citation.label || "Source";
+    details.appendChild(summary);
+
+    const link = document.createElement("a");
+    link.href = String(citation.url);
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = String(citation.url);
+    details.appendChild(link);
+
+    if (citation.requestedUrl && citation.requestedUrl !== citation.url) {
+      const requested = document.createElement("div");
+      requested.className = "muted";
+      requested.textContent = `Requested: ${citation.requestedUrl}`;
+      details.appendChild(requested);
+    }
+    if (citation.discoveredFrom) {
+      const discovered = document.createElement("div");
+      discovered.className = "muted";
+      discovered.textContent = `Discovered via: ${citation.discoveredFrom}`;
+      details.appendChild(discovered);
+    }
+    body.appendChild(document.createElement("br"));
+    body.appendChild(details);
   }
   el.append(head, body);
   container.appendChild(el);
@@ -1097,11 +1130,37 @@ function renderPersonaChatHistory() {
   history.forEach((msg) => {
     const role = msg.role === "user" ? "user" : (msg.role === "orchestrator" ? "system" : "assistant");
     const title = msg.role === "user" ? "You" : (msg.role === "orchestrator" ? "Orchestrator" : (msg.displayName || "Persona"));
+    let content = msg.content;
+    let citation = null;
+    if (msg.role === "persona" && msg.toolExecution) {
+      const requestedToolId = msg.toolExecution?.requested?.toolId || "unknown";
+      const status = String(msg.toolExecution?.status || "").toLowerCase();
+      const label =
+        status === "ok" ? "Tool executed" : status === "forbidden" ? "Tool blocked" : "Tool failed";
+      const error = msg.toolExecution?.error ? ` | ${msg.toolExecution.error}` : "";
+      content = `${msg.content}\n\n[${label}: ${requestedToolId}${error}]`;
+      if (requestedToolId === "web.fetch") {
+        const source = msg.toolExecution?.source || {};
+        const resolvedUrl = String(source.resolvedUrl || "");
+        const requestedUrl = String(source.requestedUrl || "");
+        const fallbackRequested = String(msg.toolExecution?.requested?.input?.url || "");
+        const url = resolvedUrl || requestedUrl || fallbackRequested;
+        if (url) {
+          citation = {
+            label: "Source",
+            url,
+            requestedUrl: requestedUrl || fallbackRequested,
+            discoveredFrom: String(source.discoveredFrom || "")
+          };
+        }
+      }
+    }
     renderExchangeMessage(container, {
       roleClass: role,
       title,
-      content: msg.content,
-      image: msg.image || null
+      content,
+      image: msg.image || null,
+      citation
     });
   });
 
@@ -1238,6 +1297,12 @@ async function sendPersonaChatMessage({ forceImage = false } = {}) {
 
   if (!state.personaChat.historyByChat[chatId]) state.personaChat.historyByChat[chatId] = [];
   state.personaChat.historyByChat[chatId].push({ role: "user", content: message });
+  const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  state.personaChat.historyByChat[chatId].push({
+    role: "system",
+    content: "Working on it...",
+    pendingId
+  });
   state.personaChat.activeChatId = chatId;
   renderPersonaChatHistory();
   input.value = "";
@@ -1256,15 +1321,24 @@ async function sendPersonaChatMessage({ forceImage = false } = {}) {
       });
     }
     const responses = Array.isArray(data.responses) ? data.responses : [];
+    state.personaChat.historyByChat[chatId] = (state.personaChat.historyByChat[chatId] || []).filter(
+      (msg) => msg.pendingId !== pendingId
+    );
     state.personaChat.historyByChat[chatId].push(...responses);
     renderPersonaChatHistory();
     const selected = Array.isArray(data.orchestration?.rationale) ? data.orchestration.rationale : [];
     const selectedNames = selected.map((r) => r.displayName).join(", ");
-    status.textContent = `Received ${responses.length} persona response(s). ${
-      selectedNames ? `Selected: ${selectedNames}.` : ""
-    }`;
+    const toolRuns = responses.filter((r) => r && r.toolExecution && r.toolExecution.status === "ok").length;
+    const toolFailures = responses.filter((r) => r && r.toolExecution && r.toolExecution.status !== "ok").length;
+    status.textContent = selectedNames
+      ? `Received ${responses.length} persona response(s). Selected: ${selectedNames}. Tool runs: ${toolRuns}, failures: ${toolFailures}.`
+      : `Received ${responses.length} persona response(s). Tool runs: ${toolRuns}, failures: ${toolFailures}.`;
     await loadPersonaChatSessions();
   } catch (error) {
+    state.personaChat.historyByChat[chatId] = (state.personaChat.historyByChat[chatId] || []).filter(
+      (msg) => msg.pendingId !== pendingId
+    );
+    renderPersonaChatHistory();
     status.textContent = `Persona chat failed: ${error.message}`;
   }
 }
@@ -2730,6 +2804,81 @@ function renderAdminCharts() {
   statusEl.textContent = `Charts reflect ${records.length} filtered conversation(s).`;
 }
 
+function filteredToolEvents() {
+  const tool = String(byId("admin-tool-filter-tool")?.value || "")
+    .trim()
+    .toLowerCase();
+  const context = String(byId("admin-tool-filter-context")?.value || "").trim().toLowerCase();
+  const status = String(byId("admin-tool-filter-status")?.value || "").trim().toLowerCase();
+  const rows = Array.isArray(state.adminToolUsage?.events) ? state.adminToolUsage.events : [];
+
+  return rows.filter((row) => {
+    const toolId = String(row.toolId || "").toLowerCase();
+    const contextType = String(row.contextType || (row.taskId ? "task" : "")).toLowerCase();
+    const ok = row.ok === true;
+    if (tool && !toolId.includes(tool)) return false;
+    if (context && contextType !== context) return false;
+    if (status === "ok" && !ok) return false;
+    if (status === "error" && ok) return false;
+    return true;
+  });
+}
+
+function renderAdminToolUsage() {
+  const list = byId("admin-tool-usage-list");
+  const status = byId("admin-tool-status");
+  if (!list || !status) return;
+  list.innerHTML = "";
+
+  if (state.adminToolUsage.loading) {
+    status.textContent = "Loading tool usage...";
+    return;
+  }
+
+  const rows = filteredToolEvents();
+  if (!rows.length) {
+    status.textContent = "No tool runs match current filters.";
+    list.textContent = "No tool usage records.";
+    return;
+  }
+
+  status.textContent = `Showing ${rows.length} tool run(s).`;
+  rows.slice(0, 150).forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "admin-item";
+    const ok = row.ok === true;
+    item.innerHTML = `
+      <div class="admin-item-head">
+        <strong>${row.toolId || "unknown tool"}</strong>
+        <span class="admin-item-sub">${ok ? "SUCCESS" : "FAILED"}</span>
+      </div>
+      <div class="admin-item-sub">When: ${row.ts || "n/a"}</div>
+      <div class="admin-item-sub">Context: ${row.contextType || (row.taskId ? "task" : "n/a")} | Context Id: ${row.contextId || row.taskId || "n/a"} | Step: ${row.stepId || "n/a"} | Turn: ${row.turnId || "n/a"}</div>
+      <div class="admin-item-sub">Persona: ${row.personaId || "n/a"} | User: ${row.createdByUsername || "unknown"}</div>
+      <div class="admin-item-sub">URL: ${row.requestedUrl || "n/a"}</div>
+      <div class="admin-item-sub">Duration: ${Number(row.durationMs || 0).toLocaleString()} ms</div>
+      <div class="admin-item-sub">Error: ${row.error || "none"}</div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+async function loadAdminToolUsage() {
+  state.adminToolUsage.loading = true;
+  renderAdminToolUsage();
+  try {
+    const data = await apiGet("/api/agentic/events?type=tool&limit=600");
+    state.adminToolUsage.events = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+  } catch (error) {
+    state.adminToolUsage.events = [];
+    const status = byId("admin-tool-status");
+    if (status) status.textContent = `Failed to load tool usage: ${error.message}`;
+  } finally {
+    state.adminToolUsage.loading = false;
+    renderAdminToolUsage();
+  }
+}
+
 function renderGovernanceChatHistory() {
   const container = byId("gov-chat-history");
   if (!container) return;
@@ -3169,10 +3318,42 @@ function renderAdminChatsList() {
   });
 }
 
+function renderAdminToolsList() {
+  const container = byId("admin-list");
+  container.innerHTML = "";
+  const events = filteredToolEvents();
+
+  if (!events.length) {
+    container.textContent = "No tool runs found for current filters.";
+    return;
+  }
+
+  events.slice(0, 200).forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "admin-item";
+    const ok = row.ok === true;
+    item.innerHTML = `
+      <div class="admin-item-head">
+        <strong>${row.toolId || "unknown tool"}</strong>
+        <span class="admin-item-sub">${ok ? "SUCCESS" : "FAILED"}</span>
+      </div>
+      <div class="admin-item-sub">When: ${row.ts || "n/a"}</div>
+      <div class="admin-item-sub">Context: ${row.contextType || (row.taskId ? "task" : "n/a")} | Context Id: ${row.contextId || row.taskId || "n/a"}</div>
+      <div class="admin-item-sub">Persona: ${row.personaId || "n/a"} | User: ${row.createdByUsername || "unknown"}</div>
+      <div class="admin-item-sub">URL: ${row.requestedUrl || "n/a"}</div>
+      <div class="admin-item-sub">Turn/Step: ${row.turnId || "n/a"} / ${row.stepId || "n/a"} | Duration: ${Number(row.durationMs || 0).toLocaleString()} ms</div>
+      <div class="admin-item-sub">Error: ${row.error || "none"}</div>
+    `;
+    container.appendChild(item);
+  });
+}
+
 function renderAdminList() {
   renderAdminFilterSummary();
   if (state.adminView === "personas") {
     renderAdminPersonasList();
+  } else if (state.adminView === "tools") {
+    renderAdminToolsList();
   } else if (state.adminView === "chats") {
     renderAdminChatsList();
   } else {
@@ -3201,6 +3382,7 @@ async function loadAdminData() {
     renderAdminList();
     renderAdminCharts();
     renderGovernanceChatSessions();
+    await loadAdminToolUsage();
   } catch (error) {
     byId("admin-pricing-note").textContent = `Failed to load admin data: ${error.message}`;
   }
@@ -5293,6 +5475,10 @@ function wireEvents() {
     state.adminView = "personas";
     renderAdminList();
   });
+  byId("admin-view-tools").addEventListener("click", () => {
+    state.adminView = "tools";
+    renderAdminList();
+  });
   byId("admin-dim-channel").addEventListener("click", () => {
     state.adminMatrixDimension = "channel";
     state.adminMetricFocus = null;
@@ -5347,6 +5533,10 @@ function wireEvents() {
     setChatsView("group");
     setGroupWorkspace("debate-viewer");
   });
+  byId("admin-tool-refresh").addEventListener("click", loadAdminToolUsage);
+  byId("admin-tool-filter-tool").addEventListener("input", renderAdminToolUsage);
+  byId("admin-tool-filter-context").addEventListener("change", renderAdminToolUsage);
+  byId("admin-tool-filter-status").addEventListener("change", renderAdminToolUsage);
   byId("gov-chat-create").addEventListener("click", createGovernanceChatSession);
   byId("gov-chat-search-btn").addEventListener("click", searchGovernanceChatSessions);
   byId("gov-chat-search").addEventListener("keydown", (event) => {
