@@ -38,8 +38,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div>
-        <div class="topbar-meta">
-          <p class="eyebrow">Round-Table Intelligence Studio</p>
+        <div class="topbar-menu-row">
           <div class="system-menu-shell">
             <button id="system-menu-toggle" class="system-menu-toggle" type="button" aria-expanded="false">Menu</button>
             <div id="system-menu-popout" class="system-menu-popout hidden">
@@ -53,10 +52,19 @@
             </div>
           </div>
         </div>
+        <div class="topbar-meta">
+          <p class="eyebrow">Round-Table Intelligence Studio</p>
+        </div>
         <h1>Persona Debate Orchestrator</h1>
         <p class="muted">Local-first persona manager, debate runner, and transcript-aware chat.</p>
       </div>
-      <img class="hero-art" src="/media/logo" alt="Product logo">
+      <div class="hero-logo-shell">
+        <img id="hero-logo" class="hero-art" src="/media/logo" alt="Product logo">
+        <div class="row hero-logo-actions">
+          <input id="logo-upload-input" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.svg" class="hidden">
+          <button id="logo-upload-trigger" type="button">Edit Logo</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -131,6 +139,7 @@
             <label>Expertise Tags (comma-separated)<input name="expertiseTags"></label>
             <label>Bias/Values (comma-separated or text)<textarea name="biasValues" rows="2"></textarea></label>
             <label>Debate Behavior<textarea name="debateBehavior" rows="3" placeholder="Steelman first, ask one clarifying question."></textarea></label>
+            <label>Tool IDs (comma-separated)<input name="toolIds" placeholder="http.request, web.fetch"></label>
             <div class="stack">
               <div>Persona Knowledge Packs <span class="tip" tabindex="0">?<span class="tip-flyout">Optional specialized knowledge this persona can access in every debate turn.</span></span></div>
               <div id="persona-knowledge-pack-list" class="list"></div>
@@ -485,6 +494,7 @@
               <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
               <label>Bias/Values<input id="adhoc-bias" type="text"></label>
               <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
+              <label>Tool IDs (comma-separated)<input id="adhoc-tool-ids" type="text" placeholder="optional: web.fetch, http.request"></label>
               <label>Knowledge Pack Ids (comma-separated)<input id="adhoc-knowledge-pack-ids" type="text" placeholder="optional: debate-quality-rubric, current-events-analysis"></label>
               <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
               <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>

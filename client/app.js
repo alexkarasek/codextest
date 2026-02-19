@@ -402,15 +402,50 @@ function toggleSystemMenu() {
 function renderAuthChrome() {
   const chip = byId("auth-user-chip");
   const logoutBtn = byId("auth-quick-logout");
+  const logoUploadBtn = byId("logo-upload-trigger");
   if (!chip || !logoutBtn) return;
   if (state.auth.authenticated && state.auth.user) {
     chip.textContent = `${state.auth.user.username} (${state.auth.user.role})`;
     logoutBtn.disabled = false;
+    if (logoUploadBtn) logoUploadBtn.disabled = false;
     byId("auth-open-login").textContent = "Switch User";
   } else {
     chip.textContent = "Guest";
     logoutBtn.disabled = true;
+    if (logoUploadBtn) logoUploadBtn.disabled = true;
     byId("auth-open-login").textContent = "Login";
+  }
+}
+
+async function uploadHeaderLogo(file) {
+  if (!file) return;
+  const statusTargets = [byId("support-status"), byId("auth-status")].filter(Boolean);
+  statusTargets.forEach((el) => {
+    if (el) el.textContent = "Uploading logo...";
+  });
+  try {
+    const form = new FormData();
+    form.append("logo", file);
+    const res = await fetch("/api/settings/logo", {
+      method: "POST",
+      body: form
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.ok) {
+      if (res.status === 401) handleUnauthorized(payload);
+      throw new Error(apiErrorMessage(payload, "Logo upload failed"));
+    }
+    const logo = byId("hero-logo");
+    if (logo) {
+      logo.src = payload?.data?.logoUrl || `/media/logo?t=${Date.now()}`;
+    }
+    statusTargets.forEach((el) => {
+      if (el) el.textContent = "Logo updated.";
+    });
+  } catch (error) {
+    statusTargets.forEach((el) => {
+      if (el) el.textContent = `Logo upload failed: ${error.message}`;
+    });
   }
 }
 
@@ -1628,6 +1663,7 @@ function personaFromForm() {
     expertiseTags: parseCsv(fd.get("expertiseTags")),
     biasValues: parseCsv(fd.get("biasValues")),
     debateBehavior: String(fd.get("debateBehavior") || "").trim(),
+    toolIds: parseCsv(fd.get("toolIds")),
     knowledgePackIds: state.personaFormKnowledgePackIds.slice()
   };
 }
@@ -1672,6 +1708,8 @@ function renderPersonaKnowledgePackList() {
 function fillPersonaForm(persona) {
   const form = byId("persona-form");
   form.elements.id.value = persona.id || "";
+  form.elements.id.readOnly = true;
+  form.elements.id.title = "ID is locked while editing. Use Duplicate to create a new ID.";
   form.elements.displayName.value = persona.displayName || "";
   form.elements.role.value = persona.role || "";
   form.elements.description.value = persona.description || "";
@@ -1684,6 +1722,7 @@ function fillPersonaForm(persona) {
     ? persona.biasValues.join(", ")
     : String(persona.biasValues || "");
   form.elements.debateBehavior.value = persona.debateBehavior || "";
+  form.elements.toolIds.value = (persona.toolIds || []).join(", ");
   state.personaFormKnowledgePackIds = Array.isArray(persona.knowledgePackIds)
     ? persona.knowledgePackIds.slice()
     : [];
@@ -1694,7 +1733,10 @@ function fillPersonaForm(persona) {
 function resetPersonaForm() {
   state.editingPersonaId = null;
   byId("persona-form-title").textContent = "Create Persona";
-  byId("persona-form").reset();
+  const form = byId("persona-form");
+  form.reset();
+  form.elements.id.readOnly = false;
+  form.elements.id.title = "";
   state.personaFormKnowledgePackIds = [];
   renderPersonaKnowledgePackList();
   renderPersonaPreview();
@@ -1731,6 +1773,7 @@ function renderAvailablePersonas() {
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
       <div>Knowledge: ${(persona.knowledgePackIds || []).join(", ") || "none"}</div>
+      <div>Tools: ${(persona.toolIds || []).join(", ") || "none"}</div>
     `;
 
     const addBtn = document.createElement("button");
@@ -1773,6 +1816,7 @@ function renderPersonaList() {
       <div class="card-title">${persona.displayName} <span class="muted">(${persona.id})</span></div>
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
+      <div>Tools: ${(persona.toolIds || []).join(", ") || "none"}</div>
     `;
 
     const actions = document.createElement("div");
@@ -1836,12 +1880,14 @@ function selectedLabel(entry) {
     const persona = state.personas.find((p) => p.id === entry.id);
     if (!persona) return `Saved (${entry.id})`;
     const packs = Array.isArray(persona.knowledgePackIds) ? persona.knowledgePackIds.length : 0;
-    return `${persona.displayName} (${persona.id})${packs ? ` | persona packs: ${packs}` : ""}`;
+    const tools = Array.isArray(persona.toolIds) ? persona.toolIds.length : 0;
+    return `${persona.displayName} (${persona.id})${packs ? ` | persona packs: ${packs}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
   }
   const packs = Array.isArray(entry.persona?.knowledgePackIds)
     ? entry.persona.knowledgePackIds.length
     : 0;
-  return `Ad-hoc: ${entry.persona.displayName}${packs ? ` | persona packs: ${packs}` : ""}`;
+  const tools = Array.isArray(entry.persona?.toolIds) ? entry.persona.toolIds.length : 0;
+  return `Ad-hoc: ${entry.persona.displayName}${packs ? ` | persona packs: ${packs}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
 }
 
 function renderSelectedPersonas() {
@@ -4539,6 +4585,7 @@ function adHocPersonaFromForm() {
     expertiseTags: parseCsv(byId("adhoc-tags").value),
     biasValues: parseCsv(byId("adhoc-bias").value),
     debateBehavior: byId("adhoc-debateBehavior").value.trim(),
+    toolIds: parseCsv(byId("adhoc-tool-ids").value),
     knowledgePackIds: parseCsv(byId("adhoc-knowledge-pack-ids").value)
   };
 }
@@ -4556,6 +4603,7 @@ function clearAdHocForm() {
     "adhoc-tags",
     "adhoc-bias",
     "adhoc-debateBehavior",
+    "adhoc-tool-ids",
     "adhoc-knowledge-pack-ids"
   ].forEach((id) => {
     byId(id).value = "";
@@ -4881,6 +4929,18 @@ function wireEvents() {
     showAuthGate("Sign in with a different user.");
     closeSystemMenu();
   });
+  byId("logo-upload-trigger").addEventListener("click", () => {
+    if (!state.auth.authenticated) {
+      showAuthGate("Please log in to update logo.");
+      return;
+    }
+    byId("logo-upload-input").click();
+  });
+  byId("logo-upload-input").addEventListener("change", async (event) => {
+    const file = event.target?.files?.[0] || null;
+    await uploadHeaderLogo(file);
+    event.target.value = "";
+  });
   byId("auth-quick-logout").addEventListener("click", logout);
   byId("open-documentation-page").addEventListener("click", () => {
     window.open("/documentation", "_blank", "noopener");
@@ -5005,6 +5065,11 @@ function wireEvents() {
 
     try {
       if (state.editingPersonaId) {
+        if (persona.id !== state.editingPersonaId) {
+          statusEl.textContent =
+            "Failed: Persona ID cannot be changed during update. Use Duplicate to create a new ID.";
+          return;
+        }
         await apiSend(`/api/personas/${state.editingPersonaId}`, "PUT", persona);
         statusEl.textContent = "Persona updated.";
       } else {

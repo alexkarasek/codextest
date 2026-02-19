@@ -49,11 +49,13 @@ body::before {
 
 .topbar {
   padding: 20px 22px 12px;
+  position: relative;
 }
 
 .topbar-inner {
   max-width: 1320px;
   margin: 0 auto;
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 18px 20px;
@@ -77,8 +79,21 @@ body::before {
 .topbar-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
+}
+
+.topbar-menu-row {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  display: flex;
+  justify-content: flex-start;
+  z-index: 20;
+}
+
+.topbar-inner > div:first-child {
+  padding-top: 28px;
 }
 
 .topbar h1 {
@@ -102,6 +117,16 @@ body::before {
   box-shadow: 0 12px 28px rgba(10, 20, 30, 0.18);
 }
 
+.hero-logo-shell {
+  justify-self: end;
+  display: grid;
+  gap: 8px;
+}
+
+.hero-logo-actions {
+  justify-content: flex-end;
+}
+
 .system-menu-shell {
   position: relative;
 }
@@ -119,7 +144,7 @@ body::before {
 
 .system-menu-popout {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 8px);
   width: 200px;
   border: 1px solid var(--line);
@@ -1035,8 +1060,16 @@ a {
     position: relative;
   }
 
+  .topbar-menu-row {
+    top: 10px;
+    left: 12px;
+  }
+
+  .topbar-inner > div:first-child {
+    padding-top: 30px;
+  }
+
   .system-menu-popout {
-    right: auto;
     left: 0;
     top: calc(100% + 6px);
     width: min(88vw, 280px);

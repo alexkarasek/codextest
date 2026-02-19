@@ -1,4 +1,7 @@
 import express from "express";
+import fs from "fs/promises";
+import path from "path";
+import multer from "multer";
 import { sendError, sendOk } from "../response.js";
 import {
   getResponsibleAiPolicy,
@@ -7,8 +10,27 @@ import {
 import { getWebPolicy, saveWebPolicy } from "../../lib/webPolicy.js";
 import { formatZodError, responsibleAiPolicySchema, webPolicySchema } from "../../lib/validators.js";
 import { getThemeSettings, saveThemeSettings } from "../../lib/themeSettings.js";
+import { IMAGES_DIR } from "../../lib/storage.js";
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+const LOGO_DIR = path.join(IMAGES_DIR, "logo");
+const ALLOWED_LOGO_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
+
+function extFromUpload(file) {
+  const byName = path.extname(String(file?.originalname || "")).toLowerCase();
+  if (ALLOWED_LOGO_EXT.has(byName)) return byName;
+  const mime = String(file?.mimetype || "").toLowerCase();
+  if (mime.includes("png")) return ".png";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return ".jpg";
+  if (mime.includes("webp")) return ".webp";
+  if (mime.includes("gif")) return ".gif";
+  if (mime.includes("svg")) return ".svg";
+  return "";
+}
 
 router.get("/responsible-ai", async (_req, res) => {
   try {
@@ -78,6 +100,29 @@ router.put("/theme", async (req, res) => {
     sendOk(res, { theme: saved });
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to save theme: ${error.message}`);
+  }
+});
+
+router.post("/logo", upload.single("logo"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    sendError(res, 400, "VALIDATION_ERROR", "logo file is required.");
+    return;
+  }
+  const ext = extFromUpload(file);
+  if (!ext) {
+    sendError(res, 400, "VALIDATION_ERROR", "Unsupported image type. Use png/jpg/jpeg/webp/gif/svg.");
+    return;
+  }
+  try {
+    await fs.mkdir(LOGO_DIR, { recursive: true });
+    const existing = await fs.readdir(LOGO_DIR).catch(() => []);
+    await Promise.all(existing.map((name) => fs.rm(path.join(LOGO_DIR, name), { force: true })));
+    const filename = `logo${ext}`;
+    await fs.writeFile(path.join(LOGO_DIR, filename), file.buffer);
+    sendOk(res, { logoUrl: `/media/logo?t=${Date.now()}`, filename });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to save logo: ${error.message}`);
   }
 });
 

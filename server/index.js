@@ -64,39 +64,25 @@ app.get("/theme", async (_req, res) => {
 });
 
 app.get("/media/logo", async (_req, res) => {
+  const fallback = path.join(clientDir, "assets", "debate-wave.svg");
+  const sendFallback = () => {
+    res.sendFile(fallback);
+  };
   try {
-    const explicitLogo = path.join(IMAGES_DIR, "logo", "IMG_7310.jpg");
-    try {
-      await fs.access(explicitLogo);
-      res.sendFile(explicitLogo);
-      return;
-    } catch {
-      // fall through
-    }
-
-    const files = await fs.readdir(IMAGES_DIR);
-    const match = files.find((file) => {
-      const lower = String(file || "").toLowerCase();
-      return lower === "logo" || lower.startsWith("logo.");
-    });
-    if (match) {
-      res.sendFile(path.join(IMAGES_DIR, match));
-      return;
-    }
     const logoDir = path.join(IMAGES_DIR, "logo");
-    const dirFiles = await fs.readdir(logoDir);
+    const dirFiles = await fs.readdir(logoDir).catch(() => []);
     const image = dirFiles.find((file) => {
       const lower = String(file || "").toLowerCase();
       if (lower.includes("zone.identifier")) return false;
       return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].some((ext) => lower.endsWith(ext));
     });
     if (!image) {
-      res.status(404).end();
+      sendFallback();
       return;
     }
     res.sendFile(path.join(logoDir, image));
   } catch {
-    res.status(404).end();
+    sendFallback();
   }
 });
 
