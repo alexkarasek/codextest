@@ -26,8 +26,9 @@ Tip: keep the prompt simple for first test, then iterate.
 ## 5:00-7:00 Run a quick group chat
 1. Go to `Chats -> Group Chat -> Live Group Chat`.
 2. Create a new group chat session.
-3. Select your persona.
-4. Send a message.
+3. Optionally attach a knowledge pack for this chat session.
+4. Select your persona.
+5. Send a message.
 
 Expected result:
 - Orchestrator entry appears.
@@ -55,5 +56,5 @@ Expected result:
 - `Troubleshooting`
 2. Configure `Responsible AI` keywords.
 3. Adjust the UI theme in `Admin & Config -> Theme`.
-4. Add more personas and attach specialized knowledge packs.
+4. Add more personas and attach specialized knowledge packs (persona or chat-level).
 5. Use `Support Concierge` for grounded how-to help.

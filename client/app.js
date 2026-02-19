@@ -47,6 +47,7 @@ const state = {
   },
   personaChat: {
     selectedPersonaIds: [],
+    selectedKnowledgePackIds: [],
     sessions: [],
     activeChatId: null,
     historyByChat: {},
@@ -666,7 +667,7 @@ function currentHelpGuide() {
         title: "Knowledge Studio Guide",
         points: [
           "Upload txt/pdf/image/doc files to create reusable knowledge packs.",
-          "Attach packs globally in debates or per-persona in profile settings.",
+          "Attach packs globally in debates or persona chats, or per-persona in profile settings.",
           "Use tags and descriptions to keep packs searchable."
         ]
       };
@@ -709,6 +710,7 @@ function currentHelpGuide() {
         points: [
           "Select personas and create a session before sending messages.",
           "Use Engagement Mode to tune interaction style.",
+          "Attach knowledge packs to ground the entire chat session.",
           "Create a new session when changing personas/settings significantly."
         ]
       };
@@ -1053,6 +1055,83 @@ function renderPersonaChatPersonaList() {
   });
 }
 
+function renderPersonaChatKnowledgeList() {
+  const container = byId("persona-chat-knowledge-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!state.knowledgePacks.length) {
+    container.textContent = "No knowledge packs available yet.";
+    return;
+  }
+
+  state.knowledgePacks.forEach((pack) => {
+    const row = document.createElement("label");
+    row.className = "inline";
+    const checked = state.personaChat.selectedKnowledgePackIds.includes(pack.id);
+    row.innerHTML = `
+      <input type="checkbox" data-persona-pack-id="${pack.id}" ${checked ? "checked" : ""}>
+      ${pack.title} <span class="muted">(${pack.id})</span>
+    `;
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll("input[type='checkbox'][data-persona-pack-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const packId = input.getAttribute("data-persona-pack-id");
+      if (!packId) return;
+      if (input.checked) {
+        if (!state.personaChat.selectedKnowledgePackIds.includes(packId)) {
+          state.personaChat.selectedKnowledgePackIds.push(packId);
+        }
+      } else {
+        state.personaChat.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.filter(
+          (id) => id !== packId
+        );
+      }
+      if (state.personaChat.activeChatId) {
+        state.personaChat.dirtyConfig = true;
+        byId("persona-chat-status").textContent =
+          "Knowledge pack selection changed. Click Create Chat Session to start a fresh conversation.";
+      }
+    });
+  });
+}
+
+function applyDebateTemplateFromPersonaChat() {
+  const status = byId("persona-chat-status");
+  const selected = state.personaChat.selectedPersonaIds.slice();
+  if (!selected.length) {
+    status.textContent = "Select at least one persona before using the debate template.";
+    return;
+  }
+
+  state.selectedPersonas = selected.map((id) => ({ type: "saved", id }));
+  state.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.slice();
+  renderSelectedPersonas();
+  renderKnowledgePacks();
+  renderKnowledgeStudioList();
+
+  const debateTopicEl = byId("debate-topic");
+  const debateContextEl = byId("debate-context");
+  const chatTitle = byId("persona-chat-title").value.trim();
+  const chatContext = byId("persona-chat-context").value.trim();
+  if (!debateTopicEl.value.trim()) {
+    debateTopicEl.value =
+      chatTitle && chatTitle !== "Persona Collaboration Chat" ? chatTitle : "Untitled Debate";
+  }
+  if (!debateContextEl.value.trim() && chatContext) {
+    debateContextEl.value = chatContext;
+  }
+
+  const advanced = document.querySelector("#tab-new-debate details.setup-advanced");
+  if (advanced) advanced.open = true;
+
+  setChatsView("group");
+  setGroupWorkspace("debate-setup");
+  byId("debate-run-status").textContent = "Debate template loaded from persona chat.";
+}
+
 function applyPersonaChatSelectionBulk(mode = "select") {
   const filter = String(byId("persona-chat-persona-filter")?.value || "")
     .trim()
@@ -1192,6 +1271,9 @@ async function loadPersonaChatSession(chatId) {
       ? data.session.personas.map((p) => p.id).filter(Boolean)
       : [];
     state.personaChat.selectedPersonaIds = state.personaChat.activeSessionPersonaIds.slice();
+    state.personaChat.selectedKnowledgePackIds = Array.isArray(data.session?.knowledgePackIds)
+      ? data.session.knowledgePackIds.slice()
+      : [];
     state.personaChat.dirtyConfig = false;
     state.personaChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
     byId("persona-chat-id").value = chatId;
@@ -1206,6 +1288,7 @@ async function loadPersonaChatSession(chatId) {
       byId("persona-chat-mode").value = data.session.settings.engagementMode;
     }
     renderPersonaChatPersonaList();
+    renderPersonaChatKnowledgeList();
     renderPersonaChatHistory();
     const configDetails = byId("persona-chat-config-details");
     if (configDetails) configDetails.open = false;
@@ -1227,6 +1310,7 @@ async function createPersonaChatSession() {
     title: byId("persona-chat-title").value.trim() || "Persona Collaboration Chat",
     context: byId("persona-chat-context").value.trim(),
     selectedPersonas: selected.map((id) => ({ type: "saved", id })),
+    knowledgePackIds: state.personaChat.selectedKnowledgePackIds.slice(),
     settings: {
       model: byId("persona-chat-model").value.trim() || "gpt-4.1-mini",
       temperature: safeNumberInput(byId("persona-chat-temperature").value, 0.6, { min: 0, max: 2 }),
@@ -1258,6 +1342,7 @@ function startNewPersonaChatDraft() {
   state.personaChat.activeChatId = null;
   state.personaChat.activeSessionPersonaIds = [];
   state.personaChat.dirtyConfig = false;
+  state.personaChat.selectedKnowledgePackIds = [];
   byId("persona-chat-id").value = "";
   byId("persona-chat-title").value = "Persona Collaboration Chat";
   byId("persona-chat-context").value = "";
@@ -1270,6 +1355,7 @@ function startNewPersonaChatDraft() {
   const configDetails = byId("persona-chat-config-details");
   if (configDetails) configDetails.open = true;
   renderPersonaChatPersonaList();
+  renderPersonaChatKnowledgeList();
   renderPersonaChatHistory();
 }
 
@@ -1637,6 +1723,7 @@ function setChatsView(view) {
   if (state.mainTab === "chats" && state.chatsView === "group") {
     setGroupWorkspace(state.groupWorkspace);
     renderPersonaChatPersonaList();
+    renderPersonaChatKnowledgeList();
     renderPersonaChatHistory();
     loadPersonaChatSessions();
   }
@@ -3418,21 +3505,27 @@ async function loadKnowledgePacks() {
     state.personaFormKnowledgePackIds = state.personaFormKnowledgePackIds.filter((id) =>
       state.knowledgePacks.some((p) => p.id === id)
     );
+    state.personaChat.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.filter((id) =>
+      state.knowledgePacks.some((p) => p.id === id)
+    );
     state.simpleChat.selectedKnowledgePackIds = state.simpleChat.selectedKnowledgePackIds.filter((id) =>
       state.knowledgePacks.some((p) => p.id === id)
     );
     renderKnowledgePacks();
     renderKnowledgeStudioList();
     renderPersonaKnowledgePackList();
+    renderPersonaChatKnowledgeList();
     renderSimpleChatKnowledgeList();
   } catch {
     state.knowledgePacks = [];
     state.selectedKnowledgePackIds = [];
     state.personaFormKnowledgePackIds = [];
+    state.personaChat.selectedKnowledgePackIds = [];
     state.simpleChat.selectedKnowledgePackIds = [];
     renderKnowledgePacks();
     renderKnowledgeStudioList();
     renderPersonaKnowledgePackList();
+    renderPersonaChatKnowledgeList();
     renderSimpleChatKnowledgeList();
   }
 }
@@ -5044,7 +5137,8 @@ async function loadViewerConversation(type, id) {
       `Type: Group Chat`,
       `Participants: ${(session.personas || []).map((p) => p.displayName).join(", ") || "n/a"}`,
       `Model: ${session.settings?.model || "n/a"}`,
-      `Context: ${session.context || "(none)"}`
+      `Context: ${session.context || "(none)"}`,
+      `Knowledge Packs: ${(session.knowledgePackIds || []).join(", ") || "none"}`
     ].join("\n");
     renderViewerExchanges(normalizeViewerMessagesFromChat(data));
     return;
@@ -5095,6 +5189,7 @@ function wireEvents() {
   byId("group-nav-live").addEventListener("click", () => setGroupWorkspace("live"));
   byId("group-nav-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
   byId("group-nav-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
+  byId("persona-chat-template-debate").addEventListener("click", applyDebateTemplateFromPersonaChat);
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
@@ -5575,6 +5670,7 @@ async function init() {
   renderPersonaPreview();
   renderChatHistory();
   renderPersonaChatPersonaList();
+  renderPersonaChatKnowledgeList();
   renderPersonaChatHistory();
   renderSimpleChatKnowledgeList();
   renderSimpleChatHistory();

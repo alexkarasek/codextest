@@ -21,6 +21,12 @@ Use `Chats -> Group Chat -> History Explorer` to browse sessions and inspect ris
 ## Where do I configure personas and knowledge packs?
 Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
 
+## Can I attach knowledge packs to a persona chat?
+Yes. In `Chats -> Group Chat -> Live Group Chat`, select knowledge packs in the session configuration before creating the chat.
+
+## Can I move from a persona chat to a formal debate?
+Yes. Use the **Formal Debate Template** button in the persona chat setup to copy personas, knowledge packs, and context into Debate Setup.
+
 ## How do I ingest a web page into a knowledge pack?
 Go to `Admin & Config -> Knowledge Studio`, use **Web Ingest**, paste the URL, and choose create/append/overwrite.
 

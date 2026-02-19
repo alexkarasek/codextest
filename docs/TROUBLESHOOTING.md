@@ -56,6 +56,7 @@ Cause:
 
 Common mistakes:
 - Sending persona chat create payload without `selectedPersonas` objects.
+- Referencing knowledge pack ids that do not exist (persona chats or debates).
 - Sending message payload as `{role, content}` instead of `{message}`.
 - Mismatched path ID vs body ID in update routes.
 

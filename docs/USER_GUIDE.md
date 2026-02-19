@@ -65,11 +65,13 @@ Tips:
 ## B) Start a Group Chat with Personas
 1. Go to `Chats` -> `Group Chat` -> `Live Group Chat`.
 2. Create a session title/context.
-3. Select one or more personas.
-4. Choose engagement mode:
+3. Optionally select knowledge packs to ground the session.
+4. Select one or more personas.
+5. Choose engagement mode:
 - `chat`
 - `panel`
 - `debate-work-order`
+6. Use the **Formal Debate Template** button if you want to transition into a structured debate setup.
 5. Send message.
 
 What to expect:

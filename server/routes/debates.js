@@ -6,7 +6,6 @@ import {
   createDebateFiles,
   debatePath,
   getDebate,
-  getKnowledgePack,
   getPersona,
   listDebateChat,
   listPersonas,
@@ -26,6 +25,7 @@ import { sendError, sendOk } from "../response.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 import { selectPersonasForDebate } from "../../lib/personaSelector.js";
 import { chatCompletion } from "../../lib/llm.js";
+import { normalizeKnowledgePackIds, resolveKnowledgePacks } from "../../lib/knowledgeUtils.js";
 
 const router = express.Router();
 let runQueue = Promise.resolve();
@@ -120,16 +120,6 @@ async function resolveSelectedPersonas(selected) {
   return resolved;
 }
 
-async function resolveKnowledgePacks(ids) {
-  const packs = [];
-  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
-  for (const id of uniqueIds) {
-    const pack = await getKnowledgePack(id);
-    packs.push(pack);
-  }
-  return packs;
-}
-
 async function runDebateQueued(debateId) {
   runQueue = runQueue.then(async () => {
     try {
@@ -185,7 +175,7 @@ router.post("/", async (req, res) => {
         reasoning: dynamicSelection.reasoning
       };
     }
-    globalKnowledgePackIds = [...new Set(parsed.data.knowledgePackIds || [])];
+    globalKnowledgePackIds = normalizeKnowledgePackIds(parsed.data.knowledgePackIds);
     personaKnowledgeMap = personas.reduce((acc, persona) => {
       acc[persona.id] = [...new Set(persona.knowledgePackIds || [])];
       return acc;

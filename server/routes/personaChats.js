@@ -25,6 +25,11 @@ import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 import { listTools, runTool } from "../../lib/agenticTools.js";
 import { appendToolUsage } from "../../lib/agenticStorage.js";
+import {
+  mergeKnowledgePacks,
+  normalizeKnowledgePackIds,
+  resolveKnowledgePacks
+} from "../../lib/knowledgeUtils.js";
 
 const router = express.Router();
 const STOPWORDS = new Set([
@@ -164,6 +169,11 @@ async function resolveKnowledgeForPersonas(personas) {
   }
 
   return byPersona;
+}
+
+function personaPacksFor(persona, knowledgeByPersona, globalPacks) {
+  const personaPacks = Array.isArray(knowledgeByPersona?.[persona.id]) ? knowledgeByPersona[persona.id] : [];
+  return mergeKnowledgePacks(personaPacks, globalPacks);
 }
 
 function recentHistoryText(messages, limit = 14) {
@@ -310,7 +320,14 @@ function computePersonaRelevance({ userMessage, persona, personaPacks }) {
   return hits / userTerms.length;
 }
 
-function chooseResponders({ personas, knowledgeByPersona, userMessage, history, engagementMode = "chat" }) {
+function chooseResponders({
+  personas,
+  knowledgeByPersona,
+  globalKnowledgePacks,
+  userMessage,
+  history,
+  engagementMode = "chat"
+}) {
   if (asksParticipantPresence(userMessage)) {
     return {
       selectedPersonas: personas.slice(),
@@ -329,7 +346,7 @@ function chooseResponders({ personas, knowledgeByPersona, userMessage, history, 
   const recentPenaltyIds = new Set(recent.slice(0, 2));
 
   const scored = personas.map((persona) => {
-    const packs = Array.isArray(knowledgeByPersona?.[persona.id]) ? knowledgeByPersona[persona.id] : [];
+    const packs = personaPacksFor(persona, knowledgeByPersona, globalKnowledgePacks);
     const relevance = computePersonaRelevance({ userMessage, persona, personaPacks: packs });
     const outOfScope = appearsOutOfScope({ userMessage, persona, personaPacks: packs });
     const recencyPenalty = recentPenaltyIds.has(persona.id) ? 0.12 : 0;
@@ -386,7 +403,7 @@ function personaSystemPrompt(persona, settings, personaPacks, session) {
   const quirks = Array.isArray(style.quirks) ? style.quirks.join(", ") : "";
   const knowledge = personaPacks.length
     ? personaPacks.map((p) => `${p.title}: ${truncateText(p.content, 500)}`).join("\n\n")
-    : "No persona-specific knowledge packs attached.";
+    : "No knowledge packs attached.";
   const mode = settings?.engagementMode || "chat";
   const modeInstruction =
     mode === "panel"
@@ -418,7 +435,7 @@ function personaSystemPrompt(persona, settings, personaPacks, session) {
     `Quirks: ${quirks}`,
     `Expertise tags: ${(persona.expertiseTags || []).join(", ")}`,
     `Bias/Values: ${bias}`,
-    `Knowledge available:\n${knowledge}`,
+    `Knowledge available (persona + chat):\n${knowledge}`,
     `Allowed tools for this persona:\n${allowedToolsText}`,
     `Keep your response under ${settings.maxWordsPerTurn} words.`,
     "This is a collaborative chat with a user and other personas.",
@@ -569,13 +586,17 @@ router.post("/", async (req, res) => {
 
   let personas = [];
   let knowledgeByPersona = {};
+  let knowledgePacks = [];
+  let globalKnowledgePackIds = [];
 
   try {
     personas = await resolveSelectedPersonas(parsed.data.selectedPersonas);
     knowledgeByPersona = await resolveKnowledgeForPersonas(personas);
+    globalKnowledgePackIds = normalizeKnowledgePackIds(parsed.data.knowledgePackIds);
+    knowledgePacks = await resolveKnowledgePacks(globalKnowledgePackIds);
   } catch (error) {
     if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", "One or more selected personas were not found.");
+      sendError(res, 404, "NOT_FOUND", "One or more selected personas or knowledge packs were not found.");
       return;
     }
     if (error.code === "INVALID_JSON") {
@@ -604,6 +625,8 @@ router.post("/", async (req, res) => {
     settings: parsed.data.settings,
     personas,
     knowledgeByPersona,
+    knowledgePackIds: globalKnowledgePackIds,
+    knowledgePacks,
     createdBy: req.auth?.user?.id || null,
     createdByUsername: req.auth?.user?.username || null,
     createdAt: now,
@@ -682,9 +705,11 @@ router.post("/:chatId/messages", async (req, res) => {
     force: Boolean(req.body?.forceImage)
   });
   if (imageIntent.mode === "ambiguous") {
+    const globalKnowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
     const orchestration = chooseResponders({
       personas: session.personas || [],
       knowledgeByPersona: session.knowledgeByPersona || {},
+      globalKnowledgePacks,
       userMessage: userEntry.content,
       history,
       engagementMode: session.settings?.engagementMode || "chat"
@@ -748,9 +773,11 @@ router.post("/:chatId/messages", async (req, res) => {
   }
 
   if (imageIntent.mode === "clear") {
+    const globalKnowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
     const orchestration = chooseResponders({
       personas: session.personas || [],
       knowledgeByPersona: session.knowledgeByPersona || {},
+      globalKnowledgePacks,
       userMessage: userEntry.content,
       history,
       engagementMode: session.settings?.engagementMode || "chat"
@@ -837,9 +864,11 @@ router.post("/:chatId/messages", async (req, res) => {
     }
   }
 
+  const globalKnowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
   const orchestration = chooseResponders({
     personas: session.personas || [],
     knowledgeByPersona: session.knowledgeByPersona || {},
+    globalKnowledgePacks,
     userMessage: userEntry.content,
     history,
     engagementMode: session.settings?.engagementMode || "chat"
@@ -864,9 +893,7 @@ router.post("/:chatId/messages", async (req, res) => {
   const newPersonaMessages = [];
   try {
     for (const persona of orchestration.selectedPersonas) {
-      const personaPacks = Array.isArray(session.knowledgeByPersona?.[persona.id])
-        ? session.knowledgeByPersona[persona.id]
-        : [];
+      const personaPacks = personaPacksFor(persona, session.knowledgeByPersona, globalKnowledgePacks);
       if (appearsOutOfScope({ userMessage: userEntry.content, persona, personaPacks })) {
         const personaEntry = {
           ts: new Date().toISOString(),

@@ -730,6 +730,7 @@ paths:
                 value:
                   title: Team Chat
                   context: Planning discussion
+                  knowledgePackIds: []
                   selectedPersonas:
                     - type: saved
                       id: big-tex
@@ -1598,6 +1599,10 @@ components:
       properties:
         title: { type: string, default: Persona Collaboration Chat }
         context: { type: string, default: '' }
+        knowledgePackIds:
+          type: array
+          items: { type: string }
+          default: []
         selectedPersonas:
           type: array
           minItems: 1

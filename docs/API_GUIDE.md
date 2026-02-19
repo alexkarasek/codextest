@@ -179,10 +179,13 @@ curl -X POST http://localhost:3000/api/persona-chats \
   -d '{
     "title":"Team Chat",
     "context":"Planning discussion",
+    "knowledgePackIds":[],
     "selectedPersonas":[{"type":"saved","id":"big-tex"}],
     "settings":{"model":"gpt-4.1-mini","temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat"}
   }'
 ```
+Notes:
+- `knowledgePackIds` are optional and apply to all personas in the session.
 
 Send message (payload uses `message`, not role/content pairs):
 ```bash

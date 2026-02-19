@@ -52,9 +52,11 @@ A local-first web application to create/edit personas and run multi-round debate
 - Persona Collaboration Chat
   - Create free-form chat sessions with one or more personas (no moderator rounds)
   - Engagement mode is configurable per group session: `chat`, `panel`, `debate-work-order`
+  - Attach knowledge packs at the chat session level to ground all personas
   - Sends each user message through a transparent turn orchestrator that selects only the most relevant personas for that turn
   - Scope guardrails prevent personas from answering outside their defined expertise/knowledge
   - Supports inline persona-routed image generation (`Generate Image` button or `/image ...`)
+  - One-click Formal Debate Template to carry personas/knowledge/context into debate setup
   - Persists chat sessions and message history to `data/persona-chats/<chatId>/`
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding

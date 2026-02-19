@@ -29,6 +29,9 @@ Group workspace toggles:
 - `Formal Debate Setup`: structured debate creation/run
 - `History Explorer`: browse prior conversations and flags
 
+In `Live Group Chat`, you can attach knowledge packs to ground the entire session.
+Use the **Formal Debate Template** button to carry personas, knowledge packs, and context into Debate Setup.
+
 ## Tab: Governance
 Purpose:
 - Monitoring and analysis.
