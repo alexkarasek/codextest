@@ -473,6 +473,78 @@ button[type="submit"]:hover {
   padding-right: 2px;
 }
 
+.image-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+}
+
+.image-preview.hidden {
+  display: none;
+}
+
+.image-preview-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.image-preview-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  width: min(92vw, 980px);
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+}
+
+.image-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.image-preview-download {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: linear-gradient(140deg, var(--card-strong) 0%, var(--bg-soft) 100%);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.image-preview-body {
+  position: relative;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 6px;
+}
+
+.image-preview-panel img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  border-radius: 10px;
+}
+
 .persona-chat-persona-list {
   max-height: 240px;
   overflow-y: scroll;
@@ -939,6 +1011,7 @@ button[type="submit"]:hover {
   border-radius: 10px;
   border: 1px solid var(--line);
   display: block;
+  cursor: pointer;
 }
 
 .chat-citation {

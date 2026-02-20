@@ -422,6 +422,10 @@ function renderExchangeMessage(container, { roleClass, title, content, image = n
     media.src = String(image.url);
     media.alt = String(image.prompt || "Generated image");
     media.loading = "lazy";
+    media.addEventListener("click", () => openImagePreview({
+      url: image.url,
+      title: image.prompt || "Generated image"
+    }));
     body.appendChild(document.createElement("br"));
     body.appendChild(media);
   }
@@ -456,6 +460,31 @@ function renderExchangeMessage(container, { roleClass, title, content, image = n
   }
   el.append(head, body);
   container.appendChild(el);
+}
+
+function openImagePreview({ url, title }) {
+  const modal = byId("image-preview-modal");
+  const img = byId("image-preview-img");
+  const titleEl = byId("image-preview-title");
+  const download = byId("image-preview-download");
+  if (!modal || !img) return;
+  img.src = String(url || "");
+  img.alt = String(title || "Image preview");
+  img.style.transform = "scale(1)";
+  if (titleEl) titleEl.textContent = String(title || "Image Preview");
+  if (download) download.href = String(url || "#");
+  modal.dataset.zoom = "1";
+  modal.classList.remove("hidden");
+}
+
+function closeImagePreview() {
+  const modal = byId("image-preview-modal");
+  const img = byId("image-preview-img");
+  if (img) img.src = "";
+  if (modal) {
+    modal.dataset.zoom = "1";
+  }
+  if (modal) modal.classList.add("hidden");
 }
 
 function apiErrorMessage(payload, fallback = "Request failed") {
@@ -6695,6 +6724,45 @@ function wireEvents() {
     if (event.key === "Enter") {
       event.preventDefault();
       sendSupportPopoutMessage();
+    }
+  });
+  const imageModal = byId("image-preview-modal");
+  const imageBackdrop = imageModal?.querySelector(".image-preview-backdrop");
+  if (imageBackdrop) {
+    imageBackdrop.addEventListener("click", closeImagePreview);
+  }
+  const zoomIn = byId("image-preview-zoom-in");
+  const zoomOut = byId("image-preview-zoom-out");
+  const zoomReset = byId("image-preview-zoom-reset");
+  const previewImg = byId("image-preview-img");
+  function setZoom(next) {
+    const modal = byId("image-preview-modal");
+    if (!modal || !previewImg) return;
+    const clamped = Math.max(0.5, Math.min(4, next));
+    modal.dataset.zoom = String(clamped);
+    previewImg.style.transform = `scale(${clamped})`;
+  }
+  if (zoomIn) {
+    zoomIn.addEventListener("click", () => {
+      const modal = byId("image-preview-modal");
+      const current = Number(modal?.dataset.zoom || 1);
+      setZoom(current + 0.25);
+    });
+  }
+  if (zoomOut) {
+    zoomOut.addEventListener("click", () => {
+      const modal = byId("image-preview-modal");
+      const current = Number(modal?.dataset.zoom || 1);
+      setZoom(current - 0.25);
+    });
+  }
+  if (zoomReset) {
+    zoomReset.addEventListener("click", () => setZoom(1));
+  }
+  byId("image-preview-close").addEventListener("click", closeImagePreview);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeImagePreview();
     }
   });
   document.addEventListener("click", (event) => {

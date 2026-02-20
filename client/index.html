@@ -919,6 +919,25 @@
     </details>
   </aside>
 
+  <div id="image-preview-modal" class="image-preview hidden">
+    <div class="image-preview-backdrop"></div>
+    <div class="image-preview-panel">
+      <div class="image-preview-header">
+        <div id="image-preview-title" class="muted">Image Preview</div>
+        <div class="image-preview-actions">
+          <button id="image-preview-zoom-out" type="button">-</button>
+          <button id="image-preview-zoom-reset" type="button">Reset</button>
+          <button id="image-preview-zoom-in" type="button">+</button>
+          <a id="image-preview-download" class="image-preview-download" href="#" download>Download</a>
+          <button id="image-preview-close" type="button">Close</button>
+        </div>
+      </div>
+      <div class="image-preview-body">
+        <img id="image-preview-img" alt="Preview">
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/app.js"></script>
 </body>
 </html>
