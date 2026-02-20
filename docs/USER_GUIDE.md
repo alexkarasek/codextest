@@ -33,11 +33,17 @@ Inside `Group Chat`, use workspace toggles:
 - `Live Group Chat`: conversational multi-persona orchestration.
 - `Conversation Explorer`: browse and inspect prior conversations.
 
-Inside `Live Group Chat`, use **Debate Mode Options** (in Session Configuration) for structured, round-based debate runs.
+Inside `Live Group Chat`, use **Structured Debate Run** (in Session Configuration) for structured, round-based debate runs.
 
 ### 2) Governance
 Monitoring and analytics:
 - Matrix and visual charts for usage/cost/risk/sentiment.
+- Agent coverage heat map (`Agent x Capability` or `Agent x Topic`) with weighted intensity:
+  - message contribution
+  - token share
+  - novelty
+  - citations/tool usage
+  - user follow-up engagement
 - Drilldowns and filters.
 - Governance Admin Chat (internal governance assistant).
 - Observability signals per conversation:
@@ -86,16 +92,16 @@ What to expect:
 - In `panel` mode, moderator facilitates discussion and asks one follow-up question (no winner).
 - In `debate-work-order` mode, moderator drives toward a practical outcome, open risks, and next actions.
 
-## C) Run Debate Mode
-1. Go to `Chats` -> `Group Chat` -> `Live Group Chat` -> `Debate Mode Options`.
+## C) Run Structured Debate
+1. Go to `Chats` -> `Group Chat` -> `Live Group Chat` -> `Structured Debate Run`.
 2. Complete steps in order:
-- Step 1: topic/context
+- Step 1: topic/context (from Group Chat `Chat Title` and `Shared Context` above)
 - Step 2: topic discovery (optional)
 - Step 3: generate personas from topic (optional)
 - Step 4: debate settings
 - Step 5: attach knowledge (optional)
 - Step 6: select participants
-3. Run debate mode from the embedded Debate Mode Options panel.
+3. Run debate from the embedded Structured Debate Run panel.
 4. Track progress as rounds execute sequentially.
 
 After completion:
@@ -107,6 +113,8 @@ After completion:
 2. Pick conversation type and load a session.
 3. Review exchanges, risk chips, sentiment, and transcript chat/citations.
 4. Transcript Q&A and download are available for debate-mode sessions.
+5. Optional: click **Open Stage Replay** to visualize participant turns with active-speaker highlighting and playback controls.
+6. In Stage Replay, open **Turn Explainability** to inspect orchestration/usage/tool trace details for the active turn.
 
 Use this for top-down review, not only targeted search.
 
@@ -118,6 +126,7 @@ Use this for top-down review, not only targeted search.
 - `systemPrompt`
 3. Save persona.
 4. Edit/duplicate/delete from the persona list.
+5. Optional: set `Avatar` as emoji or image URL to personalize stage replay and roster visuals.
 
 Notes:
 - Optional fields can be inferred from prompt content.

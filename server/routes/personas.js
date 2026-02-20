@@ -61,6 +61,7 @@ function hydratePersonaFromPrompt(persona) {
   const speakingStyle = persona.speakingStyle || {};
   const hydrated = {
     ...persona,
+    avatar: String(persona.avatar || "").trim(),
     description,
     speakingStyle: {
       tone: String(speakingStyle.tone || "").trim() || inferTone(systemPrompt),

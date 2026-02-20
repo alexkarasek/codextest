@@ -90,6 +90,7 @@ Response envelope:
 
 ### Admin (`/api/admin`) - auth + `viewGovernance`
 - `GET /overview`
+- `GET /heatmap?mode=capability|topic&limit=300&maxColumns=8`
 - `GET /debates/:debateId`
 - `GET /personas`
 - `GET /chats`

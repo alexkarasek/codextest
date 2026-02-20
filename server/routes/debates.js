@@ -14,6 +14,7 @@ import {
   formatZodError
 } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
+import { sendMappedError } from "../errorMapper.js";
 import { truncateText } from "../../lib/utils.js";
 import { chatCompletion } from "../../lib/llm.js";
 import { runConversationSession } from "../../src/services/conversationEngine.js";
@@ -104,37 +105,33 @@ router.post("/", async (req, res) => {
     debateId = created.conversationId;
     selectionMeta = created.selectionMeta || selectionMeta;
   } catch (error) {
-    if (error.code === "NO_PERSONAS_AVAILABLE") {
-      sendError(
-        res,
-        400,
-        "NO_PERSONAS_AVAILABLE",
-        "No saved personas available for dynamic selection. Add personas or select ad-hoc personas."
-      );
-      return;
-    }
-    if (error.code === "ENOENT") {
-      sendError(
-        res,
-        404,
-        "NOT_FOUND",
-        "One or more selected personas or knowledge packs were not found."
-      );
-      return;
-    }
-    if (error.code === "INVALID_JSON") {
-      sendError(res, 422, "CORRUPTED_PERSONA", "A selected persona has corrupted JSON.");
-      return;
-    }
-    if (error.code === "VALIDATION_ERROR") {
-      sendError(res, 400, "VALIDATION_ERROR", error.message, error.details);
-      return;
-    }
-    if (error.code === "DUPLICATE_ID") {
-      sendError(res, 409, "DUPLICATE_ID", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to resolve selected personas.");
+    sendMappedError(
+      res,
+      error,
+      [
+        {
+          code: "NO_PERSONAS_AVAILABLE",
+          status: 400,
+          message: "No saved personas available for dynamic selection. Add personas or select ad-hoc personas."
+        },
+        {
+          matchCode: "ENOENT",
+          status: 404,
+          responseCode: "NOT_FOUND",
+          message: "One or more selected personas or knowledge packs were not found."
+        },
+        {
+          matchCode: "INVALID_JSON",
+          code: "INVALID_JSON",
+          status: 422,
+          responseCode: "CORRUPTED_PERSONA",
+          message: "A selected persona has corrupted JSON."
+        },
+        { code: "VALIDATION_ERROR", status: 400, details: (e) => e.details },
+        { code: "DUPLICATE_ID", status: 409 }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to resolve selected personas." }
+    );
     return;
   }
 
@@ -172,11 +169,12 @@ router.get("/:debateId", async (req, res) => {
       }
     });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to load debate.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to load debate." }
+    );
   }
 });
 
@@ -191,11 +189,12 @@ router.get("/:debateId/transcript", async (req, res) => {
     );
     res.send(content);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' transcript not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to read transcript.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' transcript not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to read transcript." }
+    );
   }
 });
 
@@ -219,11 +218,12 @@ router.post("/:debateId/chat", async (req, res) => {
     transcript = debate.transcript || "";
     session = debate.session || null;
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to load debate transcript.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to load debate transcript." }
+    );
     return;
   }
 
@@ -289,11 +289,12 @@ router.post("/:debateId/chat", async (req, res) => {
       citations
     });
   } catch (error) {
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    sendError(res, 502, "LLM_ERROR", `Failed to generate chat response: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." }],
+      { status: 502, code: "LLM_ERROR", message: (e) => `Failed to generate chat response: ${e.message}` }
+    );
   }
 });
 
@@ -313,11 +314,12 @@ router.get("/:debateId/chat", async (req, res) => {
 
     sendOk(res, { history, citations: latestCitations });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to load persisted chat.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to load persisted chat." }
+    );
   }
 });
 

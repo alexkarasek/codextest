@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  getAgentCoverageHeatmap,
   getPersonaAnalytics
 } from "../../lib/adminAnalytics.js";
 import {
@@ -14,6 +15,7 @@ import {
   listConversationProjection
 } from "../../src/services/conversationProjection.js";
 import { sendError, sendOk } from "../response.js";
+import { sendMappedError } from "../errorMapper.js";
 
 const router = express.Router();
 
@@ -35,7 +37,11 @@ router.get("/overview", async (req, res) => {
       pricingNote: projection.pricingNote
     });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load admin overview: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load admin overview: ${e.message}`
+    });
   }
 });
 
@@ -48,11 +54,12 @@ router.get("/debates/:debateId", async (req, res) => {
     }
     sendOk(res, data);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to load debate analytics: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to load debate analytics: ${e.message}` }
+    );
   }
 });
 
@@ -61,7 +68,31 @@ router.get("/personas", async (_req, res) => {
     const data = await getPersonaAnalytics();
     sendOk(res, data);
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load persona analytics: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load persona analytics: ${e.message}`
+    });
+  }
+});
+
+router.get("/heatmap", async (req, res) => {
+  const mode = String(req.query.mode || "capability");
+  const limit = Number(req.query.limit);
+  const maxColumns = Number(req.query.maxColumns);
+  try {
+    const data = await getAgentCoverageHeatmap({
+      mode,
+      limit: Number.isFinite(limit) ? limit : undefined,
+      maxColumns: Number.isFinite(maxColumns) ? maxColumns : undefined
+    });
+    sendOk(res, data);
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load admin heatmap: ${e.message}`
+    });
   }
 });
 
@@ -77,7 +108,11 @@ router.get("/chats", async (req, res) => {
     });
     sendOk(res, { chats: projection.chats });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load chat analytics: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load chat analytics: ${e.message}`
+    });
   }
 });
 
@@ -90,11 +125,12 @@ router.get("/chats/:chatId", async (req, res) => {
     }
     sendOk(res, data);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Chat '${req.params.chatId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to load chat detail: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Chat '${req.params.chatId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to load chat detail: ${e.message}` }
+    );
   }
 });
 
@@ -106,7 +142,11 @@ router.post("/governance-chat/session", async (req, res) => {
     });
     sendOk(res, data, 201);
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to create governance chat session: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to create governance chat session: ${e.message}`
+    });
   }
 });
 
@@ -115,7 +155,11 @@ router.get("/governance-chat", async (_req, res) => {
     const chats = await listGovernanceAdminChats();
     sendOk(res, { chats });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list governance chats: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list governance chats: ${e.message}`
+    });
   }
 });
 
@@ -124,15 +168,15 @@ router.get("/governance-chat/:chatId", async (req, res) => {
     const data = await getGovernanceAdminChat(req.params.chatId);
     sendOk(res, data);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Governance chat '${req.params.chatId}' not found.`);
-      return;
-    }
-    if (error.code === "FORBIDDEN") {
-      sendError(res, 403, "FORBIDDEN", "This chat is not a governance admin session.");
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to load governance chat: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Governance chat '${req.params.chatId}' not found.` },
+        { code: "FORBIDDEN", status: 403, message: "This chat is not a governance admin session." }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to load governance chat: ${e.message}` }
+    );
   }
 });
 
@@ -147,23 +191,17 @@ router.post("/governance-chat/:chatId/messages", async (req, res) => {
     const data = await sendGovernanceAdminChatMessage(req.params.chatId, message);
     sendOk(res, data);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Governance chat '${req.params.chatId}' not found.`);
-      return;
-    }
-    if (error.code === "FORBIDDEN") {
-      sendError(res, 403, "FORBIDDEN", "This chat is not a governance admin session.");
-      return;
-    }
-    if (error.code === "VALIDATION_ERROR") {
-      sendError(res, 400, "VALIDATION_ERROR", error.message);
-      return;
-    }
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    sendError(res, 502, "LLM_ERROR", `Governance chat failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Governance chat '${req.params.chatId}' not found.` },
+        { code: "FORBIDDEN", status: 403, message: "This chat is not a governance admin session." },
+        { code: "VALIDATION_ERROR", status: 400 },
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." }
+      ],
+      { status: 502, code: "LLM_ERROR", message: (e) => `Governance chat failed: ${e.message}` }
+    );
   }
 });
 
@@ -176,7 +214,11 @@ router.post("/governance-chat/refresh-assets", async (_req, res) => {
       generatedAt: data.dataset.generatedAt
     });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to refresh governance assets: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to refresh governance assets: ${e.message}`
+    });
   }
 });
 

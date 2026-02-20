@@ -1057,6 +1057,30 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/admin/heatmap:
+    get:
+      tags: [Admin]
+      summary: Agent coverage heat map
+      parameters:
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [capability, topic]
+            default: capability
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 600, default: 300 }
+        - in: query
+          name: maxColumns
+          schema: { type: integer, minimum: 3, maximum: 16, default: 8 }
+      responses:
+        '200':
+          description: Heatmap metrics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
   /api/admin/debates/{debateId}:
     get:
       tags: [Admin]

@@ -13,19 +13,19 @@ Open `docs/UI_NAVIGATION.md` from the Documentation module at `/documentation`.
 Yes. Open `docs/FIRST_10_MINUTES.md` from the Documentation module.
 
 ## How do I run a debate mode?
-Go to `Chats -> Group Chat -> Live Group Chat -> Debate Mode Options`, complete steps 1–6, then run.
+Go to `Chats -> Persona Chat -> Live Group Chat -> Structured Debate Run`, complete steps 1–6, then run.
 
 ## How do I review old chats/debates?
-Use `Chats -> Group Chat -> Conversation Explorer` to browse sessions and inspect risk/sentiment flags.
+Use `Chats -> Persona Chat -> Conversation Explorer` to browse sessions and inspect risk/sentiment flags.
 
 ## Where do I configure personas and knowledge packs?
 Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
 
 ## Can I attach knowledge packs to a persona chat?
-Yes. In `Chats -> Group Chat -> Live Group Chat`, select knowledge packs in the session configuration before creating the chat.
+Yes. In `Chats -> Persona Chat -> Live Group Chat`, select knowledge packs in the session configuration before creating the chat.
 
 ## Can I move from a persona chat to a debate mode?
-Yes. Use the **Debate Mode Template** button in the persona chat setup to copy personas, knowledge packs, and context into Debate Mode Options.
+Yes. Use the **Debate Mode Template** button in persona chat setup to copy personas, knowledge packs, and context into **Structured Debate Run**.
 
 ## Do personas reply in fixed order in Group Chat?
 No. Replies are mode-driven:

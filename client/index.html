@@ -129,6 +129,7 @@
           <form id="persona-form" class="stack">
             <label>Id (slug) <span class="tip" tabindex="0">?<span class="tip-flyout">Lowercase letters, numbers, and dashes only. Example: policy-analyst.</span></span><input name="id" required placeholder="policy-analyst"></label>
             <label>Display Name <span class="tip" tabindex="0">?<span class="tip-flyout">Human-readable name shown in debate turns.</span></span><input name="displayName" required></label>
+            <label>Avatar (emoji or image URL)<input name="avatar" placeholder="🤖 or https://.../avatar.png"></label>
             <label>Role/Title<input name="role"></label>
             <label>Description<input name="description" placeholder="Optional: auto-derived from prompt if blank"></label>
             <label>System Prompt <span class="tip" tabindex="0">?<span class="tip-flyout">Primary instruction for this persona. Keep it specific and behavior-focused.</span></span><textarea name="systemPrompt" rows="6" required></textarea></label>
@@ -417,114 +418,6 @@
       </div>
     </section>
 
-    <section id="tab-new-debate" class="tab-section hidden">
-      <div class="grid two">
-        <div class="panel stack">
-          <h2>Debate Mode Options <span class="tip" tabindex="0">?<span class="tip-flyout">Configure topic, participants, and settings for debate-mode runs. Turns execute sequentially.</span></span></h2>
-          <div class="setup-step stack">
-            <h3>Step 1: Define Topic</h3>
-            <label class="inline"><input id="debate-use-chat-context" type="checkbox" checked> Use Group Chat title/context</label>
-            <div class="hint">Default is shared fields from Group Chat configuration above. Uncheck to provide debate-specific topic/context.</div>
-            <div id="debate-custom-topic-context" class="stack hidden">
-              <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The central question personas respond to when running debate mode.</span></span><input id="debate-topic" type="text" placeholder="Optional custom debate topic"></label>
-              <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional custom debate context"></textarea></label>
-            </div>
-          </div>
-
-          <details class="setup-advanced">
-            <summary>Advanced Setup (Topic Discovery, Persona Generation, Settings, Knowledge, Participants)</summary>
-
-          <div class="setup-step stack">
-            <h3>Step 2: Discover Topic Sources (Optional)</h3>
-            <div class="hint">Use current events search, or skip and work from your manual topic above.</div>
-            <div class="row">
-              <input id="topic-discovery-query" type="text" placeholder="Search current events (e.g., ai regulation, election policy)">
-              <button id="topic-discovery-search" type="button">Search Events</button>
-              <button id="topic-use-manual" type="button">Use Manual Topic</button>
-            </div>
-            <div id="topic-discovery-results" class="list"></div>
-            <div id="topic-selected-summary" class="status">No current-event topic selected. Manual topic generation is available.</div>
-          </div>
-
-          <div class="setup-step stack">
-            <h3>Step 3: Generate Personas (Optional)</h3>
-            <div class="hint">Generates from selected event topic when available, otherwise from manual Topic/Context.</div>
-            <div class="row">
-              <label>Generated Personas<input id="topic-persona-count" type="number" min="1" max="6" value="3"></label>
-              <button id="topic-generate-personas" type="button">Generate Personas</button>
-            </div>
-            <div id="topic-generated-drafts" class="list"></div>
-          </div>
-
-          <div class="setup-step stack">
-            <h3>Step 4: Configure Debate Mode Settings</h3>
-          <div class="grid two">
-            <label>Rounds <span class="tip" tabindex="0">?<span class="tip-flyout">Number of speaking rounds per persona. Higher values cost more tokens/time.</span></span><input id="debate-rounds" type="number" min="1" max="8" value="3"></label>
-            <label>Max Words / Turn <span class="tip" tabindex="0">?<span class="tip-flyout">Hard target for brevity in each generated turn.</span></span><input id="debate-max-words" type="number" min="40" max="400" value="120"></label>
-            <label>Temperature<input id="debate-temperature" type="number" min="0" max="2" step="0.1" value="0.7"></label>
-            <label>Model<input id="debate-model" type="text" value="gpt-4.1-mini"></label>
-            <label>Source Grounding
-              <select id="debate-source-grounding">
-                <option value="light" selected>Light</option>
-                <option value="strict">Strict</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-          </div>
-          <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
-          <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
-          </div>
-          <div class="setup-step stack">
-          <h3>Step 5: Attach Knowledge (Optional)</h3>
-          <div class="hint">These packs are global to all participants. Persona-specific packs can be set in Persona profiles.</div>
-          <div id="knowledge-pack-list" class="list"></div>
-          </div>
-
-          <div class="setup-step stack">
-            <h3>Step 6: Select Participants</h3>
-            <h3>Available Saved Personas</h3>
-            <div id="available-personas" class="list"></div>
-
-            <h3>Add Ad-hoc Persona <span class="tip" tabindex="0">?<span class="tip-flyout">Use this for one-off participants. Enable “Save persona” to persist into data/personas.</span></span></h3>
-            <div class="stack">
-              <label>Display Name<input id="adhoc-displayName" type="text"></label>
-              <label>Description<input id="adhoc-description" type="text"></label>
-              <label>System Prompt<textarea id="adhoc-systemPrompt" rows="4"></textarea></label>
-              <label>Role<input id="adhoc-role" type="text"></label>
-              <label>Tone<input id="adhoc-tone" type="text"></label>
-              <label>Verbosity<input id="adhoc-verbosity" type="text"></label>
-              <label>Quirks (comma-separated)<input id="adhoc-quirks" type="text"></label>
-              <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
-              <label>Bias/Values<input id="adhoc-bias" type="text"></label>
-              <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
-              <label>Tool IDs (comma-separated)<input id="adhoc-tool-ids" type="text" placeholder="optional: web.fetch, http.request"></label>
-              <label>Knowledge Pack Ids (comma-separated)<input id="adhoc-knowledge-pack-ids" type="text" placeholder="optional: debate-quality-rubric, current-events-analysis"></label>
-              <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
-              <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>
-              <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
-            </div>
-          </div>
-          </details>
-        </div>
-
-        <div class="panel stack">
-          <h2>Debate Participants (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
-          <div class="hint">
-            Run path:
-            <strong>Option A</strong> add/reorder personas manually.
-            <strong>Option B</strong> leave this list empty and the orchestrator auto-selects personas from saved profiles.
-          </div>
-          <div class="row">
-            <button id="debate-sync-from-group" type="button">Use Current Group Personas</button>
-          </div>
-          <div class="hint">Copies currently selected Group Chat personas and knowledge packs into this debate-mode participant list.</div>
-          <div id="selected-personas" class="list"></div>
-          <button id="run-debate" type="button">Run Debate Mode</button>
-          <div id="debate-run-status" class="status"></div>
-        </div>
-      </div>
-    </section>
-
     <section id="tab-simple-chat" class="tab-section">
       <div class="chat-shell">
         <aside id="simple-chat-sidebar" class="panel stack chat-sidebar">
@@ -625,10 +518,112 @@
             <div class="row">
               <button id="persona-chat-template-debate" type="button">Load Debate Mode Template</button>
             </div>
-            <div class="hint">Copies selected personas, knowledge packs, and context into Debate Mode options below.</div>
+            <div class="hint">Copies selected personas, knowledge packs, and context into Structured Debate Run below.</div>
             <details id="persona-chat-debate-details" class="setup-advanced">
-              <summary>Debate Mode Options (Topic, Suggestions, Persona Recommendations, Settings)</summary>
-              <div id="persona-chat-debate-host" class="stack"></div>
+              <summary>Structured Debate Run (Topic Discovery, Persona Recommendations, Settings)</summary>
+              <div id="persona-chat-debate-host" class="stack">
+<div class="grid two">
+        <div class="panel stack">
+          <h2>Structured Debate Run <span class="tip" tabindex="0">?<span class="tip-flyout">Configure participants and settings for a structured debate run within Group Chat. Turns execute sequentially.</span></span></h2>
+          <div class="setup-step stack">
+            <h3>Step 1: Define Topic</h3>
+            <div class="hint">Debate mode uses the Group Chat <strong>Chat Title</strong> and <strong>Shared Context</strong> fields above as the topic/context source.</div>
+            <div class="hint">Update those fields in Session Configuration to change the debate question and background.</div>
+          </div>
+
+          <details class="setup-advanced">
+            <summary>Advanced Setup (Topic Discovery, Persona Generation, Settings, Knowledge, Participants)</summary>
+
+          <div class="setup-step stack">
+            <h3>Step 2: Discover Topic Sources (Optional)</h3>
+            <div class="hint">Use current events search, or skip and work from your manual topic above.</div>
+            <div class="row">
+              <input id="topic-discovery-query" type="text" placeholder="Search current events (e.g., ai regulation, election policy)">
+              <button id="topic-discovery-search" type="button">Search Events</button>
+              <button id="topic-use-manual" type="button">Use Manual Topic</button>
+            </div>
+            <div id="topic-discovery-results" class="list"></div>
+            <div id="topic-selected-summary" class="status">No current-event topic selected. Manual topic generation is available.</div>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 3: Generate Personas (Optional)</h3>
+            <div class="hint">Generates from selected event topic when available, otherwise from manual Topic/Context.</div>
+            <div class="row">
+              <label>Generated Personas<input id="topic-persona-count" type="number" min="1" max="6" value="3"></label>
+              <button id="topic-generate-personas" type="button">Generate Personas</button>
+            </div>
+            <div id="topic-generated-drafts" class="list"></div>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 4: Configure Debate Mode Settings</h3>
+          <div class="grid two">
+            <label>Rounds <span class="tip" tabindex="0">?<span class="tip-flyout">Number of speaking rounds per persona. Higher values cost more tokens/time.</span></span><input id="debate-rounds" type="number" min="1" max="8" value="3"></label>
+            <label>Max Words / Turn <span class="tip" tabindex="0">?<span class="tip-flyout">Hard target for brevity in each generated turn.</span></span><input id="debate-max-words" type="number" min="40" max="400" value="120"></label>
+            <label>Temperature<input id="debate-temperature" type="number" min="0" max="2" step="0.1" value="0.7"></label>
+            <label>Model<input id="debate-model" type="text" value="gpt-4.1-mini"></label>
+            <label>Source Grounding
+              <select id="debate-source-grounding">
+                <option value="light" selected>Light</option>
+                <option value="strict">Strict</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+          <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
+          <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
+          </div>
+          <div class="setup-step stack">
+          <h3>Step 5: Attach Knowledge (Optional)</h3>
+          <div class="hint">These packs are global to all participants. Persona-specific packs can be set in Persona profiles.</div>
+          <div id="knowledge-pack-list" class="list"></div>
+          </div>
+
+          <div class="setup-step stack">
+            <h3>Step 6: Select Participants</h3>
+            <h3>Available Saved Personas</h3>
+            <div id="available-personas" class="list"></div>
+
+            <h3>Add Ad-hoc Persona <span class="tip" tabindex="0">?<span class="tip-flyout">Use this for one-off participants. Enable “Save persona” to persist into data/personas.</span></span></h3>
+            <div class="stack">
+              <label>Display Name<input id="adhoc-displayName" type="text"></label>
+              <label>Description<input id="adhoc-description" type="text"></label>
+              <label>System Prompt<textarea id="adhoc-systemPrompt" rows="4"></textarea></label>
+              <label>Role<input id="adhoc-role" type="text"></label>
+              <label>Tone<input id="adhoc-tone" type="text"></label>
+              <label>Verbosity<input id="adhoc-verbosity" type="text"></label>
+              <label>Quirks (comma-separated)<input id="adhoc-quirks" type="text"></label>
+              <label>Expertise Tags (comma-separated)<input id="adhoc-tags" type="text"></label>
+              <label>Bias/Values<input id="adhoc-bias" type="text"></label>
+              <label>Debate Behavior<textarea id="adhoc-debateBehavior" rows="2"></textarea></label>
+              <label>Tool IDs (comma-separated)<input id="adhoc-tool-ids" type="text" placeholder="optional: web.fetch, http.request"></label>
+              <label>Knowledge Pack Ids (comma-separated)<input id="adhoc-knowledge-pack-ids" type="text" placeholder="optional: debate-quality-rubric, current-events-analysis"></label>
+              <label class="inline"><input id="adhoc-save" type="checkbox"> Save persona</label>
+              <label>Save Id (required if save checked)<input id="adhoc-id" type="text" placeholder="new-persona-id"></label>
+              <button id="add-adhoc" type="button">Add Ad-hoc Persona</button>
+            </div>
+          </div>
+          </details>
+        </div>
+
+        <div class="panel stack">
+          <h2>Debate Participants (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
+          <div class="hint">
+            Run path:
+            <strong>Option A</strong> add/reorder personas manually.
+            <strong>Option B</strong> leave this list empty and the orchestrator auto-selects personas from saved profiles.
+          </div>
+          <div class="row">
+            <button id="debate-sync-from-group" type="button">Use Current Group Personas</button>
+          </div>
+          <div class="hint">Copies currently selected Group Chat personas and knowledge packs into this debate-mode participant list.</div>
+          <div id="selected-personas" class="list"></div>
+            <button id="run-debate" type="button">Run Structured Debate</button>
+          <div id="debate-run-status" class="status"></div>
+        </div>
+      </div>
+              </div>
             </details>
             <h3>Select Personas (One or More)</h3>
             <div class="row">
@@ -676,6 +671,8 @@
             </select>
           </label>
           <button id="load-conversation" type="button">Load</button>
+          <button id="viewer-open-stage" type="button" disabled>Open Stage Replay</button>
+          <span class="hint">Load a conversation first to enable replay.</span>
           <a id="download-transcript" href="#" target="_blank" rel="noopener">Download Transcript</a>
         </div>
         <div id="viewer-history-list" class="list"></div>
@@ -731,6 +728,21 @@
         <div class="panel stack">
           <h2>Visual Analytics</h2>
           <div id="admin-chart-status" class="status">Charts update from current matrix filters.</div>
+          <div class="row">
+            <label>Coverage Heatmap
+              <select id="admin-heatmap-mode">
+                <option value="capability">Agent x Capability</option>
+                <option value="topic">Agent x Topic</option>
+              </select>
+            </label>
+            <button id="admin-heatmap-refresh" type="button">Refresh Heatmap</button>
+          </div>
+          <div id="admin-heatmap-status" class="status">Loading heatmap...</div>
+          <div id="admin-heatmap-note" class="hint">
+            Heatmap score blends message share, token share, novelty, citation/tool activity, and user follow-up engagement.
+          </div>
+          <div id="admin-heatmap-legend" class="hint"></div>
+          <div id="admin-heatmap" class="admin-heatmap"></div>
           <div id="admin-charts" class="stack"></div>
           <h3>Tool Usage Monitor</h3>
           <div class="row">
@@ -816,6 +828,33 @@
       <strong class="muted">Latest citations</strong>
       <div id="support-citations" class="citations-list"></div>
     </div>
+  </aside>
+
+  <aside id="viewer-stage-popout" class="citations-popout support-popout" aria-hidden="true">
+    <div class="citations-header">
+      <h3>Conversation Stage Replay</h3>
+      <button id="viewer-stage-close" type="button">Close</button>
+    </div>
+    <div id="viewer-stage-status" class="status">Load a conversation from Explorer first.</div>
+    <div class="row">
+      <button id="viewer-stage-prev" type="button">Prev</button>
+      <button id="viewer-stage-play" type="button">Play</button>
+      <button id="viewer-stage-next" type="button">Next</button>
+      <label>Speed
+        <select id="viewer-stage-speed">
+          <option value="0.75">0.75x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div id="viewer-stage-roster" class="stage-roster"></div>
+    <div id="viewer-stage-transcript" class="chat-history stage-transcript"></div>
+    <details>
+      <summary>Turn Explainability</summary>
+      <pre id="viewer-stage-trace" class="preview"></pre>
+    </details>
   </aside>
 
   <script type="module" src="/app.js"></script>

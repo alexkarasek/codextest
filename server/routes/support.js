@@ -1,6 +1,7 @@
 import express from "express";
 import { answerSupportMessage } from "../../src/support/supportAgent.js";
 import { sendError, sendOk } from "../response.js";
+import { sendMappedError } from "../errorMapper.js";
 
 const router = express.Router();
 
@@ -18,11 +19,16 @@ router.post("/messages", async (req, res) => {
     });
     sendOk(res, data);
   } catch (error) {
-    if (error.code === "VALIDATION_ERROR") {
-      sendError(res, 400, "VALIDATION_ERROR", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Support response failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ code: "VALIDATION_ERROR", status: 400 }],
+      {
+        status: 500,
+        code: "SERVER_ERROR",
+        message: (e) => `Support response failed: ${e.message}`
+      }
+    );
   }
 });
 

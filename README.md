@@ -399,6 +399,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 ### Admin
 
 - `GET /api/admin/overview`
+- `GET /api/admin/heatmap?mode=capability|topic&limit=300&maxColumns=8`
 - `GET /api/admin/personas`
 - `GET /api/admin/debates/:debateId`
 - `GET /api/admin/chats`
@@ -475,14 +476,14 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - Create task with **Run immediately** checked.
    - Confirm output in task detail includes `image.url` and `files.*`.
    - Confirm persisted files under `data/agentic/autonomy/` and `data/agentic/reports/autonomous-persona-image.md`.
-6. In **New Debate**:
-   - Set a topic and optional context.
+6. In **Persona Chat** (Structured Debate Run):
+   - Set topic using **Chat Title** and optional **Shared Context**.
    - Optionally use **Topic Discovery** to search current events and select one result.
    - Optionally click **Generate Personas from Topic** and add/save generated drafts.
    - Add at least 2 saved personas.
    - Optionally add one ad-hoc persona (with and without save enabled).
    - Reorder personas with Up/Down controls.
-   - Click **Run Debate**.
+   - Click **Run Structured Debate**.
 7. In **Conversation Explorer**:
    - Verify progress updates show round and current speaker.
    - Verify transcript updates while running.

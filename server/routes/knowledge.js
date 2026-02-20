@@ -9,6 +9,7 @@ import {
 } from "../../lib/storage.js";
 import { formatZodError, knowledgePackSchema } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
+import { sendMappedError } from "../errorMapper.js";
 import fs from "fs/promises";
 import { ingestFileToKnowledgePack, ingestUrlToKnowledgePack } from "../../lib/knowledgeIngest.js";
 import { fetchWebDocument, truncateWebText } from "../../lib/webFetch.js";
@@ -33,11 +34,12 @@ router.get("/:id", async (req, res) => {
     }
     sendOk(res, { pack });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Knowledge pack '${req.params.id}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to load knowledge pack.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Knowledge pack '${req.params.id}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to load knowledge pack." }
+    );
   }
 });
 
@@ -91,11 +93,12 @@ router.put("/:id", async (req, res) => {
     await saveKnowledgePack(pack);
     sendOk(res, { pack });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Knowledge pack '${req.params.id}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", "Failed to update knowledge pack.");
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Knowledge pack '${req.params.id}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to update knowledge pack." }
+    );
   }
 });
 
@@ -146,24 +149,16 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
     await saveKnowledgePack(pack);
     sendOk(res, { pack, ingestMeta }, 201);
   } catch (error) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      sendError(res, 400, "FILE_TOO_LARGE", "File exceeds 15MB upload limit.");
-      return;
-    }
-    if (error.code === "MISSING_API_KEY") {
-      sendError(
-        res,
-        400,
-        "MISSING_API_KEY",
-        "LLM provider credentials are required for image OCR ingestion."
-      );
-      return;
-    }
-    if (error.code === "UNSUPPORTED_FILE_TYPE") {
-      sendError(res, 400, "UNSUPPORTED_FILE_TYPE", error.message);
-      return;
-    }
-    sendError(res, 500, "INGEST_FAILED", `Knowledge ingest failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "LIMIT_FILE_SIZE", status: 400, responseCode: "FILE_TOO_LARGE", message: "File exceeds 15MB upload limit." },
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are required for image OCR ingestion." },
+        { code: "UNSUPPORTED_FILE_TYPE", status: 400 }
+      ],
+      { status: 500, code: "INGEST_FAILED", message: (e) => `Knowledge ingest failed: ${e.message}` }
+    );
   }
 });
 
@@ -219,27 +214,18 @@ router.post("/ingest-url", async (req, res) => {
     await saveKnowledgePack(pack);
     sendOk(res, { pack, ingestMeta }, 201);
   } catch (error) {
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are required for summarization.");
-      return;
-    }
-    if (error.code === "BLOCKED_HOSTNAME") {
-      sendError(res, 400, "BLOCKED_HOSTNAME", error.message);
-      return;
-    }
-    if (error.code === "BLOCKED_DOMAIN") {
-      sendError(res, 400, "BLOCKED_DOMAIN", error.message, error.details || null);
-      return;
-    }
-    if (error.code === "FETCH_TOO_LARGE") {
-      sendError(res, 400, "FETCH_TOO_LARGE", error.message);
-      return;
-    }
-    if (error.code === "FETCH_FAILED") {
-      sendError(res, 400, "FETCH_FAILED", error.message);
-      return;
-    }
-    sendError(res, 500, "INGEST_FAILED", `URL ingest failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are required for summarization." },
+        { code: "BLOCKED_HOSTNAME", status: 400 },
+        { code: "BLOCKED_DOMAIN", status: 400, details: (e) => e.details || null },
+        { code: "FETCH_TOO_LARGE", status: 400 },
+        { code: "FETCH_FAILED", status: 400 }
+      ],
+      { status: 500, code: "INGEST_FAILED", message: (e) => `URL ingest failed: ${e.message}` }
+    );
   }
 });
 
@@ -264,23 +250,17 @@ router.post("/preview-url", async (req, res) => {
       }
     });
   } catch (error) {
-    if (error.code === "BLOCKED_HOSTNAME") {
-      sendError(res, 400, "BLOCKED_HOSTNAME", error.message);
-      return;
-    }
-    if (error.code === "BLOCKED_DOMAIN") {
-      sendError(res, 400, "BLOCKED_DOMAIN", error.message, error.details || null);
-      return;
-    }
-    if (error.code === "FETCH_TOO_LARGE") {
-      sendError(res, 400, "FETCH_TOO_LARGE", error.message);
-      return;
-    }
-    if (error.code === "FETCH_FAILED") {
-      sendError(res, 400, "FETCH_FAILED", error.message);
-      return;
-    }
-    sendError(res, 500, "PREVIEW_FAILED", `URL preview failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "BLOCKED_HOSTNAME", status: 400 },
+        { code: "BLOCKED_DOMAIN", status: 400, details: (e) => e.details || null },
+        { code: "FETCH_TOO_LARGE", status: 400 },
+        { code: "FETCH_FAILED", status: 400 }
+      ],
+      { status: 500, code: "PREVIEW_FAILED", message: (e) => `URL preview failed: ${e.message}` }
+    );
   }
 });
 

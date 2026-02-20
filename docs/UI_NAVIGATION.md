@@ -20,7 +20,7 @@ Main areas:
 - Left: chat history list + load controls
 - Right: session setup + message composer + thread
 
-### Subtab: Group Chat
+### Subtab: Persona Chat
 Purpose:
 - Multi-persona collaboration and debate workflows.
 
@@ -30,7 +30,7 @@ Group workspace toggles:
 
 In `Live Group Chat`, you can:
 - attach knowledge packs to ground the entire session
-- open **Debate Mode Options** inside Session Configuration
+- open **Structured Debate Run** inside Session Configuration
 - use **Debate Mode Template** to carry selected personas/knowledge/context into those options
 - choose interaction mode: `chat`, `panel`, or `debate-work-order` (orchestrator routes responses each turn)
 
@@ -93,11 +93,11 @@ Main areas:
 - "I want to chat quickly":
   - `Chats` -> `Simple Chat`
 - "I want multiple personas to collaborate":
-  - `Chats` -> `Group Chat` -> `Live Group Chat`
+  - `Chats` -> `Persona Chat` -> `Live Group Chat`
 - "I want a debate mode transcript":
-  - `Chats` -> `Group Chat` -> `Live Group Chat` -> `Debate Mode Options`
+  - `Chats` -> `Persona Chat` -> `Live Group Chat` -> `Structured Debate Run`
 - "I want to review prior conversations":
-  - `Chats` -> `Group Chat` -> `Conversation Explorer`
+  - `Chats` -> `Persona Chat` -> `Conversation Explorer`
 - "I want metrics and risk/cost views":
   - `Governance`
 - "I want to edit personas/knowledge/security settings":

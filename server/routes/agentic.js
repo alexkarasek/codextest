@@ -29,6 +29,7 @@ import {
   runAgenticTaskSchema
 } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
+import { sendMappedError } from "../errorMapper.js";
 
 const router = express.Router();
 
@@ -89,7 +90,11 @@ router.post("/router/preview", async (req, res) => {
       reasoning: routed.reasoning
     });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to preview team routing: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to preview team routing: ${e.message}`
+    });
   }
 });
 
@@ -209,11 +214,12 @@ router.post("/plan", async (req, res) => {
 
     sendOk(res, { plan });
   } catch (error) {
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to generate plan: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to generate plan: ${e.message}` }
+    );
   }
 });
 
@@ -222,7 +228,11 @@ router.get("/templates", async (_req, res) => {
     const templates = await listTaskTemplates();
     sendOk(res, { templates });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list templates: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list templates: ${e.message}`
+    });
   }
 });
 
@@ -250,7 +260,11 @@ router.post("/templates", async (req, res) => {
     });
     sendOk(res, { template: row }, 201);
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to save template: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to save template: ${e.message}`
+    });
   }
 });
 
@@ -263,7 +277,11 @@ router.delete("/templates/:templateId", async (req, res) => {
     }
     sendOk(res, { deleted: true });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to delete template: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to delete template: ${e.message}`
+    });
   }
 });
 
@@ -273,7 +291,11 @@ router.get("/tasks", async (req, res) => {
     const tasks = await listTasks({ status });
     sendOk(res, { tasks });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list tasks: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list tasks: ${e.message}`
+    });
   }
 });
 
@@ -282,11 +304,12 @@ router.get("/tasks/:taskId", async (req, res) => {
     const task = await getTask(req.params.taskId);
     sendOk(res, { task });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Task '${req.params.taskId}' not found.`);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to load task: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Task '${req.params.taskId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to load task: ${e.message}` }
+    );
   }
 });
 
@@ -317,15 +340,15 @@ router.post("/tasks", async (req, res) => {
 
     sendOk(res, { task: hydrated }, 201);
   } catch (error) {
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    if (error.code === "UNKNOWN_TOOL") {
-      sendError(res, 400, "UNKNOWN_TOOL", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to create task: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." },
+        { code: "UNKNOWN_TOOL", status: 400 }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to create task: ${e.message}` }
+    );
   }
 });
 
@@ -343,19 +366,16 @@ router.post("/tasks/:taskId/run", async (req, res) => {
     });
     sendOk(res, { task });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Task '${req.params.taskId}' not found.`);
-      return;
-    }
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    if (error.code === "UNKNOWN_TOOL") {
-      sendError(res, 400, "UNKNOWN_TOOL", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Task run failed: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Task '${req.params.taskId}' not found.` },
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." },
+        { code: "UNKNOWN_TOOL", status: 400 }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Task run failed: ${e.message}` }
+    );
   }
 });
 
@@ -365,7 +385,11 @@ router.get("/approvals", async (req, res) => {
     const approvals = await listApprovals({ status });
     sendOk(res, { approvals });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list approvals: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list approvals: ${e.message}`
+    });
   }
 });
 
@@ -391,19 +415,16 @@ router.post("/approvals/:approvalId/decision", async (req, res) => {
     }
     sendOk(res, { approval, task });
   } catch (error) {
-    if (error.code === "ENOENT") {
-      sendError(res, 404, "NOT_FOUND", `Approval '${req.params.approvalId}' not found.`);
-      return;
-    }
-    if (error.code === "MISSING_API_KEY") {
-      sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
-      return;
-    }
-    if (error.code === "UNKNOWN_TOOL") {
-      sendError(res, 400, "UNKNOWN_TOOL", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to apply approval: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Approval '${req.params.approvalId}' not found.` },
+        { code: "MISSING_API_KEY", status: 400, message: "LLM provider credentials are not configured." },
+        { code: "UNKNOWN_TOOL", status: 400 }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to apply approval: ${e.message}` }
+    );
   }
 });
 
@@ -412,7 +433,11 @@ router.get("/jobs", async (_req, res) => {
     const jobs = await listJobs();
     sendOk(res, { jobs });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list jobs: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list jobs: ${e.message}`
+    });
   }
 });
 
@@ -430,7 +455,11 @@ router.get("/events", async (req, res) => {
     const rows = await listTaskEvents(safeLimit);
     sendOk(res, { type: "task", events: rows });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to list events: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list events: ${e.message}`
+    });
   }
 });
 
@@ -439,7 +468,11 @@ router.get("/metrics/overview", async (_req, res) => {
     const metrics = await getAgenticMetricsOverview();
     sendOk(res, metrics);
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load agentic metrics: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load agentic metrics: ${e.message}`
+    });
   }
 });
 
@@ -448,7 +481,11 @@ router.get("/mcp/status", async (_req, res) => {
     const status = await getMcpReadinessStatus();
     sendOk(res, status);
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP status: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load MCP status: ${e.message}`
+    });
   }
 });
 
@@ -458,7 +495,11 @@ router.get("/mcp/servers", async (req, res) => {
     const servers = await listResolvedMcpServers({ includeTools });
     sendOk(res, { servers });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP servers: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load MCP servers: ${e.message}`
+    });
   }
 });
 
@@ -472,7 +513,11 @@ router.get("/mcp/servers/:serverId/tools", async (req, res) => {
     }
     sendOk(res, { tools: server.tools || [] });
   } catch (error) {
-    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP tools: ${error.message}`);
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load MCP tools: ${e.message}`
+    });
   }
 });
 
@@ -499,15 +544,15 @@ router.post("/mcp/servers/:serverId/call", async (req, res) => {
     });
     sendOk(res, { output });
   } catch (error) {
-    if (error.code === "MCP_SERVER_NOT_FOUND") {
-      sendError(res, 404, "NOT_FOUND", error.message);
-      return;
-    }
-    if (error.code === "MCP_TOOL_NOT_FOUND") {
-      sendError(res, 404, "NOT_FOUND", error.message);
-      return;
-    }
-    sendError(res, 500, "SERVER_ERROR", `Failed to run MCP tool: ${error.message}`);
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "MCP_SERVER_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" },
+        { code: "MCP_TOOL_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to run MCP tool: ${e.message}` }
+    );
   }
 });
 

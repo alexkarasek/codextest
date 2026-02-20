@@ -25,6 +25,10 @@ Stabilize and modularize the current local-first workbench so it is easier to ma
   - prompt/payload traces (with masking/redaction)
   - per-turn token consumption and estimated cost details
   - tool execution linkage to conversation exchanges
+- Add an Agent x Topic/Capability coverage heat map to governance:
+  - rows = agents/personas
+  - columns = topics or capability dimensions
+  - weighted intensity = message contribution + token share + novelty + citations/tool usage + follow-up engagement
 
 ## Target Architecture
 

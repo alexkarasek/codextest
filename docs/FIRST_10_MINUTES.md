@@ -24,7 +24,7 @@ Tip: keep the prompt simple for first test, then iterate.
 3. Confirm it appears in the library.
 
 ## 5:00-7:00 Run a quick group chat
-1. Go to `Chats -> Group Chat -> Live Group Chat`.
+1. Go to `Chats -> Persona Chat -> Live Group Chat`.
 2. Create a new group chat session.
 3. Optionally attach a knowledge pack for this chat session.
 4. Select your persona.
@@ -35,13 +35,13 @@ Expected result:
 - Persona response appears.
 
 ## 7:00-8:30 Run a debate mode
-1. Go to `Chats -> Group Chat -> Live Group Chat -> Debate Mode Options`.
-2. Enter topic.
+1. Go to `Chats -> Persona Chat -> Live Group Chat -> Structured Debate Run`.
+2. Enter topic via `Chat Title` and optional `Shared Context`.
 3. Select personas (or leave empty for dynamic selection).
 4. Run debate.
 
 ## 8:30-9:30 Review history
-1. Go to `Chats -> Group Chat -> Conversation Explorer`.
+1. Go to `Chats -> Persona Chat -> Conversation Explorer`.
 2. Load your new chat/debate session.
 3. Check exchange-level risk/sentiment indicators.
 

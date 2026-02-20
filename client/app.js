@@ -22,6 +22,11 @@ const state = {
   adminPersonas: null,
   adminChats: null,
   adminUsage: null,
+  adminHeatmap: {
+    mode: "capability",
+    data: null,
+    loading: false
+  },
   adminToolUsage: {
     events: [],
     loading: false
@@ -91,6 +96,13 @@ const state = {
       debate: [],
       group: [],
       simple: []
+    },
+    stage: {
+      replay: null,
+      activeIndex: 0,
+      playing: false,
+      speed: 1,
+      timerId: null
     }
   }
 };
@@ -706,7 +718,7 @@ function currentHelpGuide() {
         points: [
           "Create personas with system prompts; optional fields can be inferred.",
           "Attach persona-specific knowledge packs for specialized responses.",
-          "Select personas in Persona Chat configuration, then use Debate Mode Options when needed."
+          "Select personas in Persona Chat configuration, then use Structured Debate Run when needed."
         ]
       };
     }
@@ -943,6 +955,303 @@ function clearSupportPopoutHistory() {
   state.supportConcierge.citations = [];
   byId("support-status").textContent = "Support conversation cleared.";
   renderSupportPopout();
+}
+
+function stopViewerStagePlayback() {
+  if (state.viewer.stage.timerId) {
+    clearInterval(state.viewer.stage.timerId);
+    state.viewer.stage.timerId = null;
+  }
+  state.viewer.stage.playing = false;
+  const playBtn = byId("viewer-stage-play");
+  if (playBtn) playBtn.textContent = "Play";
+}
+
+function fallbackAvatarForName(name, role = "") {
+  const low = `${String(name || "")} ${String(role || "")}`.toLowerCase();
+  if (low.includes("moderator") || low.includes("orchestrator")) return "🎙️";
+  if (low.includes("assistant")) return "🤖";
+  if (low.includes("policy") || low.includes("governance")) return "📜";
+  if (low.includes("market") || low.includes("finance")) return "📈";
+  if (low.includes("developer") || low.includes("engineer")) return "💻";
+  if (low.includes("design") || low.includes("creative")) return "🎨";
+  if (low.includes("poker") || low.includes("casino")) return "♠️";
+  if (low.includes("nutrition") || low.includes("health")) return "🥗";
+  return "🧠";
+}
+
+function normalizeAvatarValue(value, name, role = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return { type: "emoji", value: fallbackAvatarForName(name, role) };
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("/")) return { type: "image", value: raw };
+  return { type: "emoji", value: raw };
+}
+
+function buildPersonaMetaMapFromSession(session) {
+  const map = new Map();
+  (session?.personas || []).forEach((p) => {
+    if (!p?.id) return;
+    map.set(String(p.id), {
+      displayName: p.displayName || p.id,
+      role: p.role || "",
+      avatar: normalizeAvatarValue(p.avatar, p.displayName || p.id, p.role || "")
+    });
+  });
+  return map;
+}
+
+function renderViewerStageButtonState() {
+  const btn = byId("viewer-open-stage");
+  if (!btn) return;
+  const hasReplay = Boolean(state.viewer.stage.replay && state.viewer.stage.replay.entries?.length);
+  btn.disabled = !hasReplay;
+}
+
+function setViewerStageReplay(replay, { preserveIndex = false } = {}) {
+  const prev = state.viewer.stage.replay;
+  const prevIndex = state.viewer.stage.activeIndex || 0;
+  state.viewer.stage.replay = replay || null;
+  if (!replay || !Array.isArray(replay.entries) || !replay.entries.length) {
+    state.viewer.stage.activeIndex = 0;
+    stopViewerStagePlayback();
+    renderViewerStageButtonState();
+    renderViewerStagePopout();
+    return;
+  }
+  if (
+    preserveIndex &&
+    prev &&
+    prev.type === replay.type &&
+    String(prev.title || "") === String(replay.title || "")
+  ) {
+    state.viewer.stage.activeIndex = Math.max(0, Math.min(replay.entries.length - 1, prevIndex));
+  } else {
+    state.viewer.stage.activeIndex = 0;
+    stopViewerStagePlayback();
+  }
+  renderViewerStageButtonState();
+  renderViewerStagePopout();
+}
+
+function stageEntryFromChatMessage(m, idx, personaMap = new Map()) {
+  const role = String(m?.role || "assistant");
+  const personaMeta = personaMap.get(String(m?.speakerId || "")) || null;
+  const speakerLabel =
+    role === "user"
+      ? "You"
+      : role === "orchestrator"
+        ? "Moderator"
+        : String(m?.displayName || personaMeta?.displayName || m?.speakerId || "Assistant");
+  const speakerKey =
+    role === "user"
+      ? "user"
+      : role === "orchestrator"
+        ? "moderator"
+        : String(m?.speakerId || m?.displayName || `assistant-${idx}`);
+  const trace = {
+    turnId: m?.turnId || null,
+    speakerId: m?.speakerId || null,
+    usage: m?.usage || null,
+    citations: Array.isArray(m?.citations) ? m.citations.length : 0,
+    toolExecution: m?.toolExecution || null,
+    rationale: m?.rationale || null,
+    selectedSpeakerIds: m?.selectedSpeakerIds || null,
+    omittedCount: m?.omittedCount || null
+  };
+  return {
+    id: `${m?.turnId || 0}-${idx}`,
+    speakerKey,
+    speakerLabel,
+    role,
+    content: String(m?.content || ""),
+    round: Number(m?.turnId || 0) || null,
+    avatar: role === "user"
+      ? normalizeAvatarValue("🙂", "You", role)
+      : role === "orchestrator"
+        ? normalizeAvatarValue("", "Moderator", role)
+        : normalizeAvatarValue(personaMeta?.avatar?.value || personaMeta?.avatar || "", speakerLabel, personaMeta?.role || role),
+    trace
+  };
+}
+
+function buildViewerStageReplayFromChat(data, type) {
+  const session = data?.session || {};
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  const personaMap = buildPersonaMetaMapFromSession(session);
+  const entries = messages.map((m, idx) => stageEntryFromChatMessage(m, idx, personaMap));
+  const bySpeaker = new Map();
+  entries.forEach((entry) => {
+    if (!bySpeaker.has(entry.speakerKey)) {
+      bySpeaker.set(entry.speakerKey, {
+        key: entry.speakerKey,
+        label: entry.speakerLabel,
+        role: entry.role,
+        avatar: entry.avatar
+      });
+    }
+  });
+  return {
+    title: session.title || session.topic || "Conversation",
+    type,
+    entries,
+    participants: [...bySpeaker.values()]
+  };
+}
+
+function buildViewerStageReplayFromDebate(session, debateDetail = null) {
+  const turns = Array.isArray(session?.turns) ? session.turns : [];
+  const personaMap = buildPersonaMetaMapFromSession(session);
+  const payloadByKey = new Map();
+  const llmByKey = new Map();
+  const orchestrationByKey = new Map();
+  const detailObs = debateDetail?.observability || {};
+  (detailObs.payloadTraces || []).forEach((row) => {
+    const key = `${row?.round || 0}|${row?.speakerId || "moderator"}`;
+    payloadByKey.set(key, row);
+  });
+  (detailObs.llmTraces || []).forEach((row) => {
+    const key = `${row?.round || 0}|${row?.speakerId || "moderator"}`;
+    llmByKey.set(key, row);
+  });
+  (detailObs.orchestration || []).forEach((row) => {
+    const key = `${row?.round || 0}|${row?.speaker || row?.speakerId || "moderator"}`;
+    orchestrationByKey.set(key, row);
+  });
+  const entries = turns.map((turn, idx) => {
+    const isModerator = turn.type === "moderator";
+    const speakerLabel = isModerator ? "Moderator" : String(turn.displayName || turn.speakerId || `Speaker ${idx + 1}`);
+    const speakerKey = isModerator ? "moderator" : String(turn.speakerId || turn.displayName || `speaker-${idx}`);
+    const meta = personaMap.get(String(turn.speakerId || "")) || null;
+    const traceKey = `${turn.round || 0}|${isModerator ? "moderator" : turn.speakerId || "moderator"}`;
+    return {
+      id: `${turn.round || 0}-${idx}`,
+      speakerKey,
+      speakerLabel,
+      role: isModerator ? "orchestrator" : "persona",
+      content: String(turn.text || ""),
+      round: Number(turn.round || 0) || null,
+      avatar: isModerator
+        ? normalizeAvatarValue("", "Moderator", "moderator")
+        : normalizeAvatarValue(meta?.avatar?.value || meta?.avatar || "", speakerLabel, meta?.role || "persona"),
+      trace: {
+        llm: llmByKey.get(traceKey) || null,
+        payload: payloadByKey.get(traceKey) || null,
+        orchestration: orchestrationByKey.get(traceKey) || null
+      }
+    };
+  });
+  const bySpeaker = new Map();
+  entries.forEach((entry) => {
+    if (!bySpeaker.has(entry.speakerKey)) {
+      bySpeaker.set(entry.speakerKey, {
+        key: entry.speakerKey,
+        label: entry.speakerLabel,
+        role: entry.role,
+        avatar: entry.avatar
+      });
+    }
+  });
+  return {
+    title: session?.topic || "Debate",
+    type: "debate",
+    entries,
+    participants: [...bySpeaker.values()]
+  };
+}
+
+function renderViewerStagePopout() {
+  const status = byId("viewer-stage-status");
+  const roster = byId("viewer-stage-roster");
+  const transcript = byId("viewer-stage-transcript");
+  const trace = byId("viewer-stage-trace");
+  if (!status || !roster || !transcript || !trace) return;
+  const replay = state.viewer.stage.replay;
+  roster.innerHTML = "";
+  transcript.innerHTML = "";
+  if (!replay || !Array.isArray(replay.entries) || !replay.entries.length) {
+    status.textContent = "Load a conversation from Explorer first.";
+    transcript.textContent = "No replay data.";
+    return;
+  }
+  const idx = Math.max(0, Math.min(state.viewer.stage.activeIndex, replay.entries.length - 1));
+  state.viewer.stage.activeIndex = idx;
+  const active = replay.entries[idx];
+  status.textContent = `${String(replay.type || "conversation").toUpperCase()} | ${replay.title} | Turn ${idx + 1}/${replay.entries.length} | Active: ${active.speakerLabel}`;
+
+  (replay.participants || []).forEach((p) => {
+    const card = document.createElement("div");
+    card.className = `stage-card ${p.key === active.speakerKey ? "active" : ""}`;
+    const avatar = p.avatar || normalizeAvatarValue("", p.label, p.role);
+    const avatarHtml =
+      avatar.type === "image"
+        ? `<span class="stage-avatar"><img src="${avatar.value}" alt="${p.label} avatar"></span>`
+        : `<span class="stage-avatar">${avatar.value}</span>`;
+    card.innerHTML = `${avatarHtml}<div><div><strong>${p.label}</strong></div><div class="muted">${p.role || "speaker"}</div></div>`;
+    roster.appendChild(card);
+  });
+
+  replay.entries.forEach((entry, entryIdx) => {
+    const row = document.createElement("div");
+    row.className = `stage-line ${entryIdx === idx ? "active" : ""}`;
+    const roundText = entry.round ? ` (Round ${entry.round})` : "";
+    row.innerHTML = `<div class="muted"><strong>${entry.speakerLabel}</strong>${roundText}</div><div>${entry.content}</div>`;
+    row.addEventListener("click", () => {
+      state.viewer.stage.activeIndex = entryIdx;
+      renderViewerStagePopout();
+    });
+    transcript.appendChild(row);
+  });
+  const activeLine = transcript.querySelector(".stage-line.active");
+  if (activeLine) {
+    activeLine.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  trace.textContent = JSON.stringify(active.trace || { note: "No trace available for this turn." }, null, 2);
+}
+
+function stepViewerStage(delta = 1) {
+  const replay = state.viewer.stage.replay;
+  if (!replay || !replay.entries.length) return;
+  const max = replay.entries.length - 1;
+  state.viewer.stage.activeIndex = Math.max(0, Math.min(max, state.viewer.stage.activeIndex + delta));
+  renderViewerStagePopout();
+}
+
+function toggleViewerStagePlayback() {
+  const replay = state.viewer.stage.replay;
+  if (!replay || !replay.entries.length) return;
+  if (state.viewer.stage.playing) {
+    stopViewerStagePlayback();
+    return;
+  }
+  state.viewer.stage.playing = true;
+  const playBtn = byId("viewer-stage-play");
+  if (playBtn) playBtn.textContent = "Pause";
+  const tickMs = Math.max(500, Math.round(1800 / Math.max(0.25, Number(state.viewer.stage.speed || 1))));
+  state.viewer.stage.timerId = setInterval(() => {
+    const max = replay.entries.length - 1;
+    if (state.viewer.stage.activeIndex >= max) {
+      stopViewerStagePlayback();
+      return;
+    }
+    state.viewer.stage.activeIndex += 1;
+    renderViewerStagePopout();
+  }, tickMs);
+}
+
+function openViewerStagePopout() {
+  const popout = byId("viewer-stage-popout");
+  if (!popout) return;
+  popout.classList.add("open");
+  popout.setAttribute("aria-hidden", "false");
+  renderViewerStagePopout();
+}
+
+function closeViewerStagePopout() {
+  const popout = byId("viewer-stage-popout");
+  if (!popout) return;
+  stopViewerStagePlayback();
+  popout.classList.remove("open");
+  popout.setAttribute("aria-hidden", "true");
 }
 
 function renderChatHistory() {
@@ -1193,19 +1502,13 @@ function applyDebateTemplateFromPersonaChat() {
   renderKnowledgePacks();
   renderKnowledgeStudioList();
 
-  const debateTopicEl = byId("debate-topic");
-  const debateContextEl = byId("debate-context");
-  const useChatContextEl = byId("debate-use-chat-context");
   const chatTitle = byId("persona-chat-title").value.trim();
   const chatContext = byId("persona-chat-context").value.trim();
-  if (useChatContextEl) useChatContextEl.checked = true;
-  if (!debateTopicEl.value.trim()) {
-    debateTopicEl.value =
-      chatTitle && chatTitle !== "Persona Collaboration Chat" ? chatTitle : "Untitled Debate";
-  }
-  if (!debateContextEl.value.trim() && chatContext) {
-    debateContextEl.value = chatContext;
-  }
+  setUnifiedDebateTopicContext(
+    chatTitle && chatTitle !== "Persona Collaboration Chat" ? chatTitle : "Untitled Debate",
+    chatContext,
+    { onlyIfEmptyContext: true }
+  );
 
   const advanced = document.querySelector("#persona-chat-debate-host details.setup-advanced");
   if (advanced) advanced.open = true;
@@ -1217,7 +1520,7 @@ function applyDebateTemplateFromPersonaChat() {
   const debateHost = byId("persona-chat-debate-host");
   if (debateHost) debateHost.scrollIntoView({ behavior: "smooth", block: "start" });
   syncDebateModeTopicContextFromGroup(true);
-  byId("debate-run-status").textContent = "Debate mode template loaded from persona chat.";
+  byId("debate-run-status").textContent = "Structured debate template loaded from persona chat.";
 }
 
 function syncDebateParticipantsFromPersonaChat() {
@@ -1233,20 +1536,31 @@ function syncDebateParticipantsFromPersonaChat() {
   byId("debate-run-status").textContent = "Debate participants synced from current Group Chat selection.";
 }
 
+function getUnifiedDebateTopic() {
+  return String(byId("persona-chat-title")?.value || "").trim();
+}
+
+function getUnifiedDebateContext() {
+  return String(byId("persona-chat-context")?.value || "").trim();
+}
+
+function setUnifiedDebateTopicContext(topic = "", context = "", { onlyIfEmptyContext = false } = {}) {
+  const normalizedTopic = String(topic || "").trim();
+  const normalizedContext = String(context || "").trim();
+  if (normalizedTopic && byId("persona-chat-title")) {
+    byId("persona-chat-title").value = normalizedTopic;
+  }
+  if (normalizedContext && byId("persona-chat-context")) {
+    const current = String(byId("persona-chat-context").value || "").trim();
+    if (!onlyIfEmptyContext || !current) {
+      byId("persona-chat-context").value = normalizedContext;
+    }
+  }
+}
+
 function syncDebateModeTopicContextFromGroup(force = false) {
-  const useGroup = Boolean(byId("debate-use-chat-context")?.checked);
-  const topicEl = byId("debate-topic");
-  const contextEl = byId("debate-context");
-  const customFields = byId("debate-custom-topic-context");
-  if (!topicEl || !contextEl) return;
-  if (customFields) customFields.classList.toggle("hidden", useGroup);
-  topicEl.disabled = useGroup;
-  contextEl.disabled = useGroup;
-  if (!useGroup && !force) return;
-  const chatTitle = String(byId("persona-chat-title")?.value || "").trim();
-  const chatContext = String(byId("persona-chat-context")?.value || "").trim();
-  topicEl.value = chatTitle || "Untitled Debate";
-  contextEl.value = chatContext;
+  if (!force && !byId("persona-chat-title") && !byId("persona-chat-context")) return;
+  setUnifiedDebateTopicContext(getUnifiedDebateTopic() || "Untitled Debate", getUnifiedDebateContext());
 }
 
 function updatePersonaChatModeHelp() {
@@ -1817,7 +2131,6 @@ function setGroupWorkspace(view) {
   state.groupWorkspace = ["live", "debate-viewer"].includes(view) ? view : "live";
   const groupActive = state.mainTab === "chats" && state.chatsView === "group";
   byId("tab-persona-chat").classList.toggle("active", groupActive && state.groupWorkspace === "live");
-  byId("tab-new-debate").classList.toggle("active", false);
   byId("tab-viewer").classList.toggle("active", groupActive && state.groupWorkspace === "debate-viewer");
   byId("group-work-live").classList.toggle("active", state.groupWorkspace === "live");
   byId("group-work-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
@@ -1835,7 +2148,6 @@ function setChatsView(view) {
   state.chatsView = view === "group" ? "group" : "simple";
   byId("tab-simple-chat").classList.toggle("active", state.mainTab === "chats" && state.chatsView === "simple");
   byId("tab-persona-chat").classList.remove("active");
-  byId("tab-new-debate").classList.remove("active");
   byId("tab-viewer").classList.remove("active");
   byId("subnav-group-work").classList.toggle("hidden", !(state.mainTab === "chats" && state.chatsView === "group"));
   setSubtabActive("chats", state.chatsView);
@@ -1851,17 +2163,6 @@ function setChatsView(view) {
     renderPersonaChatHistory();
     loadPersonaChatSessions();
   }
-}
-
-function mountDebateModeOptionsIntoPersonaConfig() {
-  const host = byId("persona-chat-debate-host");
-  const source = byId("tab-new-debate");
-  if (!host || !source || host.dataset.mounted === "true") return;
-  const debateGrid = source.querySelector(":scope > .grid");
-  if (!debateGrid) return;
-  host.appendChild(debateGrid);
-  host.dataset.mounted = "true";
-  source.classList.add("hidden");
 }
 
 function setSimpleSidebarCollapsed(collapsed) {
@@ -1948,6 +2249,7 @@ function personaFromForm() {
   return {
     id: String(fd.get("id") || "").trim(),
     displayName: String(fd.get("displayName") || "").trim(),
+    avatar: String(fd.get("avatar") || "").trim(),
     role: String(fd.get("role") || "").trim(),
     description: String(fd.get("description") || "").trim(),
     systemPrompt: String(fd.get("systemPrompt") || "").trim(),
@@ -2007,6 +2309,7 @@ function fillPersonaForm(persona) {
   form.elements.id.readOnly = true;
   form.elements.id.title = "ID is locked while editing. Use Duplicate to create a new ID.";
   form.elements.displayName.value = persona.displayName || "";
+  form.elements.avatar.value = persona.avatar || "";
   form.elements.role.value = persona.role || "";
   form.elements.description.value = persona.description || "";
   form.elements.systemPrompt.value = persona.systemPrompt || "";
@@ -2066,6 +2369,7 @@ function renderAvailablePersonas() {
     card.className = "card";
     card.innerHTML = `
       <div class="card-title">${persona.displayName} <span class="muted">(${persona.id})</span></div>
+      <div>Avatar: ${persona.avatar || fallbackAvatarForName(persona.displayName, persona.role)}</div>
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
       <div>Knowledge: ${(persona.knowledgePackIds || []).join(", ") || "none"}</div>
@@ -2074,7 +2378,7 @@ function renderAvailablePersonas() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate Mode";
+    addBtn.textContent = "Add to Debate Participants";
     addBtn.addEventListener("click", () => addSavedPersonaToSelection(persona.id));
 
     card.appendChild(addBtn);
@@ -2110,6 +2414,7 @@ function renderPersonaList() {
     card.className = "card";
     card.innerHTML = `
       <div class="card-title">${persona.displayName} <span class="muted">(${persona.id})</span></div>
+      <div>Avatar: ${persona.avatar || fallbackAvatarForName(persona.displayName, persona.role)}</div>
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
       <div>Tools: ${(persona.toolIds || []).join(", ") || "none"}</div>
@@ -2162,7 +2467,7 @@ function renderPersonaList() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate Mode";
+    addBtn.textContent = "Add to Debate Participants";
     addBtn.addEventListener("click", () => addSavedPersonaToSelection(persona.id));
 
     actions.append(editBtn, duplicateBtn, delBtn, addBtn);
@@ -2320,10 +2625,9 @@ function renderTopicDiscoveryResults() {
     useBtn.disabled = state.topicDiscovery.selected?.url === item.url;
     useBtn.addEventListener("click", () => {
       state.topicDiscovery.selected = normalizeTopicSource(item);
-      byId("debate-topic").value = item.title || byId("debate-topic").value;
-      if (!byId("debate-context").value.trim()) {
-        byId("debate-context").value = item.snippet || "";
-      }
+      setUnifiedDebateTopicContext(item.title || getUnifiedDebateTopic(), item.snippet || "", {
+        onlyIfEmptyContext: true
+      });
       renderSelectedTopicSummary();
       renderTopicDiscoveryResults();
     });
@@ -2407,7 +2711,7 @@ function renderKnowledgeStudioList() {
     const attachBtn = document.createElement("button");
     attachBtn.type = "button";
     const already = state.selectedKnowledgePackIds.includes(pack.id);
-    attachBtn.textContent = already ? "Attached in Debate Mode Options" : "Attach for Debate Mode";
+    attachBtn.textContent = already ? "Attached in Structured Debate" : "Attach for Structured Debate";
     attachBtn.disabled = already;
     attachBtn.addEventListener("click", () => {
       if (!state.selectedKnowledgePackIds.includes(pack.id)) {
@@ -2463,7 +2767,7 @@ function renderGeneratedTopicDrafts() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate Mode";
+    addBtn.textContent = "Add to Debate Participants";
     addBtn.addEventListener("click", () => {
       state.selectedPersonas.push({
         type: "adhoc",
@@ -2528,8 +2832,8 @@ async function searchCurrentEventTopics() {
 }
 
 async function generatePersonasFromSelectedTopic() {
-  const manualTopic = byId("debate-topic").value.trim();
-  const manualContext = byId("debate-context").value.trim();
+  const manualTopic = getUnifiedDebateTopic();
+  const manualContext = getUnifiedDebateContext();
 
   let selected = state.topicDiscovery.selected;
   if (!selected && Array.isArray(state.topicDiscovery.results) && state.topicDiscovery.results.length) {
@@ -2581,8 +2885,8 @@ async function generatePersonasFromSelectedTopic() {
 }
 
 function useManualTopicForGeneration() {
-  const topic = byId("debate-topic").value.trim();
-  const context = byId("debate-context").value.trim();
+  const topic = getUnifiedDebateTopic();
+  const context = getUnifiedDebateContext();
   if (!topic) {
     byId("topic-selected-summary").textContent = "Enter a Topic/Title first, then click Use Manual Topic.";
     return;
@@ -2949,6 +3253,142 @@ function getFilteredGovernanceData() {
   const debates = applyDebateFilter(state.adminOverview?.debates || []);
   const chats = applyChatFilter(state.adminChats?.chats || state.adminOverview?.chats || []);
   return { debates, chats };
+}
+
+function renderAdminHeatmap() {
+  const statusEl = byId("admin-heatmap-status");
+  const container = byId("admin-heatmap");
+  if (!statusEl || !container) return;
+  const modeSel = byId("admin-heatmap-mode");
+  if (modeSel) modeSel.value = state.adminHeatmap.mode || "capability";
+
+  if (state.adminHeatmap.loading) {
+    statusEl.textContent = "Loading heatmap...";
+    return;
+  }
+
+  const data = state.adminHeatmap.data;
+  if (!data || !Array.isArray(data.rows) || !Array.isArray(data.columns)) {
+    statusEl.textContent = "No heatmap data loaded.";
+    container.innerHTML = "";
+    return;
+  }
+
+  const rows = data.rows || [];
+  const columns = data.columns || [];
+  const legendEl = byId("admin-heatmap-legend");
+  const noteEl = byId("admin-heatmap-note");
+  if (noteEl) {
+    noteEl.textContent =
+      "Composite score (0-100): weighted message contribution + token share + novelty + citations/tool usage + follow-up engagement.";
+  }
+  if (legendEl) {
+    legendEl.innerHTML = `
+      <div class="heat-legend">
+        <span class="heat-legend-item"><span class="heat-legend-chip heat-1"></span>0-20 Low</span>
+        <span class="heat-legend-item"><span class="heat-legend-chip heat-2"></span>21-40 Light</span>
+        <span class="heat-legend-item"><span class="heat-legend-chip heat-3"></span>41-60 Medium</span>
+        <span class="heat-legend-item"><span class="heat-legend-chip heat-4"></span>61-80 High</span>
+        <span class="heat-legend-item"><span class="heat-legend-chip heat-5"></span>81-100 Very High</span>
+      </div>
+    `;
+  }
+
+  const scoreClass = (score) => {
+    if (score >= 81) return "heat-5";
+    if (score >= 61) return "heat-4";
+    if (score >= 41) return "heat-3";
+    if (score >= 21) return "heat-2";
+    return "heat-1";
+  };
+
+  container.innerHTML = `
+    <table class="admin-heatmap-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          ${columns.map((col) => `<th>${col.label}</th>`).join("")}
+          <th>Avg</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((row) => {
+            const cells = columns.map((col) => {
+              const cell = (row.cells || []).find((c) => c.key === col.key) || { score: 0, metrics: {} };
+              const score = Number(cell.score || 0);
+              const cls = scoreClass(score);
+              const metrics = cell.metrics || {};
+              const msgCount = Number(metrics.messageCount || 0).toFixed(1);
+              const msgNorm = `${Math.round(Number(metrics.messageNormalized || 0) * 100)}%`;
+              const tokenShare = `${Math.round(Number(metrics.tokenShare || 0) * 100)}%`;
+              const novelty = `${Math.round(Number(metrics.novelty || 0) * 100)}%`;
+              const opsRate = `${Math.round(Number(metrics.operationsRate || 0) * 100)}%`;
+              const opsNorm = `${Math.round(Number(metrics.operationsNormalized || 0) * 100)}%`;
+              const engagement = `${Math.round(Number(metrics.engagement || 0) * 100)}%`;
+              const contrib = metrics.weightedContributions || {};
+              const tooltip = [
+                `Score ${score.toFixed(1)} / 100`,
+                `Messages: ${msgCount} (norm ${msgNorm})`,
+                `Token share: ${tokenShare}`,
+                `Novelty: ${novelty}`,
+                `Ops rate: ${opsRate} (norm ${opsNorm})`,
+                `Engagement: ${engagement}`,
+                "",
+                "Weighted contribution to score:",
+                `- Message: ${Number(contrib.messageCount || 0).toFixed(2)}`,
+                `- Token: ${Number(contrib.tokenShare || 0).toFixed(2)}`,
+                `- Novelty: ${Number(contrib.novelty || 0).toFixed(2)}`,
+                `- Ops: ${Number(contrib.operations || 0).toFixed(2)}`,
+                `- Engagement: ${Number(contrib.engagement || 0).toFixed(2)}`
+              ].join("\n");
+              return `
+                <td>
+                  <div class="heat-cell ${cls}" title="${tooltip}">
+                    <span class="heat-score">${score.toFixed(1)}</span>
+                    <span class="heat-meta">msg ${msgCount} | tok ${tokenShare} | nov ${novelty}</span>
+                  </div>
+                </td>
+              `;
+            });
+            return `
+              <tr>
+                <td><strong>${row.agentName || row.agentId}</strong></td>
+                ${cells.join("")}
+                <td><strong>${Number(row.averageScore || 0).toFixed(1)}</strong></td>
+              </tr>
+            `;
+          })
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  statusEl.textContent = `Heatmap: ${rows.length} agent(s) x ${columns.length} ${
+    state.adminHeatmap.mode === "topic" ? "topic" : "capability"
+  } column(s).`;
+}
+
+async function loadAdminHeatmap() {
+  state.adminHeatmap.loading = true;
+  renderAdminHeatmap();
+  try {
+    const mode = state.adminHeatmap.mode || "capability";
+    const data = await apiGet(
+      `/api/admin/heatmap?mode=${encodeURIComponent(mode)}&limit=300&maxColumns=8`
+    );
+    state.adminHeatmap.data = data;
+    renderAdminHeatmap();
+  } catch (error) {
+    state.adminHeatmap.data = null;
+    const statusEl = byId("admin-heatmap-status");
+    if (statusEl) statusEl.textContent = `Failed to load heatmap: ${error.message}`;
+    const container = byId("admin-heatmap");
+    if (container) container.innerHTML = "";
+  } finally {
+    state.adminHeatmap.loading = false;
+    renderAdminHeatmap();
+  }
 }
 
 function aggregateSignals(records) {
@@ -3586,27 +4026,37 @@ function renderAdminList() {
 
 async function loadAdminData() {
   byId("admin-pricing-note").textContent = "Loading governance metrics...";
+  state.adminHeatmap.loading = true;
+  renderAdminHeatmap();
   try {
-    const [overview, personas, chats, usage] = await Promise.all([
+    const [overview, personas, chats, usage, heatmap] = await Promise.all([
       apiGet("/api/admin/overview"),
       apiGet("/api/admin/personas"),
       apiGet("/api/admin/chats"),
-      apiGet("/api/auth/usage")
+      apiGet("/api/auth/usage"),
+      apiGet(
+        `/api/admin/heatmap?mode=${encodeURIComponent(state.adminHeatmap.mode || "capability")}&limit=300&maxColumns=8`
+      )
     ]);
     state.adminOverview = overview;
     state.adminPersonas = personas;
     state.adminChats = chats;
     state.adminUsage = usage;
+    state.adminHeatmap.data = heatmap;
     byId("admin-pricing-note").textContent = overview.pricingNote || "";
     renderAdminSummaryCards();
     renderAdminMatrix();
     renderAdminFilterSummary();
     renderAdminList();
     renderAdminCharts();
+    renderAdminHeatmap();
     renderGovernanceChatSessions();
     await loadAdminToolUsage();
   } catch (error) {
     byId("admin-pricing-note").textContent = `Failed to load admin data: ${error.message}`;
+  } finally {
+    state.adminHeatmap.loading = false;
+    renderAdminHeatmap();
   }
 }
 
@@ -5025,6 +5475,12 @@ function clearAdHocForm() {
 async function loadDebate(debateId) {
   const data = await apiGet(`/api/debates/${encodeURIComponent(debateId)}`);
   const session = data.session;
+  let debateDetail = null;
+  try {
+    debateDetail = await apiGet(`/api/admin/debates/${encodeURIComponent(debateId)}`);
+  } catch {
+    debateDetail = null;
+  }
   state.viewer.type = "debate";
   state.viewer.activeId = debateId;
   state.activeDebateId = debateId;
@@ -5059,6 +5515,7 @@ async function loadDebate(debateId) {
   }
   byId("viewer-transcript").textContent = data.transcript || "";
   renderDebateTurns(session.turns || []);
+  setViewerStageReplay(buildViewerStageReplayFromDebate(session, debateDetail), { preserveIndex: true });
   renderChatHistory();
   renderCitationsPopout();
   byId("chat-status").textContent = "Transcript chat ready.";
@@ -5266,6 +5723,7 @@ async function loadViewerConversation(type, id) {
   byId("download-transcript").removeAttribute("href");
   byId("viewer-transcript").textContent = "";
   state.activeDebateId = null;
+  setViewerStageReplay(null);
 
   if (type === "group") {
     const data = await apiGet(`/api/persona-chats/${encodeURIComponent(id)}`);
@@ -5280,6 +5738,7 @@ async function loadViewerConversation(type, id) {
       `Knowledge Packs: ${(session.knowledgePackIds || []).join(", ") || "none"}`
     ].join("\n");
     renderViewerExchanges(normalizeViewerMessagesFromChat(data));
+    setViewerStageReplay(buildViewerStageReplayFromChat(data, "group"));
     return;
   }
 
@@ -5295,6 +5754,7 @@ async function loadViewerConversation(type, id) {
       `Knowledge Packs: ${(session.knowledgePackIds || []).join(", ") || "none"}`
     ].join("\n");
     renderViewerExchanges(normalizeViewerMessagesFromChat(data));
+    setViewerStageReplay(buildViewerStageReplayFromChat(data, "simple"));
     return;
   }
 
@@ -5328,7 +5788,6 @@ function wireEvents() {
   byId("group-nav-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
   byId("persona-chat-template-debate").addEventListener("click", applyDebateTemplateFromPersonaChat);
   byId("debate-sync-from-group").addEventListener("click", syncDebateParticipantsFromPersonaChat);
-  byId("debate-use-chat-context").addEventListener("change", () => syncDebateModeTopicContextFromGroup(true));
   byId("persona-chat-mode").addEventListener("change", updatePersonaChatModeHelp);
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
@@ -5540,17 +5999,13 @@ function wireEvents() {
   });
 
   byId("run-debate").addEventListener("click", async () => {
-    const useGroupContext = Boolean(byId("debate-use-chat-context")?.checked);
-    const topic = useGroupContext
-      ? String(byId("persona-chat-title").value || "").trim() || String(byId("debate-topic").value || "").trim()
-      : byId("debate-topic").value.trim();
+    syncDebateModeTopicContextFromGroup(true);
+    const topic = getUnifiedDebateTopic();
     if (!topic) {
       window.alert("Topic is required.");
       return;
     }
-    const context = useGroupContext
-      ? String(byId("persona-chat-context").value || "").trim()
-      : byId("debate-context").value.trim();
+    const context = getUnifiedDebateContext();
 
     const payload = {
       topic,
@@ -5584,7 +6039,7 @@ function wireEvents() {
       const data = await apiSend("/api/debates", "POST", payload);
       const debateId = data.debateId;
       const mode = data.personaSelection?.mode || "manual";
-      byId("debate-run-status").textContent = `Debate mode queued: ${debateId} (selection: ${mode})`;
+      byId("debate-run-status").textContent = `Structured debate queued: ${debateId} (selection: ${mode})`;
       byId("viewer-conversation-type").value = "debate";
       byId("viewer-conversation-select").value = debateId;
       await loadViewerHistory("debate");
@@ -5627,6 +6082,20 @@ function wireEvents() {
   byId("chat-send").addEventListener("click", askTranscriptChat);
   byId("chat-citations-open").addEventListener("click", openCitationsPopout);
   byId("chat-citations-close").addEventListener("click", closeCitationsPopout);
+  byId("viewer-open-stage").addEventListener("click", openViewerStagePopout);
+  byId("viewer-stage-close").addEventListener("click", closeViewerStagePopout);
+  byId("viewer-stage-prev").addEventListener("click", () => stepViewerStage(-1));
+  byId("viewer-stage-next").addEventListener("click", () => stepViewerStage(1));
+  byId("viewer-stage-play").addEventListener("click", toggleViewerStagePlayback);
+  byId("viewer-stage-speed").addEventListener("change", () => {
+    state.viewer.stage.speed = Number(byId("viewer-stage-speed").value || 1) || 1;
+    if (state.viewer.stage.playing) {
+      stopViewerStagePlayback();
+      toggleViewerStagePlayback();
+    } else {
+      renderViewerStagePopout();
+    }
+  });
   byId("chat-question").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -5777,6 +6246,11 @@ function wireEvents() {
     setGroupWorkspace("debate-viewer");
   });
   byId("admin-tool-refresh").addEventListener("click", loadAdminToolUsage);
+  byId("admin-heatmap-refresh").addEventListener("click", loadAdminHeatmap);
+  byId("admin-heatmap-mode").addEventListener("change", (event) => {
+    state.adminHeatmap.mode = String(event.target?.value || "capability");
+    loadAdminHeatmap();
+  });
   byId("admin-tool-filter-tool").addEventListener("input", renderAdminToolUsage);
   byId("admin-tool-filter-context").addEventListener("change", renderAdminToolUsage);
   byId("admin-tool-filter-status").addEventListener("change", renderAdminToolUsage);
@@ -5801,7 +6275,6 @@ function wireEvents() {
 
 async function init() {
   await loadThemeSettings();
-  mountDebateModeOptionsIntoPersonaConfig();
   wireEvents();
   initAgenticStepDrafts(getDefaultAgenticSteps());
   renderAgenticStepBuilder();
@@ -5830,9 +6303,11 @@ async function init() {
   renderGeneratedTopicDrafts();
   renderKnowledgeStudioList();
   setViewerTypeUI(byId("viewer-conversation-type").value || "debate");
+  renderViewerStageButtonState();
   syncDebateModeTopicContextFromGroup(true);
   renderGovernanceChatSessions();
   renderGovernanceChatHistory();
+  renderAdminHeatmap();
   setSimpleSidebarCollapsed(false);
   setPersonaSidebarCollapsed(false);
   if (!authed) {
