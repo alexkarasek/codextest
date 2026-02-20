@@ -12,11 +12,11 @@ Open `docs/UI_NAVIGATION.md` from the Documentation module at `/documentation`.
 ## Is there a quick onboarding checklist?
 Yes. Open `docs/FIRST_10_MINUTES.md` from the Documentation module.
 
-## How do I run a formal debate?
-Go to `Chats -> Group Chat -> Formal Debate Setup`, complete steps 1–6, then run.
+## How do I run a debate mode?
+Go to `Chats -> Group Chat -> Live Group Chat -> Debate Mode Options`, complete steps 1–6, then run.
 
 ## How do I review old chats/debates?
-Use `Chats -> Group Chat -> History Explorer` to browse sessions and inspect risk/sentiment flags.
+Use `Chats -> Group Chat -> Conversation Explorer` to browse sessions and inspect risk/sentiment flags.
 
 ## Where do I configure personas and knowledge packs?
 Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
@@ -24,8 +24,14 @@ Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
 ## Can I attach knowledge packs to a persona chat?
 Yes. In `Chats -> Group Chat -> Live Group Chat`, select knowledge packs in the session configuration before creating the chat.
 
-## Can I move from a persona chat to a formal debate?
-Yes. Use the **Formal Debate Template** button in the persona chat setup to copy personas, knowledge packs, and context into Debate Setup.
+## Can I move from a persona chat to a debate mode?
+Yes. Use the **Debate Mode Template** button in the persona chat setup to copy personas, knowledge packs, and context into Debate Mode Options.
+
+## Do personas reply in fixed order in Group Chat?
+No. Replies are mode-driven:
+- `chat`: mostly directed; addressed personas reply, otherwise moderator routes.
+- `panel`: moderator facilitates discussion and adds synthesis/questioning.
+- `debate-work-order`: moderator pushes toward a concrete outcome and next actions.
 
 ## How do I ingest a web page into a knowledge pack?
 Go to `Admin & Config -> Knowledge Studio`, use **Web Ingest**, paste the URL, and choose create/append/overwrite.

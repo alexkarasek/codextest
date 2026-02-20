@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Persona Debate Orchestrator</title>
+  <title>Agentic AI Workbench</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -55,8 +55,8 @@
         <div class="topbar-meta">
           <p class="eyebrow">Round-Table Intelligence Studio</p>
         </div>
-        <h1>Persona Debate Orchestrator</h1>
-        <p class="muted">Local-first persona manager, debate runner, and transcript-aware chat.</p>
+        <h1>Agentic AI Workbench</h1>
+        <p class="muted">Local-first persona manager with conversation modes, orchestration, and governance analytics.</p>
       </div>
       <div class="hero-logo-shell">
         <img id="hero-logo" class="hero-art" src="/media/logo" alt="Product logo">
@@ -80,8 +80,7 @@
   </nav>
   <nav id="subnav-group-work" class="subtabs hidden">
     <button id="group-nav-live" class="subtab-btn" type="button">Live Persona Chat</button>
-    <button id="group-nav-debate-setup" class="subtab-btn" type="button">Formal Debate Setup</button>
-    <button id="group-nav-debate-viewer" class="subtab-btn" type="button">History Explorer</button>
+    <button id="group-nav-debate-viewer" class="subtab-btn" type="button">Conversation Explorer</button>
   </nav>
   <nav id="subnav-config" class="subtabs hidden">
     <button id="config-view-personas" class="subtab-btn active" type="button">Personas</button>
@@ -418,14 +417,18 @@
       </div>
     </section>
 
-    <section id="tab-new-debate" class="tab-section">
+    <section id="tab-new-debate" class="tab-section hidden">
       <div class="grid two">
         <div class="panel stack">
-          <h2>Debate Setup <span class="tip" tabindex="0">?<span class="tip-flyout">Configure the topic, choose participants in order, then run. Turns execute sequentially.</span></span></h2>
+          <h2>Debate Mode Options <span class="tip" tabindex="0">?<span class="tip-flyout">Configure topic, participants, and settings for debate-mode runs. Turns execute sequentially.</span></span></h2>
           <div class="setup-step stack">
             <h3>Step 1: Define Topic</h3>
-            <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The debate question all personas will respond to each round.</span></span><input id="debate-topic" type="text" placeholder="Should cities ban private cars downtown?" required></label>
-            <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional background context"></textarea></label>
+            <label class="inline"><input id="debate-use-chat-context" type="checkbox" checked> Use Group Chat title/context</label>
+            <div class="hint">Default is shared fields from Group Chat configuration above. Uncheck to provide debate-specific topic/context.</div>
+            <div id="debate-custom-topic-context" class="stack hidden">
+              <label>Topic/Title <span class="tip" tabindex="0">?<span class="tip-flyout">The central question personas respond to when running debate mode.</span></span><input id="debate-topic" type="text" placeholder="Optional custom debate topic"></label>
+              <label>Context <span class="tip" tabindex="0">?<span class="tip-flyout">Optional background facts, constraints, or assumptions shared with all personas.</span></span><textarea id="debate-context" rows="4" placeholder="Optional custom debate context"></textarea></label>
+            </div>
           </div>
 
           <details class="setup-advanced">
@@ -454,7 +457,7 @@
           </div>
 
           <div class="setup-step stack">
-            <h3>Step 4: Configure Debate Settings</h3>
+            <h3>Step 4: Configure Debate Mode Settings</h3>
           <div class="grid two">
             <label>Rounds <span class="tip" tabindex="0">?<span class="tip-flyout">Number of speaking rounds per persona. Higher values cost more tokens/time.</span></span><input id="debate-rounds" type="number" min="1" max="8" value="3"></label>
             <label>Max Words / Turn <span class="tip" tabindex="0">?<span class="tip-flyout">Hard target for brevity in each generated turn.</span></span><input id="debate-max-words" type="number" min="40" max="400" value="120"></label>
@@ -505,14 +508,18 @@
         </div>
 
         <div class="panel stack">
-          <h2>Selected Personas (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
+          <h2>Debate Participants (Ordered) <span class="tip" tabindex="0">?<span class="tip-flyout">Order controls speaking sequence each round. Use Up/Down before running.</span></span></h2>
           <div class="hint">
             Run path:
             <strong>Option A</strong> add/reorder personas manually.
             <strong>Option B</strong> leave this list empty and the orchestrator auto-selects personas from saved profiles.
           </div>
+          <div class="row">
+            <button id="debate-sync-from-group" type="button">Use Current Group Personas</button>
+          </div>
+          <div class="hint">Copies currently selected Group Chat personas and knowledge packs into this debate-mode participant list.</div>
           <div id="selected-personas" class="list"></div>
-          <button id="run-debate" type="button">Run Debate</button>
+          <button id="run-debate" type="button">Run Debate Mode</button>
           <div id="debate-run-status" class="status"></div>
         </div>
       </div>
@@ -593,8 +600,7 @@
           </div>
           <div class="row">
             <button id="group-work-live" type="button">Live Group Chat</button>
-            <button id="group-work-debate-setup" type="button">Formal Debate Setup</button>
-            <button id="group-work-debate-viewer" type="button">History Explorer</button>
+            <button id="group-work-debate-viewer" type="button">Conversation Explorer</button>
           </div>
           <details id="persona-chat-config-details" class="setup-advanced" open>
             <summary>Session Configuration</summary>
@@ -606,19 +612,24 @@
               <label>Max Words / Persona Turn<input id="persona-chat-max-words" type="number" min="40" max="400" value="140"></label>
               <label>Engagement Mode
                 <select id="persona-chat-mode">
-                  <option value="chat" selected>Chat</option>
-                  <option value="panel">Panel Discussion</option>
-                  <option value="debate-work-order">Debate + Work Order</option>
+                  <option value="chat" selected>Interactive Chat (Directed)</option>
+                  <option value="panel">Panel Discussion (Moderated)</option>
+                  <option value="debate-work-order">Debate to Decision (Moderated)</option>
                 </select>
               </label>
             </div>
+            <div id="persona-chat-mode-help" class="hint">Interactive chat: personas mostly reply when directly addressed. If unclear, moderator routes the turn and gives guidance.</div>
             <h3>Knowledge Packs (Optional)</h3>
             <div id="persona-chat-knowledge-list" class="list"></div>
             <h3>Templates</h3>
             <div class="row">
-              <button id="persona-chat-template-debate" type="button">Open Formal Debate Template</button>
+              <button id="persona-chat-template-debate" type="button">Load Debate Mode Template</button>
             </div>
-            <div class="hint">Copies selected personas, knowledge packs, and context into Debate Setup.</div>
+            <div class="hint">Copies selected personas, knowledge packs, and context into Debate Mode options below.</div>
+            <details id="persona-chat-debate-details" class="setup-advanced">
+              <summary>Debate Mode Options (Topic, Suggestions, Persona Recommendations, Settings)</summary>
+              <div id="persona-chat-debate-host" class="stack"></div>
+            </details>
             <h3>Select Personas (One or More)</h3>
             <div class="row">
               <input id="persona-chat-persona-filter" type="text" placeholder="Filter personas by name or id">
@@ -638,19 +649,19 @@
           </div>
           <div id="persona-chat-status" class="status">Create or select a session from history to begin.</div>
           <div id="persona-chat-history" class="chat-history"></div>
+          <div id="persona-chat-mention-strip" class="mention-strip"></div>
           <div class="row">
             <input id="persona-chat-message" type="text" placeholder="Ask your selected personas anything">
             <button id="persona-chat-send" type="button">Send</button>
-            <button id="persona-chat-image" type="button">Generate Image</button>
           </div>
-          <div class="hint">For persona-led visuals, click Generate Image or begin prompt with <code>/image</code>.</div>
+          <div class="hint">Image intent is auto-detected. Use natural prompts like “generate an image of…” or prefix with <code>/image</code>.</div>
         </div>
       </div>
     </section>
 
     <section id="tab-viewer" class="tab-section">
       <div class="panel stack">
-        <h2>History Explorer <span class="tip" tabindex="0">?<span class="tip-flyout">Browse conversation history by type. Select and open any session to monitor exchange-level risk flags.</span></span></h2>
+        <h2>Conversation Explorer <span class="tip" tabindex="0">?<span class="tip-flyout">Browse conversation history by type. Select and open any session to monitor exchange-level risk flags.</span></span></h2>
         <div class="row">
           <label>Type
             <select id="viewer-conversation-type">
@@ -678,7 +689,7 @@
         <div id="viewer-transcript-chat" class="chatbox stack">
           <h3>Transcript Chat</h3>
           <div class="hint">
-            Ask questions about the currently loaded debate transcript. Responses are grounded in transcript excerpts.
+            Ask questions about the currently loaded transcript (debate-mode sessions). Responses are grounded in transcript excerpts.
           </div>
           <div id="chat-history" class="chat-history"></div>
           <div class="row">
@@ -707,7 +718,7 @@
           <div id="admin-filter-summary" class="hint">No active drill filter.</div>
           <div id="admin-matrix" class="admin-matrix"></div>
           <div class="row">
-            <button id="admin-view-debates" type="button">Debate View</button>
+            <button id="admin-view-debates" type="button">Conversation View</button>
             <button id="admin-view-chats" type="button">Chat View</button>
             <button id="admin-view-personas" type="button">Persona View</button>
             <button id="admin-view-tools" type="button">Tool Usage</button>
@@ -747,7 +758,7 @@
           <div class="row">
             <button id="admin-nav-group-history" type="button">Open Group Chat History</button>
             <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>
-            <button id="admin-nav-debate-history" type="button">Open History Explorer</button>
+            <button id="admin-nav-debate-history" type="button">Open Conversation Explorer</button>
           </div>
           <h3>Governance Admin Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Admin-only chat backed by a hidden governance dataset knowledge pack and hidden governance persona.</span></span></h3>
           <div class="row">
@@ -798,7 +809,7 @@
     <div id="support-history" class="chat-history support-history"></div>
     <div class="row"><button id="support-clear" type="button">Clear</button></div>
     <div class="row">
-      <input id="support-message" type="text" placeholder="How do I run a formal debate?">
+      <input id="support-message" type="text" placeholder="How do I run debate mode?">
       <button id="support-send" type="button">Send</button>
     </div>
     <div>

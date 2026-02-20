@@ -120,6 +120,9 @@ router.post("/", async (req, res) => {
   const chatId = `${timestampForId()}-${slugify(parsed.data.title || "simple-chat") || "simple-chat"}`;
   const session = {
     chatId,
+    conversationKind: "simple",
+    conversationMode: "simple",
+    conversationEngine: "simple-chat-assistant",
     title: parsed.data.title || "Simple Chat",
     context: parsed.data.context || "",
     settings: parsed.data.settings,

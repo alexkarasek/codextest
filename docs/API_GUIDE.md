@@ -100,6 +100,13 @@ Response envelope:
 - `POST /governance-chat/:chatId/messages`
 - `POST /governance-chat/refresh-assets`
 
+Notes:
+- Admin overview/detail responses include conversation mode fields and observability summaries.
+- Detail endpoints include sanitized observability traces (payload excerpts are redacted/masked).
+- Debate APIs remain stable and are compatibility wrappers for a unified internal conversation-mode model (`conversationMode: "debate"`).
+- Admin chat/debate analytics routes are backed by one internal conversation projection model for consistent governance drill-through.
+- `GET /api/admin/overview` includes a unified `conversations` list used by Conversation Explorer. Debate-mode rows are marked transcript-capable.
+
 ### Agentic (`/api/agentic`) - auth + `viewGovernance`
 - `GET /tools`
 - `POST /router/preview`

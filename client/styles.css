@@ -581,6 +581,22 @@ button[type="submit"]:hover {
   font-size: 1.02rem;
 }
 
+#persona-chat-debate-details {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 92%, var(--accent-soft) 8%);
+}
+
+#persona-chat-debate-host .grid.two {
+  grid-template-columns: 1fr;
+}
+
+#persona-chat-debate-host .panel {
+  box-shadow: none;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--bg-soft) 92%, white 8%);
+}
+
 .knowledge-content-preview {
   margin: 0;
   background: var(--bg-soft);
@@ -771,6 +787,28 @@ button[type="submit"]:hover {
   overflow: auto;
   display: grid;
   gap: 8px;
+}
+
+.mention-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.mention-chip {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  color: var(--accent-strong);
+}
+
+.mention-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .chat-msg {

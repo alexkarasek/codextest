@@ -26,11 +26,13 @@ Purpose:
 
 Group workspace toggles:
 - `Live Group Chat`: free-form multi-persona conversation
-- `Formal Debate Setup`: structured debate creation/run
-- `History Explorer`: browse prior conversations and flags
+- `Conversation Explorer`: browse prior conversations and flags
 
-In `Live Group Chat`, you can attach knowledge packs to ground the entire session.
-Use the **Formal Debate Template** button to carry personas, knowledge packs, and context into Debate Setup.
+In `Live Group Chat`, you can:
+- attach knowledge packs to ground the entire session
+- open **Debate Mode Options** inside Session Configuration
+- use **Debate Mode Template** to carry selected personas/knowledge/context into those options
+- choose interaction mode: `chat`, `panel`, or `debate-work-order` (orchestrator routes responses each turn)
 
 ## Tab: Governance
 Purpose:
@@ -41,6 +43,7 @@ Main areas:
 - visual charts
 - drillable details by conversation/persona/model/user
 - Governance Admin Chat (admin-focused QA over governance data)
+- Observability overlays (LLM/orchestration/payload/tool counters)
 
 ## Tab: Admin & Config
 
@@ -91,10 +94,10 @@ Main areas:
   - `Chats` -> `Simple Chat`
 - "I want multiple personas to collaborate":
   - `Chats` -> `Group Chat` -> `Live Group Chat`
-- "I want a formal debate transcript":
-  - `Chats` -> `Group Chat` -> `Formal Debate Setup`
+- "I want a debate mode transcript":
+  - `Chats` -> `Group Chat` -> `Live Group Chat` -> `Debate Mode Options`
 - "I want to review prior conversations":
-  - `Chats` -> `Group Chat` -> `History Explorer`
+  - `Chats` -> `Group Chat` -> `Conversation Explorer`
 - "I want metrics and risk/cost views":
   - `Governance`
 - "I want to edit personas/knowledge/security settings":

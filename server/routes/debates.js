@@ -3,29 +3,21 @@ import fs from "fs/promises";
 import path from "path";
 import {
   appendDebateChat,
-  createDebateFiles,
   debatePath,
   getDebate,
-  getPersona,
   listDebateChat,
-  listPersonas,
   listDebates,
-  personaJsonPath,
-  savePersona,
   updateDebateSession
 } from "../../lib/storage.js";
 import {
-  adHocPersonaSchema,
   createDebateSchema,
-  formatZodError,
-  personaSchema
+  formatZodError
 } from "../../lib/validators.js";
-import { runDebate } from "../../lib/orchestrator.js";
 import { sendError, sendOk } from "../response.js";
-import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
-import { selectPersonasForDebate } from "../../lib/personaSelector.js";
+import { truncateText } from "../../lib/utils.js";
 import { chatCompletion } from "../../lib/llm.js";
-import { normalizeKnowledgePackIds, resolveKnowledgePacks } from "../../lib/knowledgeUtils.js";
+import { runConversationSession } from "../../src/services/conversationEngine.js";
+import { createConversationSession } from "../../src/services/createConversationSession.js";
 
 const router = express.Router();
 let runQueue = Promise.resolve();
@@ -65,66 +57,15 @@ function transcriptSnippetsForQuestion(transcript, question, maxSnippets = 5) {
   return selected;
 }
 
-async function resolveSelectedPersonas(selected) {
-  const resolved = [];
-
-  for (let i = 0; i < selected.length; i += 1) {
-    const entry = selected[i];
-
-    if (entry.type === "saved") {
-      const persona = await getPersona(entry.id);
-      resolved.push(persona);
-      continue;
-    }
-
-    const adHocParsed = adHocPersonaSchema.safeParse(entry.persona);
-    if (!adHocParsed.success) {
-      const err = new Error("Invalid ad-hoc persona payload.");
-      err.code = "VALIDATION_ERROR";
-      err.details = formatZodError(adHocParsed.error);
-      throw err;
-    }
-
-    const candidate = adHocParsed.data;
-    const adHocId = candidate.id || `adhoc-${slugify(candidate.displayName)}-${i + 1}`;
-    const persona = {
-      ...candidate,
-      id: adHocId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const parsedFull = personaSchema.safeParse(persona);
-    if (!parsedFull.success) {
-      const err = new Error("Invalid ad-hoc persona payload.");
-      err.code = "VALIDATION_ERROR";
-      err.details = formatZodError(parsedFull.error);
-      throw err;
-    }
-
-    if (entry.savePersona) {
-      try {
-        await fs.access(personaJsonPath(persona.id));
-        const err = new Error(`Persona id '${persona.id}' already exists.`);
-        err.code = "DUPLICATE_ID";
-        throw err;
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
-      await savePersona(persona, { withMarkdown: true });
-    }
-
-    resolved.push(persona);
-  }
-
-  return resolved;
-}
-
 async function runDebateQueued(debateId) {
   runQueue = runQueue.then(async () => {
     try {
       const { session } = await getDebate(debateId);
-      await runDebate({ debateId, session });
+      await runConversationSession({
+        conversationMode: session?.conversationMode || "debate",
+        conversationId: debateId,
+        session
+      });
     } catch (error) {
       await updateDebateSession(debateId, (current) => ({
         ...current,
@@ -152,37 +93,16 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  let personas;
-  let knowledgePacks = [];
-  let globalKnowledgePackIds = [];
-  let personaKnowledgeMap = {};
   let selectionMeta = { mode: "manual", reasoning: "Used manually selected personas." };
+  let debateId = "";
   try {
-    if (parsed.data.selectedPersonas.length) {
-      personas = await resolveSelectedPersonas(parsed.data.selectedPersonas);
-    } else {
-      const { personas: savedPersonas } = await listPersonas();
-      const dynamicSelection = await selectPersonasForDebate({
-        topic: parsed.data.topic,
-        context: parsed.data.context,
-        personas: savedPersonas,
-        model: parsed.data.settings.model,
-        maxCount: 3
-      });
-      personas = dynamicSelection.personas;
-      selectionMeta = {
-        mode: dynamicSelection.mode,
-        reasoning: dynamicSelection.reasoning
-      };
-    }
-    globalKnowledgePackIds = normalizeKnowledgePackIds(parsed.data.knowledgePackIds);
-    personaKnowledgeMap = personas.reduce((acc, persona) => {
-      acc[persona.id] = [...new Set(persona.knowledgePackIds || [])];
-      return acc;
-    }, {});
-    const allPersonaPackIds = Object.values(personaKnowledgeMap).flat();
-    const allKnowledgePackIds = [...new Set([...globalKnowledgePackIds, ...allPersonaPackIds])];
-    knowledgePacks = await resolveKnowledgePacks(allKnowledgePackIds);
+    const created = await createConversationSession({
+      kind: "debate-mode",
+      payload: parsed.data,
+      user: req.auth?.user || null
+    });
+    debateId = created.conversationId;
+    selectionMeta = created.selectionMeta || selectionMeta;
   } catch (error) {
     if (error.code === "NO_PERSONAS_AVAILABLE") {
       sendError(
@@ -218,35 +138,6 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const stamp = timestampForId();
-  const debateId = `${stamp}-${slugify(parsed.data.topic) || "debate"}`;
-
-  const session = {
-    debateId,
-    topic: parsed.data.topic,
-    context: parsed.data.context || "",
-    topicDiscovery: parsed.data.topicDiscovery || { query: "", selectedTitle: "", selectedSummary: "", sources: [] },
-    knowledgePacks,
-    knowledgePackCatalog: knowledgePacks,
-    knowledgePackIds: globalKnowledgePackIds,
-    globalKnowledgePackIds,
-    personaKnowledgeMap,
-    settings: parsed.data.settings,
-    personas,
-    personaSelection: selectionMeta,
-    createdBy: req.auth?.user?.id || null,
-    createdByUsername: req.auth?.user?.username || null,
-    status: "queued",
-    createdAt: new Date().toISOString(),
-    progress: {
-      round: 0,
-      currentSpeaker: null,
-      message: "Queued"
-    },
-    turns: []
-  };
-
-  await createDebateFiles(debateId, session);
   runDebateQueued(debateId);
 
   sendOk(

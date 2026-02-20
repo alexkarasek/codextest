@@ -34,14 +34,14 @@ Expected result:
 - Orchestrator entry appears.
 - Persona response appears.
 
-## 7:00-8:30 Run a formal debate
-1. Go to `Chats -> Group Chat -> Formal Debate Setup`.
+## 7:00-8:30 Run a debate mode
+1. Go to `Chats -> Group Chat -> Live Group Chat -> Debate Mode Options`.
 2. Enter topic.
 3. Select personas (or leave empty for dynamic selection).
 4. Run debate.
 
 ## 8:30-9:30 Review history
-1. Go to `Chats -> Group Chat -> History Explorer`.
+1. Go to `Chats -> Group Chat -> Conversation Explorer`.
 2. Load your new chat/debate session.
 3. Check exchange-level risk/sentiment indicators.
 

@@ -31,14 +31,20 @@ Sub-views:
 
 Inside `Group Chat`, use workspace toggles:
 - `Live Group Chat`: conversational multi-persona orchestration.
-- `Formal Debate Setup`: structured, round-based debate run.
-- `History Explorer`: browse and inspect prior conversations.
+- `Conversation Explorer`: browse and inspect prior conversations.
+
+Inside `Live Group Chat`, use **Debate Mode Options** (in Session Configuration) for structured, round-based debate runs.
 
 ### 2) Governance
 Monitoring and analytics:
 - Matrix and visual charts for usage/cost/risk/sentiment.
 - Drilldowns and filters.
 - Governance Admin Chat (internal governance assistant).
+- Observability signals per conversation:
+  - orchestration activity counts
+  - LLM call counts
+  - payload trace counts (sanitized)
+  - tool run counts
 
 ### 3) Admin & Config
 Configuration workspace with subtabs:
@@ -68,19 +74,20 @@ Tips:
 3. Optionally select knowledge packs to ground the session.
 4. Select one or more personas.
 5. Choose engagement mode:
-- `chat`
-- `panel`
-- `debate-work-order`
-6. Use the **Formal Debate Template** button if you want to transition into a structured debate setup.
-5. Send message.
+- `chat` (interactive, directed)
+- `panel` (moderated discussion)
+- `debate-work-order` (moderated convergence to outcome)
+6. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
+7. Send message.
 
 What to expect:
-- The orchestrator selects relevant personas each turn.
-- Not every persona replies every time.
-- Orchestrator rationale appears in the thread.
+- In `chat` mode, personas mainly reply when directly addressed (for example, `@persona-name`).
+- If no clear addressee is provided, moderator/orchestrator routes the turn and gives guidance.
+- In `panel` mode, moderator facilitates discussion and asks one follow-up question (no winner).
+- In `debate-work-order` mode, moderator drives toward a practical outcome, open risks, and next actions.
 
-## C) Run a Formal Debate
-1. Go to `Chats` -> `Group Chat` -> `Formal Debate Setup`.
+## C) Run Debate Mode
+1. Go to `Chats` -> `Group Chat` -> `Live Group Chat` -> `Debate Mode Options`.
 2. Complete steps in order:
 - Step 1: topic/context
 - Step 2: topic discovery (optional)
@@ -88,17 +95,18 @@ What to expect:
 - Step 4: debate settings
 - Step 5: attach knowledge (optional)
 - Step 6: select participants
-3. Run debate.
+3. Run debate mode from the embedded Debate Mode Options panel.
 4. Track progress as rounds execute sequentially.
 
 After completion:
-- Use `History Explorer` or debate viewer to inspect transcript.
+- Use `Conversation Explorer` to inspect transcript.
 - Use transcript chat for follow-up Q&A with citations.
 
 ## D) Browse history and monitor risk flags
-1. Go to `Chats` -> `Group Chat` -> `History Explorer`.
+1. Go to `Chats` -> `Group Chat` -> `Conversation Explorer`.
 2. Pick conversation type and load a session.
 3. Review exchanges, risk chips, sentiment, and transcript chat/citations.
+4. Transcript Q&A and download are available for debate-mode sessions.
 
 Use this for top-down review, not only targeted search.
 
@@ -144,7 +152,20 @@ This affects new rendering/analytics signals.
 Reminder:
 - Raw API key is shown once at creation time.
 
-## J) Use Support and Documentation
+## J) Run autonomous multi-persona image generation (one click)
+1. Go to `Admin & Config` -> `Agentic`.
+2. In Presets, choose **Built-in: Autonomous Persona -> Image**.
+3. Click **Load Preset**.
+4. Optionally tweak the prompt in `step-1` input JSON.
+5. Enable **Run Immediately** and click **Create Task**.
+6. Open task detail to view step results (`image.url`, run files, final prompt).
+
+Persisted outputs:
+- `data/agentic/autonomy/<run-id>/transcript.md`
+- `data/agentic/autonomy/<run-id>/result.json`
+- `data/agentic/reports/autonomous-persona-image.md`
+
+## K) Use Support and Documentation
 - Support Concierge: `Menu` -> `Support` or `/support`
 - Documentation module: `Menu` -> `Documentation` or `/documentation`
 - API reference: `/docs/api`
@@ -163,5 +184,5 @@ All state is file-based under `data/`:
 ## Practical usage guidance
 - If a view feels crowded, use top tabs to narrow context before drilling into subtabs.
 - Prefer starting a new chat session when testing new persona instructions.
-- Use `History Explorer` for auditing; use `Governance` for metrics trends.
+- Use `Conversation Explorer` for auditing; use `Governance` for metrics trends.
 - Use tooltips (`?`) on section headers for inline guidance.

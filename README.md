@@ -1,12 +1,13 @@
-# Persona Debate Orchestrator (Local-First Node.js)
+# Agentic AI Workbench (Local-First Node.js)
 
-A local-first web application to create/edit personas and run multi-round debate sessions with OpenAI Chat Completions.
+A local-first web application to create/edit personas and run conversation modes (simple chat, multi-persona collaboration, and debate mode) with OpenAI Chat Completions.
 
 ## Docs Index
 
 - User Guide: `docs/USER_GUIDE.md`
 - First 10 Minutes: `docs/FIRST_10_MINUTES.md`
 - UI Navigation Map: `docs/UI_NAVIGATION.md`
+- Refactor Blueprint: `docs/REFACTOR_BLUEPRINT.md`
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
@@ -31,7 +32,7 @@ A local-first web application to create/edit personas and run multi-round debate
   - File-based persistence to:
     - `data/personas/<id>.json`
     - `data/personas/<id>.md`
-- Debate Orchestrator
+- Debate Mode Orchestrator
   - Configure topic, context, persona order, rounds, max words, moderation, temperature, model
   - Source grounding modes: `off`, `light`, `strict`
   - Optional knowledge pack attachments at two levels:
@@ -46,17 +47,18 @@ A local-first web application to create/edit personas and run multi-round debate
     - `data/debates/<timestamp>-<slug>/transcript.md`
     - `data/debates/<timestamp>-<slug>/messages.jsonl`
   - Transcript Chat
-    - Ask questions from the Debate Viewer using the loaded transcript as knowledge
+    - Ask questions from the Conversation Explorer using the loaded transcript as knowledge
     - Responses are grounded in transcript excerpts
     - Citation excerpts appear in a separate side pop-out so chat flow stays clean
+  - Internally modeled as `conversationMode: "debate"` for convergence with other conversation modes
 - Persona Collaboration Chat
   - Create free-form chat sessions with one or more personas (no moderator rounds)
-  - Engagement mode is configurable per group session: `chat`, `panel`, `debate-work-order`
+  - Engagement mode is configurable per group session: `chat` (directed), `panel` (moderated), `debate-work-order` (decision-oriented)
   - Attach knowledge packs at the chat session level to ground all personas
-  - Sends each user message through a transparent turn orchestrator that selects only the most relevant personas for that turn
+  - Sends each user message through a transparent moderator/orchestrator that routes directed turns in chat mode and facilitates multi-agent turns in panel/debate modes
   - Scope guardrails prevent personas from answering outside their defined expertise/knowledge
-  - Supports inline persona-routed image generation (`Generate Image` button or `/image ...`)
-  - One-click Formal Debate Template to carry personas/knowledge/context into debate setup
+  - Supports inline persona-routed image generation by intent (e.g., `generate an image of ...` or `/image ...`)
+  - One-click Debate Mode Template to carry personas/knowledge/context into debate setup
   - Persists chat sessions and message history to `data/persona-chats/<chatId>/`
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding
@@ -77,15 +79,19 @@ A local-first web application to create/edit personas and run multi-round debate
   - Embedded MCP server exposes platform tools (knowledge, personas, events)
   - MCP tool registry and runner UI in Agentic workspace
   - MCP calls appear in tool usage events
+  - Includes built-in one-click preset: `Autonomous Persona -> Image`
+  - New tool: `persona.autonomous_image_brainstorm` for unattended multi-persona discussion -> image generation -> persisted run files
 - Safety and reliability
   - Runtime prompt guardrail: do not reveal system prompts
   - API retries with exponential backoff (max 2 retries)
   - Corrupted persona JSON handling
   - Persona creation is strict: if optimization fails or returns weak output, creation returns an error and does not save
 - Admin Governance View
-  - Toggle between Debate View and Persona View
+  - Toggle between conversation-centric and persona-centric views
   - Summary metrics for conversations, participants, outcomes, tokens, and estimated costs
   - Drill-down round-by-round debate inspection
+  - Observability summaries for LLM calls, payload traces, orchestration events, and tool runs
+  - Backed by a unified internal conversation projection layer across debate/chat/support records
 
 ## Tech Stack
 
@@ -446,6 +452,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `data/agentic/jobs/*.json` stores queued/background job metadata.
 - `data/agentic/task-events.jsonl` stores orchestration lifecycle events.
 - `data/agentic/tool-usage.jsonl` stores tool execution telemetry.
+- `data/agentic/autonomy/*` stores autonomous multi-persona image run outputs.
 
 ## Manual Test Plan
 
@@ -464,6 +471,10 @@ docker push <dockerhub-username>/persona-debate-app:v1
 5. In **Agentic**:
    - Run the MCP tool runner to list knowledge packs.
    - Confirm tool usage appears in events.
+   - Load preset **Autonomous Persona -> Image**.
+   - Create task with **Run immediately** checked.
+   - Confirm output in task detail includes `image.url` and `files.*`.
+   - Confirm persisted files under `data/agentic/autonomy/` and `data/agentic/reports/autonomous-persona-image.md`.
 6. In **New Debate**:
    - Set a topic and optional context.
    - Optionally use **Topic Discovery** to search current events and select one result.
@@ -472,7 +483,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - Optionally add one ad-hoc persona (with and without save enabled).
    - Reorder personas with Up/Down controls.
    - Click **Run Debate**.
-7. In **Debate Viewer**:
+7. In **Conversation Explorer**:
    - Verify progress updates show round and current speaker.
    - Verify transcript updates while running.
    - Download transcript using the download link.

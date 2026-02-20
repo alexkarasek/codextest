@@ -97,6 +97,54 @@ const state = {
 
 const AGENTIC_BUILTIN_PRESETS = [
   {
+    id: "preset-autonomous-persona-image",
+    kind: "builtin",
+    name: "Autonomous Persona -> Image",
+    template: {
+      title: "Autonomous Multi-Persona Image Scenario",
+      objective:
+        "Let selected personas discuss unattended, synthesize final image instructions, generate the image, and persist a full report.",
+      team: { mode: "auto", personaIds: [], tags: ["design", "architecture"], maxAgents: 3 },
+      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      steps: [
+        {
+          id: "step-1",
+          name: "Run autonomous persona image brainstorm",
+          type: "tool",
+          toolId: "persona.autonomous_image_brainstorm",
+          input: {
+            prompt:
+              "Design a modern cloud-native reference architecture diagram for a secure, cost-efficient AI workbench platform.",
+            mode: "debate-work-order",
+            rounds: 2,
+            maxAgents: 3,
+            model: "gpt-4.1-mini",
+            temperature: 0.5,
+            maxWordsPerTurn: 140,
+            generateImage: true,
+            imageModel: "gpt-image-1",
+            imageSize: "1024x1024",
+            imageQuality: "auto"
+          },
+          dependsOn: [],
+          requiresApproval: false
+        },
+        {
+          id: "step-2",
+          name: "Persist final markdown report",
+          type: "tool",
+          toolId: "filesystem.write_text",
+          input: {
+            path: "data/agentic/reports/autonomous-persona-image.md",
+            content: "{{steps.step-1.result.reportMarkdown}}"
+          },
+          dependsOn: ["step-1"],
+          requiresApproval: false
+        }
+      ]
+    }
+  },
+  {
     id: "preset-http-analyze-save",
     kind: "builtin",
     name: "HTTP -> Analyze -> Save report",
@@ -646,7 +694,7 @@ function currentHelpGuide() {
       points: [
         "Use Matrix Dimension (Channel/Model/Persona/User) to pivot metrics.",
         "Click a row or metric cell to drill into filtered views.",
-        "Use History Explorer links to inspect full conversation history.",
+        "Use Conversation Explorer links to inspect full conversation history.",
         "Use Governance Admin Chat for natural-language Q&A over internal governance data."
       ]
     };
@@ -658,7 +706,7 @@ function currentHelpGuide() {
         points: [
           "Create personas with system prompts; optional fields can be inferred.",
           "Attach persona-specific knowledge packs for specialized responses.",
-          "Use Add to Debate to include personas in formal debate setup."
+          "Select personas in Persona Chat configuration, then use Debate Mode Options when needed."
         ]
       };
     }
@@ -700,7 +748,7 @@ function currentHelpGuide() {
         points: [
           "Create a session, optionally attach knowledge packs, then send messages.",
           "Load past sessions from Saved Sessions to continue work.",
-          "Use History Explorer for cross-session monitoring and flags."
+          "Use Conversation Explorer for cross-session monitoring and flags."
         ]
       };
     }
@@ -708,25 +756,14 @@ function currentHelpGuide() {
       return {
         title: "Group Chat Guide",
         points: [
-          "Select personas and create a session before sending messages.",
-          "Use Engagement Mode to tune interaction style.",
-          "Attach knowledge packs to ground the entire chat session.",
-          "Create a new session when changing personas/settings significantly."
-        ]
-      };
-    }
-    if (state.groupWorkspace === "debate-setup") {
-      return {
-        title: "Debate Setup Guide",
-        points: [
-          "Define topic/context, optionally discover sources and generate personas.",
-          "Attach global knowledge packs and configure rounds/model settings.",
-          "Run debate to stream transcript and moderator synthesis."
+          "Interactive Chat mode: address personas directly (for example, @Big Tex) for targeted replies.",
+          "Panel mode: moderator facilitates persona-to-persona discussion without a winner.",
+          "Debate to Decision mode: moderator pushes toward a concrete outcome with next actions."
         ]
       };
     }
     return {
-      title: "History Explorer Guide",
+      title: "Conversation Explorer Guide",
       points: [
         "Choose conversation type and browse saved history list.",
         "Open any session to inspect transcript/summary and risk flags.",
@@ -1051,7 +1088,51 @@ function renderPersonaChatPersonaList() {
         byId("persona-chat-status").textContent =
           "Persona selection changed. Click Create Chat Session to start a fresh conversation.";
       }
+      renderPersonaMentionStrip();
     });
+  });
+  renderPersonaMentionStrip();
+}
+
+function personaMentionCandidates() {
+  const ids =
+    state.personaChat.activeChatId && state.personaChat.activeSessionPersonaIds.length
+      ? state.personaChat.activeSessionPersonaIds
+      : state.personaChat.selectedPersonaIds;
+  const byIdMap = new Map(state.personas.map((p) => [p.id, p]));
+  return ids.map((id) => byIdMap.get(id)).filter(Boolean);
+}
+
+function insertPersonaMention(displayName) {
+  const input = byId("persona-chat-message");
+  if (!input) return;
+  const mention = `@${String(displayName || "").trim()}`;
+  if (!mention || mention === "@") return;
+  const current = String(input.value || "");
+  input.value = current.trim() ? `${current.trim()} ${mention} ` : `${mention} `;
+  input.focus();
+}
+
+function renderPersonaMentionStrip() {
+  const container = byId("persona-chat-mention-strip");
+  if (!container) return;
+  container.innerHTML = "";
+  const candidates = personaMentionCandidates();
+  if (!candidates.length) {
+    container.innerHTML = `<span class="hint">Tip: select personas, then click a chip to direct replies with @mentions.</span>`;
+    return;
+  }
+  const lead = document.createElement("span");
+  lead.className = "muted";
+  lead.textContent = "Direct replies:";
+  container.appendChild(lead);
+  candidates.forEach((persona) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "mention-chip";
+    chip.textContent = `@${persona.displayName}`;
+    chip.addEventListener("click", () => insertPersonaMention(persona.displayName));
+    container.appendChild(chip);
   });
 }
 
@@ -1114,8 +1195,10 @@ function applyDebateTemplateFromPersonaChat() {
 
   const debateTopicEl = byId("debate-topic");
   const debateContextEl = byId("debate-context");
+  const useChatContextEl = byId("debate-use-chat-context");
   const chatTitle = byId("persona-chat-title").value.trim();
   const chatContext = byId("persona-chat-context").value.trim();
+  if (useChatContextEl) useChatContextEl.checked = true;
   if (!debateTopicEl.value.trim()) {
     debateTopicEl.value =
       chatTitle && chatTitle !== "Persona Collaboration Chat" ? chatTitle : "Untitled Debate";
@@ -1124,12 +1207,64 @@ function applyDebateTemplateFromPersonaChat() {
     debateContextEl.value = chatContext;
   }
 
-  const advanced = document.querySelector("#tab-new-debate details.setup-advanced");
+  const advanced = document.querySelector("#persona-chat-debate-host details.setup-advanced");
   if (advanced) advanced.open = true;
+  const debateDetails = byId("persona-chat-debate-details");
+  if (debateDetails) debateDetails.open = true;
 
   setChatsView("group");
-  setGroupWorkspace("debate-setup");
-  byId("debate-run-status").textContent = "Debate template loaded from persona chat.";
+  setGroupWorkspace("live");
+  const debateHost = byId("persona-chat-debate-host");
+  if (debateHost) debateHost.scrollIntoView({ behavior: "smooth", block: "start" });
+  syncDebateModeTopicContextFromGroup(true);
+  byId("debate-run-status").textContent = "Debate mode template loaded from persona chat.";
+}
+
+function syncDebateParticipantsFromPersonaChat() {
+  const selected = state.personaChat.selectedPersonaIds.slice();
+  if (!selected.length) {
+    byId("debate-run-status").textContent = "Select one or more personas in Group Chat first.";
+    return;
+  }
+  state.selectedPersonas = selected.map((id) => ({ type: "saved", id }));
+  state.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.slice();
+  renderSelectedPersonas();
+  renderKnowledgePacks();
+  byId("debate-run-status").textContent = "Debate participants synced from current Group Chat selection.";
+}
+
+function syncDebateModeTopicContextFromGroup(force = false) {
+  const useGroup = Boolean(byId("debate-use-chat-context")?.checked);
+  const topicEl = byId("debate-topic");
+  const contextEl = byId("debate-context");
+  const customFields = byId("debate-custom-topic-context");
+  if (!topicEl || !contextEl) return;
+  if (customFields) customFields.classList.toggle("hidden", useGroup);
+  topicEl.disabled = useGroup;
+  contextEl.disabled = useGroup;
+  if (!useGroup && !force) return;
+  const chatTitle = String(byId("persona-chat-title")?.value || "").trim();
+  const chatContext = String(byId("persona-chat-context")?.value || "").trim();
+  topicEl.value = chatTitle || "Untitled Debate";
+  contextEl.value = chatContext;
+}
+
+function updatePersonaChatModeHelp() {
+  const mode = String(byId("persona-chat-mode")?.value || "chat");
+  const helpEl = byId("persona-chat-mode-help");
+  if (!helpEl) return;
+  if (mode === "panel") {
+    helpEl.textContent =
+      "Panel discussion: moderator facilitates agent-to-agent dialogue, synthesizes viewpoints, and asks one next exploration question. No winner is declared.";
+    return;
+  }
+  if (mode === "debate-work-order") {
+    helpEl.textContent =
+      "Debate to decision: moderator drives convergence toward a practical outcome, including open risks and next actions.";
+    return;
+  }
+  helpEl.textContent =
+    "Interactive chat: personas mostly reply when directly addressed. If unclear, moderator routes the turn and gives guidance.";
 }
 
 function applyPersonaChatSelectionBulk(mode = "select") {
@@ -1162,6 +1297,7 @@ function applyPersonaChatSelectionBulk(mode = "select") {
       "Persona selection changed. Click Create Chat Session to start a fresh conversation.";
   }
   renderPersonaChatPersonaList();
+  renderPersonaMentionStrip();
 }
 
 function renderPersonaChatSessionList() {
@@ -1277,6 +1413,8 @@ async function loadPersonaChatSession(chatId) {
     state.personaChat.dirtyConfig = false;
     state.personaChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
     byId("persona-chat-id").value = chatId;
+    if (typeof data.session?.title === "string") byId("persona-chat-title").value = data.session.title;
+    if (typeof data.session?.context === "string") byId("persona-chat-context").value = data.session.context;
     if (data.session?.settings?.model) byId("persona-chat-model").value = data.session.settings.model;
     if (typeof data.session?.settings?.temperature !== "undefined") {
       byId("persona-chat-temperature").value = String(data.session.settings.temperature);
@@ -1287,8 +1425,11 @@ async function loadPersonaChatSession(chatId) {
     if (data.session?.settings?.engagementMode) {
       byId("persona-chat-mode").value = data.session.settings.engagementMode;
     }
+    updatePersonaChatModeHelp();
     renderPersonaChatPersonaList();
     renderPersonaChatKnowledgeList();
+    renderPersonaMentionStrip();
+    syncDebateModeTopicContextFromGroup(true);
     renderPersonaChatHistory();
     const configDetails = byId("persona-chat-config-details");
     if (configDetails) configDetails.open = false;
@@ -1350,12 +1491,14 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-temperature").value = "0.6";
   byId("persona-chat-max-words").value = "140";
   byId("persona-chat-mode").value = "chat";
+  updatePersonaChatModeHelp();
   byId("persona-chat-persona-filter").value = "";
   byId("persona-chat-status").textContent = "Draft reset. Select personas/settings and click Create Chat Session.";
   const configDetails = byId("persona-chat-config-details");
   if (configDetails) configDetails.open = true;
   renderPersonaChatPersonaList();
   renderPersonaChatKnowledgeList();
+  renderPersonaMentionStrip();
   renderPersonaChatHistory();
 }
 
@@ -1427,23 +1570,6 @@ async function sendPersonaChatMessage({ forceImage = false } = {}) {
     renderPersonaChatHistory();
     status.textContent = `Persona chat failed: ${error.message}`;
   }
-}
-
-function prepareImageCommand(inputEl) {
-  const raw = String(inputEl.value || "").trim();
-  if (!raw) return "";
-  if (/^\/image\s+/i.test(raw)) return raw;
-  return `/image ${raw}`;
-}
-
-async function sendPersonaChatImageMessage() {
-  const input = byId("persona-chat-message");
-  const prompt = String(input.value || "").trim();
-  if (!prompt) {
-    byId("persona-chat-status").textContent = "Enter an image prompt first.";
-    return;
-  }
-  await sendPersonaChatMessage({ forceImage: true });
 }
 
 function renderSimpleChatKnowledgeList() {
@@ -1688,16 +1814,14 @@ function setSubtabActive(group, value) {
 }
 
 function setGroupWorkspace(view) {
-  state.groupWorkspace = ["live", "debate-setup", "debate-viewer"].includes(view) ? view : "live";
+  state.groupWorkspace = ["live", "debate-viewer"].includes(view) ? view : "live";
   const groupActive = state.mainTab === "chats" && state.chatsView === "group";
   byId("tab-persona-chat").classList.toggle("active", groupActive && state.groupWorkspace === "live");
-  byId("tab-new-debate").classList.toggle("active", groupActive && state.groupWorkspace === "debate-setup");
+  byId("tab-new-debate").classList.toggle("active", false);
   byId("tab-viewer").classList.toggle("active", groupActive && state.groupWorkspace === "debate-viewer");
   byId("group-work-live").classList.toggle("active", state.groupWorkspace === "live");
-  byId("group-work-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
   byId("group-work-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
   byId("group-nav-live").classList.toggle("active", state.groupWorkspace === "live");
-  byId("group-nav-debate-setup").classList.toggle("active", state.groupWorkspace === "debate-setup");
   byId("group-nav-debate-viewer").classList.toggle("active", state.groupWorkspace === "debate-viewer");
   if (groupActive && state.groupWorkspace === "debate-viewer") {
     const type = byId("viewer-conversation-type").value || "debate";
@@ -1727,6 +1851,17 @@ function setChatsView(view) {
     renderPersonaChatHistory();
     loadPersonaChatSessions();
   }
+}
+
+function mountDebateModeOptionsIntoPersonaConfig() {
+  const host = byId("persona-chat-debate-host");
+  const source = byId("tab-new-debate");
+  if (!host || !source || host.dataset.mounted === "true") return;
+  const debateGrid = source.querySelector(":scope > .grid");
+  if (!debateGrid) return;
+  host.appendChild(debateGrid);
+  host.dataset.mounted = "true";
+  source.classList.add("hidden");
 }
 
 function setSimpleSidebarCollapsed(collapsed) {
@@ -1939,7 +2074,7 @@ function renderAvailablePersonas() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate";
+    addBtn.textContent = "Add to Debate Mode";
     addBtn.addEventListener("click", () => addSavedPersonaToSelection(persona.id));
 
     card.appendChild(addBtn);
@@ -2027,7 +2162,7 @@ function renderPersonaList() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate";
+    addBtn.textContent = "Add to Debate Mode";
     addBtn.addEventListener("click", () => addSavedPersonaToSelection(persona.id));
 
     actions.append(editBtn, duplicateBtn, delBtn, addBtn);
@@ -2272,7 +2407,7 @@ function renderKnowledgeStudioList() {
     const attachBtn = document.createElement("button");
     attachBtn.type = "button";
     const already = state.selectedKnowledgePackIds.includes(pack.id);
-    attachBtn.textContent = already ? "Attached in Debate Setup" : "Attach for Debate";
+    attachBtn.textContent = already ? "Attached in Debate Mode Options" : "Attach for Debate Mode";
     attachBtn.disabled = already;
     attachBtn.addEventListener("click", () => {
       if (!state.selectedKnowledgePackIds.includes(pack.id)) {
@@ -2328,7 +2463,7 @@ function renderGeneratedTopicDrafts() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to Debate";
+    addBtn.textContent = "Add to Debate Mode";
     addBtn.addEventListener("click", () => {
       state.selectedPersonas.push({
         type: "adhoc",
@@ -3271,7 +3406,7 @@ function renderAdminDebatesList() {
     actions.className = "row";
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = "Open in Debate Viewer";
+    open.textContent = "Open in Conversation Explorer";
     open.addEventListener("click", () => openDebateInHistory(debate.debateId));
     actions.appendChild(open);
     item.appendChild(actions);
@@ -4231,7 +4366,8 @@ function renderAgenticTaskDetail() {
       status: step.status,
       requiresApproval: step.requiresApproval,
       approvalId: step.approvalId,
-      error: step.error || null
+      error: step.error || null,
+      result: step.result || null
     })),
     summary: task.summary || ""
   };
@@ -4980,8 +5116,8 @@ function setViewerTypeUI(type) {
   byId("viewer-transcript-chat").classList.toggle("hidden", !isDebate);
   byId("download-transcript").classList.toggle("hidden", !isDebate);
   if (!isDebate) {
-    byId("chat-status").textContent = "Transcript chat is available for debates only.";
-    byId("chat-history").textContent = "Select Debate type to use transcript Q&A.";
+    byId("chat-status").textContent = "Transcript chat is available for debate-mode sessions only.";
+    byId("chat-history").textContent = "Select Debate Mode type to use transcript Q&A.";
   }
 }
 
@@ -5051,56 +5187,59 @@ function renderViewerHistoryBrowser(type) {
 }
 
 async function loadViewerHistory(type) {
-  let rows = [];
-  if (type === "debate") {
-    const overview = await apiGet("/api/admin/overview");
-    rows = (overview.debates || []).map((d) => ({
-      id: d.debateId,
-      title: d.title || d.debateId,
-      status: d.status || "n/a",
-      participants: d.participants || [],
-      messages: Number(d.drillSummary?.turns || 0),
-      tokens: Number(d.tokenUsage?.totalTokens || 0),
-      cost: typeof d.estimatedCostUsd === "number" ? d.estimatedCostUsd : 0,
-      risk: {
-        red: Number(d.responsibleAi?.stoplights?.red || 0),
-        yellow: Number(d.responsibleAi?.stoplights?.yellow || 0),
-        green: Number(d.responsibleAi?.stoplights?.green || 0)
-      },
-      sentiment: {
-        positive: Number(d.responsibleAi?.sentiment?.positive || 0),
-        neutral: Number(d.responsibleAi?.sentiment?.neutral || 0),
-        negative: Number(d.responsibleAi?.sentiment?.negative || 0)
-      },
-      createdAt: d.createdAt || ""
-    }));
-  } else {
-    const chats = await apiGet("/api/admin/chats");
-    rows = (chats.chats || [])
-      .filter((c) => (type === "group" ? c.kind === "group" : c.kind === "simple"))
-      .map((c) => ({
-        id: c.chatId,
-        title: c.title || c.chatId,
-        participants: c.participants || [],
-        messages: Number(c.messageCount || 0),
-        tokens: Number(c.tokenUsage?.totalTokens || 0),
-        cost: typeof c.estimatedCostUsd === "number" ? c.estimatedCostUsd : 0,
+  const overview = await apiGet("/api/admin/overview");
+  const projected = projectOverviewConversations(overview);
+  const rows = projected
+    .filter((item) => {
+      if (type === "debate") return item.conversationType === "debate" && item.transcriptCapable !== false;
+      if (type === "group") return item.conversationType === "group-chat";
+      if (type === "simple") return item.conversationType === "simple-chat";
+      return false;
+    })
+    .map((item) => {
+      const isDebate = item.conversationType === "debate";
+      return {
+        id: item.conversationId || item.debateId || item.chatId,
+        title: item.title || item.conversationId || item.debateId || item.chatId,
+        status: isDebate ? item.status || "n/a" : undefined,
+        participants: item.participants || [],
+        messages: Number(item.drillSummary?.turns || item.messageCount || 0),
+        tokens: Number(item.tokenUsage?.totalTokens || 0),
+        cost: typeof item.estimatedCostUsd === "number" ? item.estimatedCostUsd : 0,
         risk: {
-          red: Number(c.responsibleAi?.stoplights?.red || 0),
-          yellow: Number(c.responsibleAi?.stoplights?.yellow || 0),
-          green: Number(c.responsibleAi?.stoplights?.green || 0)
+          red: Number(item.responsibleAi?.stoplights?.red || 0),
+          yellow: Number(item.responsibleAi?.stoplights?.yellow || 0),
+          green: Number(item.responsibleAi?.stoplights?.green || 0)
         },
         sentiment: {
-          positive: Number(c.responsibleAi?.sentiment?.positive || 0),
-          neutral: Number(c.responsibleAi?.sentiment?.neutral || 0),
-          negative: Number(c.responsibleAi?.sentiment?.negative || 0)
+          positive: Number(item.responsibleAi?.sentiment?.positive || 0),
+          neutral: Number(item.responsibleAi?.sentiment?.neutral || 0),
+          negative: Number(item.responsibleAi?.sentiment?.negative || 0)
         },
-        createdAt: c.lastActivityAt || c.updatedAt || c.createdAt || ""
-      }));
-  }
+        createdAt: item.lastActivityAt || item.updatedAt || item.createdAt || ""
+      };
+    });
   rows.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   state.viewer.historyByType[type] = rows;
   renderViewerHistoryBrowser(type);
+}
+
+function projectOverviewConversations(overview) {
+  if (Array.isArray(overview?.conversations)) return overview.conversations;
+  return [
+    ...((overview?.debates || []).map((d) => ({
+      ...d,
+      conversationType: "debate",
+      conversationId: d.debateId,
+      transcriptCapable: true
+    })) || []),
+    ...((overview?.chats || []).map((c) => ({
+      ...c,
+      conversationType: c.kind === "simple" ? "simple-chat" : c.kind === "support" ? "support-chat" : "group-chat",
+      conversationId: c.chatId,
+      transcriptCapable: false
+    })) || [])
+  ];
 }
 
 async function loadViewerConversation(type, id) {
@@ -5184,12 +5323,13 @@ function wireEvents() {
   byId("chats-view-simple").addEventListener("click", () => setChatsView("simple"));
   byId("chats-view-group").addEventListener("click", () => setChatsView("group"));
   byId("group-work-live").addEventListener("click", () => setGroupWorkspace("live"));
-  byId("group-work-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
   byId("group-work-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
   byId("group-nav-live").addEventListener("click", () => setGroupWorkspace("live"));
-  byId("group-nav-debate-setup").addEventListener("click", () => setGroupWorkspace("debate-setup"));
   byId("group-nav-debate-viewer").addEventListener("click", () => setGroupWorkspace("debate-viewer"));
   byId("persona-chat-template-debate").addEventListener("click", applyDebateTemplateFromPersonaChat);
+  byId("debate-sync-from-group").addEventListener("click", syncDebateParticipantsFromPersonaChat);
+  byId("debate-use-chat-context").addEventListener("change", () => syncDebateModeTopicContextFromGroup(true));
+  byId("persona-chat-mode").addEventListener("change", updatePersonaChatModeHelp);
   byId("config-view-personas").addEventListener("click", () => setConfigView("personas"));
   byId("config-view-knowledge").addEventListener("click", () => setConfigView("knowledge"));
   byId("config-view-rai").addEventListener("click", () => setConfigView("rai"));
@@ -5400,15 +5540,21 @@ function wireEvents() {
   });
 
   byId("run-debate").addEventListener("click", async () => {
-    const topic = byId("debate-topic").value.trim();
+    const useGroupContext = Boolean(byId("debate-use-chat-context")?.checked);
+    const topic = useGroupContext
+      ? String(byId("persona-chat-title").value || "").trim() || String(byId("debate-topic").value || "").trim()
+      : byId("debate-topic").value.trim();
     if (!topic) {
       window.alert("Topic is required.");
       return;
     }
+    const context = useGroupContext
+      ? String(byId("persona-chat-context").value || "").trim()
+      : byId("debate-context").value.trim();
 
     const payload = {
       topic,
-      context: byId("debate-context").value.trim(),
+      context,
       selectedPersonas: Array.isArray(state.selectedPersonas) ? state.selectedPersonas : [],
       knowledgePackIds: state.selectedKnowledgePackIds.slice(),
       topicDiscovery: {
@@ -5438,7 +5584,7 @@ function wireEvents() {
       const data = await apiSend("/api/debates", "POST", payload);
       const debateId = data.debateId;
       const mode = data.personaSelection?.mode || "manual";
-      byId("debate-run-status").textContent = `Debate queued: ${debateId} (selection: ${mode})`;
+      byId("debate-run-status").textContent = `Debate mode queued: ${debateId} (selection: ${mode})`;
       byId("viewer-conversation-type").value = "debate";
       byId("viewer-conversation-select").value = debateId;
       await loadViewerHistory("debate");
@@ -5524,7 +5670,6 @@ function wireEvents() {
     loadPersonaChatSession(byId("persona-chat-id").value.trim());
   });
   byId("persona-chat-send").addEventListener("click", sendPersonaChatMessage);
-  byId("persona-chat-image").addEventListener("click", sendPersonaChatImageMessage);
   byId("persona-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -5535,6 +5680,9 @@ function wireEvents() {
     const el = byId(id);
     if (!el) return;
     el.addEventListener("input", () => {
+      if (id === "persona-chat-title" || id === "persona-chat-context") {
+        syncDebateModeTopicContextFromGroup();
+      }
       if (!state.personaChat.activeChatId) return;
       state.personaChat.dirtyConfig = true;
       byId("persona-chat-status").textContent =
@@ -5653,6 +5801,7 @@ function wireEvents() {
 
 async function init() {
   await loadThemeSettings();
+  mountDebateModeOptionsIntoPersonaConfig();
   wireEvents();
   initAgenticStepDrafts(getDefaultAgenticSteps());
   renderAgenticStepBuilder();
@@ -5671,6 +5820,8 @@ async function init() {
   renderChatHistory();
   renderPersonaChatPersonaList();
   renderPersonaChatKnowledgeList();
+  updatePersonaChatModeHelp();
+  syncDebateModeTopicContextFromGroup(true);
   renderPersonaChatHistory();
   renderSimpleChatKnowledgeList();
   renderSimpleChatHistory();
@@ -5679,6 +5830,7 @@ async function init() {
   renderGeneratedTopicDrafts();
   renderKnowledgeStudioList();
   setViewerTypeUI(byId("viewer-conversation-type").value || "debate");
+  syncDebateModeTopicContextFromGroup(true);
   renderGovernanceChatSessions();
   renderGovernanceChatHistory();
   setSimpleSidebarCollapsed(false);
