@@ -79,6 +79,7 @@ const state = {
     templates: [],
     approvals: [],
     jobs: [],
+    watchers: [],
     metrics: null,
     mcp: null,
     mcpServers: [],
@@ -108,6 +109,50 @@ const state = {
 };
 
 const AGENTIC_BUILTIN_PRESETS = [
+  {
+    id: "preset-autonomous-decision-chain",
+    kind: "builtin",
+    name: "Autonomous Persona -> Decision Chain",
+    template: {
+      title: "Autonomous Multi-Persona Decision Chain",
+      objective:
+        "Let selected personas discuss unattended, synthesize a decision summary and action plan, and persist a report.",
+      team: { mode: "auto", personaIds: [], tags: ["decision", "planning"], maxAgents: 3 },
+      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      steps: [
+        {
+          id: "step-1",
+          name: "Run autonomous persona decision chain",
+          type: "tool",
+          toolId: "persona.autonomous_decision_chain",
+          input: {
+            prompt:
+              "Define the next milestone scope for the agentic AI workbench and propose a 2-week execution plan.",
+            mode: "debate-work-order",
+            rounds: 2,
+            maxAgents: 3,
+            model: "gpt-4.1-mini",
+            temperature: 0.5,
+            maxWordsPerTurn: 160
+          },
+          dependsOn: [],
+          requiresApproval: false
+        },
+        {
+          id: "step-2",
+          name: "Persist final markdown report",
+          type: "tool",
+          toolId: "filesystem.write_text",
+          input: {
+            path: "data/agentic/reports/autonomous-decision-chain.md",
+            content: "{{steps.step-1.result.reportMarkdown}}"
+          },
+          dependsOn: ["step-1"],
+          requiresApproval: false
+        }
+      ]
+    }
+  },
   {
     id: "preset-autonomous-persona-image",
     kind: "builtin",
@@ -4666,6 +4711,247 @@ function normalizeAgenticTemplate(template = {}) {
   };
 }
 
+function toSafeSlug(value, maxLen = 48) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen);
+}
+
+function latestMessageByRole(history, role) {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const row = history[i];
+    if (row?.role === role) return row;
+  }
+  return null;
+}
+
+function buildAgenticTemplateFromSimpleChat() {
+  const title = byId("simple-chat-title")?.value.trim() || "Simple Chat";
+  const context = byId("simple-chat-context")?.value.trim() || "";
+  const model = byId("simple-chat-model")?.value.trim() || "gpt-4.1-mini";
+  const temperature = safeNumberInput(byId("simple-chat-temperature")?.value, 0.4, { min: 0, max: 2 });
+  const chatId = state.simpleChat.activeChatId || "";
+  const session = (state.simpleChat.sessions || []).find((s) => s.chatId === chatId) || null;
+  const knowledgePackIds = Array.isArray(session?.knowledgePackIds)
+    ? session.knowledgePackIds
+    : state.simpleChat.selectedKnowledgePackIds.slice();
+  const history = state.simpleChat.historyByChat[chatId] || [];
+  const lastUser = latestMessageByRole(history, "user");
+  const lastAssistant = latestMessageByRole(history, "assistant");
+  const summaryId = toSafeSlug(`${title}-simple-chat`) || `simple-chat-${Date.now()}`;
+
+  const objective = [
+    "Source: Simple Chat",
+    `Chat title: ${title}`,
+    `Context: ${context || "(none)"}`,
+    `Knowledge packs: ${knowledgePackIds.join(", ") || "(none)"}`,
+    `Latest user message: ${lastUser?.content || "(none)"}`,
+    `Latest assistant reply: ${lastAssistant?.content || "(none)"}`
+  ].join("\n");
+
+  return {
+    title: `Task from Simple Chat: ${title}`,
+    objective,
+    team: {
+      mode: "auto",
+      personaIds: [],
+      tags: knowledgePackIds.slice(0, 6),
+      maxAgents: 3
+    },
+    settings: { model, temperature },
+    steps: [
+      {
+        id: "step-1",
+        name: "Draft action plan from chat context",
+        type: "llm",
+        prompt: [
+          "Create a concise action plan based on this chat context.",
+          "Return 3-7 bullet steps, each with owner and rationale.",
+          "",
+          objective
+        ].join("\n")
+      },
+      {
+        id: "step-2",
+        name: "Write report",
+        type: "tool",
+        toolId: "filesystem.write_text",
+        input: {
+          path: `data/agentic/reports/${summaryId}.md`,
+          content: "{{steps.step-1.result.text}}"
+        },
+        dependsOn: ["step-1"],
+        requiresApproval: false
+      }
+    ]
+  };
+}
+
+function buildAgenticTemplateFromPersonaChat() {
+  const title = byId("persona-chat-title")?.value.trim() || "Persona Collaboration Chat";
+  const context = byId("persona-chat-context")?.value.trim() || "";
+  const model = byId("persona-chat-model")?.value.trim() || "gpt-4.1-mini";
+  const temperature = safeNumberInput(byId("persona-chat-temperature")?.value, 0.6, { min: 0, max: 2 });
+  const personaIds =
+    state.personaChat.activeSessionPersonaIds.length
+      ? state.personaChat.activeSessionPersonaIds.slice()
+      : state.personaChat.selectedPersonaIds.slice();
+  const knowledgePackIds = state.personaChat.selectedKnowledgePackIds.slice();
+  const chatId = state.personaChat.activeChatId || "";
+  const history = state.personaChat.historyByChat[chatId] || [];
+  const lastUser = latestMessageByRole(history, "user");
+  const lastPersona = latestMessageByRole(history, "persona");
+  const personaNames = personaIds
+    .map((id) => state.personas.find((p) => p.id === id))
+    .filter(Boolean)
+    .map((p) => p.displayName);
+  const summaryId = toSafeSlug(`${title}-persona-chat`) || `persona-chat-${Date.now()}`;
+
+  const objective = [
+    "Source: Persona Collaboration Chat",
+    `Chat title: ${title}`,
+    `Context: ${context || "(none)"}`,
+    `Personas: ${personaNames.join(", ") || "(none)"}`,
+    `Knowledge packs: ${knowledgePackIds.join(", ") || "(none)"}`,
+    `Latest user message: ${lastUser?.content || "(none)"}`,
+    `Latest persona reply: ${lastPersona?.content || "(none)"}`
+  ].join("\n");
+
+  return {
+    title: `Task from Persona Chat: ${title}`,
+    objective,
+    team: {
+      mode: personaIds.length ? "manual" : "auto",
+      personaIds,
+      tags: knowledgePackIds.slice(0, 6),
+      maxAgents: Math.max(1, Math.min(8, personaIds.length || 3))
+    },
+    settings: { model, temperature },
+    steps: [
+      {
+        id: "step-1",
+        name: "Synthesize multi-persona action plan",
+        type: "llm",
+        prompt: [
+          "Synthesize a decision-ready action plan using the persona discussion context.",
+          "Return 4-8 bullet steps with owners and risks.",
+          "",
+          objective
+        ].join("\n")
+      },
+      {
+        id: "step-2",
+        name: "Write report",
+        type: "tool",
+        toolId: "filesystem.write_text",
+        input: {
+          path: `data/agentic/reports/${summaryId}.md`,
+          content: "{{steps.step-1.result.text}}"
+        },
+        dependsOn: ["step-1"],
+        requiresApproval: false
+      }
+    ]
+  };
+}
+
+function openAgenticWorkspaceWithTemplate(template, statusMessage) {
+  switchTab("config");
+  setConfigView("agentic");
+  applyAgenticTemplate(template);
+  byId("agentic-task-status").textContent = statusMessage;
+}
+
+function truncateForChat(value, maxLen = 1600) {
+  const text = String(value || "");
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}...`;
+}
+
+function taskSummaryForChat(task) {
+  const steps = Array.isArray(task?.steps) ? task.steps : [];
+  const stepLines = steps.map((step) => {
+    const name = step.name || step.id || "step";
+    const status = step.status || "unknown";
+    const error = step.error ? ` | error=${truncateForChat(step.error, 160)}` : "";
+    const result = step.result ? truncateForChat(JSON.stringify(step.result), 500) : "";
+    return `- ${name} (${status})${error}${result ? `\n  result: ${result}` : ""}`;
+  });
+
+  return [
+    `Task: ${task?.title || task?.id || "Agentic Task"}`,
+    `Status: ${task?.status || "unknown"}`,
+    `Objective: ${task?.objective || "(none)"}`,
+    `Routing: ${(task?.routing?.selectedPersonaIds || []).join(", ") || "(auto)"}`,
+    "Steps:",
+    stepLines.length ? stepLines.join("\n") : "- (no steps)"
+  ].join("\n");
+}
+
+async function openAgenticTaskInChat() {
+  const status = byId("agentic-task-status");
+  const taskId = state.agentic.activeTaskId || byId("agentic-task-select")?.value || "";
+  if (!taskId) {
+    status.textContent = "Select a task first.";
+    return;
+  }
+
+  const task = (state.agentic.tasks || []).find((t) => t.id === taskId);
+  if (!task) {
+    status.textContent = "Task not loaded. Refresh and try again.";
+    return;
+  }
+
+  const summary = taskSummaryForChat(task);
+  const payload = {
+    title: `Task Review: ${task.title || task.id}`,
+    context: `Agentic task review session for ${task.title || task.id}.`,
+    knowledgePackIds: [],
+    settings: {
+      model: task.settings?.model || "gpt-4.1-mini",
+      temperature: Number.isFinite(Number(task.settings?.temperature)) ? Number(task.settings.temperature) : 0.4,
+      maxResponseWords: 240
+    }
+  };
+
+  status.textContent = `Creating chat for ${taskId}...`;
+  try {
+    const created = await apiSend("/api/simple-chats", "POST", payload);
+    const chatId = created.chatId;
+    const opener = [
+      "Review the following task output and suggest next steps, fixes, or missing checks.",
+      "",
+      summary
+    ].join("\n");
+
+    await apiSend(`/api/simple-chats/${encodeURIComponent(chatId)}/messages`, "POST", {
+      message: opener,
+      historyLimit: 6
+    });
+
+    switchTab("chats");
+    setChatsView("simple");
+    await loadSimpleChatSessions();
+    await loadSimpleChatSession(chatId);
+    status.textContent = `Opened task ${taskId} in Simple Chat.`;
+  } catch (error) {
+    status.textContent = `Failed to open task in chat: ${error.message}`;
+  }
+}
+
+function createAgenticFromSimpleChat() {
+  const template = buildAgenticTemplateFromSimpleChat();
+  openAgenticWorkspaceWithTemplate(template, "Agentic task template loaded from Simple Chat.");
+}
+
+function createAgenticFromPersonaChat() {
+  const template = buildAgenticTemplateFromPersonaChat();
+  openAgenticWorkspaceWithTemplate(template, "Agentic task template loaded from Persona Chat.");
+}
+
 function applyAgenticTemplate(template) {
   const normalized = normalizeAgenticTemplate(template);
   byId("agentic-task-title").value = normalized.title;
@@ -4712,7 +4998,7 @@ function renderAgenticPresetSelect() {
     })),
     ...(state.agentic.templates || []).map((item) => ({
       value: `saved:${item.id}`,
-      label: `Saved: ${item.name}`
+      label: `Saved: ${item.name}${item.version ? ` (v${item.version})` : ""}`
     }))
   ];
 
@@ -4889,6 +5175,68 @@ function getAgenticStepsFromForm() {
   return parsed;
 }
 
+function validateAgenticSteps(steps) {
+  const errors = [];
+  const warnings = [];
+  const ids = new Set();
+  const toolRegistry = new Set((state.agentic.tools || []).map((t) => String(t.id || "").trim()).filter(Boolean));
+  const requiredFieldsByTool = {
+    "filesystem.read_text": ["path"],
+    "filesystem.write_text": ["path", "content"],
+    "http.request": ["url"],
+    "web.fetch": ["url"],
+    "knowledge.ingest_url": ["url"],
+    "openai.generate_image": ["prompt"],
+    "persona.autonomous_image_brainstorm": ["prompt"],
+    "jobs.enqueue": ["name"]
+  };
+
+  steps.forEach((rawStep, index) => {
+    const step = normalizeAgenticStepDraft(rawStep, index);
+    if (!step.id) {
+      errors.push(`Step ${index + 1}: id is required.`);
+    } else if (ids.has(step.id)) {
+      errors.push(`Step ${index + 1}: duplicate id '${step.id}'.`);
+    } else {
+      ids.add(step.id);
+    }
+
+    if (step.type === "llm" && !step.prompt.trim()) {
+      errors.push(`Step ${step.id}: prompt is required for llm steps.`);
+    }
+
+    if (step.type === "tool") {
+      if (!step.toolId) {
+        errors.push(`Step ${step.id}: toolId is required for tool steps.`);
+      } else if (toolRegistry.size && !toolRegistry.has(step.toolId) && !step.toolId.startsWith("mcp.")) {
+        errors.push(`Step ${step.id}: unknown toolId '${step.toolId}'.`);
+      }
+
+      if (step.input && typeof step.input !== "object") {
+        errors.push(`Step ${step.id}: input must be an object.`);
+      }
+
+      const required = requiredFieldsByTool[step.toolId] || [];
+      required.forEach((field) => {
+        if (!Object.prototype.hasOwnProperty.call(step.input || {}, field)) {
+          errors.push(`Step ${step.id}: missing required input field '${field}'.`);
+        }
+      });
+    }
+
+    step.dependsOn.forEach((dep) => {
+      if (!dep) return;
+      if (dep === step.id) {
+        errors.push(`Step ${step.id}: dependsOn cannot include itself.`);
+      } else if (!ids.has(dep)) {
+        warnings.push(`Step ${step.id}: dependsOn '${dep}' not found earlier in the list.`);
+      }
+    });
+  });
+
+  return { errors, warnings };
+}
+
 function agenticTaskSummary(task) {
   const done = (task.steps || []).filter((s) => s.status === "completed").length;
   const total = (task.steps || []).length;
@@ -4924,10 +5272,14 @@ function renderAgenticTaskSelect() {
 
 function renderAgenticTaskDetail() {
   const detail = byId("agentic-task-detail");
+  const observability = byId("agentic-task-observability");
+  const reportPreview = byId("agentic-task-report");
   const taskId = state.agentic.activeTaskId || byId("agentic-task-select").value;
   const task = (state.agentic.tasks || []).find((t) => t.id === taskId);
   if (!task) {
     detail.textContent = "No task selected.";
+    if (observability) observability.textContent = "";
+    if (reportPreview) reportPreview.textContent = "";
     return;
   }
   const summary = {
@@ -4951,6 +5303,105 @@ function renderAgenticTaskDetail() {
     summary: task.summary || ""
   };
   detail.textContent = toPrettyJson(summary);
+
+  if (!observability) return;
+  const taskEvents = (state.agentic.events?.task || []).filter((e) => e.taskId === task.id);
+  const toolEvents = (state.agentic.events?.tool || []).filter((e) => e.taskId === task.id);
+  const toolEventsByStep = new Map();
+  toolEvents.forEach((evt) => {
+    const key = String(evt.stepId || "unknown");
+    if (!toolEventsByStep.has(key)) toolEventsByStep.set(key, []);
+    toolEventsByStep.get(key).push(evt);
+  });
+  const taskEventsByStep = new Map();
+  taskEvents.forEach((evt) => {
+    const key = String(evt.stepId || "unknown");
+    if (!taskEventsByStep.has(key)) taskEventsByStep.set(key, []);
+    taskEventsByStep.get(key).push(evt);
+  });
+
+  function durationMs(startedAt, completedAt) {
+    if (!startedAt || !completedAt) return "";
+    const start = Date.parse(startedAt);
+    const end = Date.parse(completedAt);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+    return `${end - start}ms`;
+  }
+
+  function truncateValue(value, maxLen = 900) {
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    if (!text) return "";
+    return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+  }
+
+  const lines = [
+    `Task ${task.id} | status=${task.status || "unknown"}`,
+    `Updated: ${task.updatedAt || "(unknown)"}`,
+    "----",
+    "Steps:"
+  ];
+
+  (task.steps || []).forEach((step) => {
+    const stepId = step.id || "step";
+    const stepName = step.name || stepId;
+    const dur = durationMs(step.startedAt, step.completedAt);
+    lines.push(
+      `Step ${stepId} | ${stepName} | type=${step.type} | status=${step.status || "unknown"}${dur ? ` | ${dur}` : ""}`
+    );
+    if (step.toolId) lines.push(`  toolId: ${step.toolId}`);
+    if (step.model) lines.push(`  model: ${step.model}`);
+    if (step.startedAt) lines.push(`  startedAt: ${step.startedAt}`);
+    if (step.completedAt) lines.push(`  completedAt: ${step.completedAt}`);
+    if (step.error) lines.push(`  error: ${truncateValue(step.error, 300)}`);
+    if (step.input && Object.keys(step.input).length) {
+      lines.push(`  input: ${truncateValue(step.input)}`);
+    }
+    if (step.result) {
+      lines.push(`  result: ${truncateValue(step.result)}`);
+    }
+
+    const stepTaskEvents = taskEventsByStep.get(stepId) || [];
+    if (stepTaskEvents.length) {
+      const eventLines = stepTaskEvents
+        .slice(-3)
+        .map((evt) => `  event: ${evt.type || "event"} @ ${evt.ts || "n/a"}`);
+      lines.push(...eventLines);
+    }
+
+    const stepToolEvents = toolEventsByStep.get(stepId) || [];
+    if (stepToolEvents.length) {
+      const toolLines = stepToolEvents.slice(-3).map((evt) => {
+        const durMs = Number(evt.durationMs || 0);
+        return `  tool: ${evt.toolId || "unknown"} | ok=${evt.ok === true ? "true" : "false"} | durationMs=${durMs}`;
+      });
+      lines.push(...toolLines);
+    }
+
+    lines.push("----");
+  });
+
+  observability.textContent = lines.join("\n");
+}
+
+async function generateAgenticReportForSelectedTask() {
+  const status = byId("agentic-task-status");
+  const reportPreview = byId("agentic-task-report");
+  const taskId = state.agentic.activeTaskId || byId("agentic-task-select")?.value || "";
+  if (!taskId) {
+    status.textContent = "Select a task first.";
+    return;
+  }
+  status.textContent = `Generating report for ${taskId}...`;
+  try {
+    const data = await apiSend(`/api/agentic/tasks/${encodeURIComponent(taskId)}/report`, "POST", {});
+    const content = data.report?.content || "";
+    if (reportPreview) {
+      reportPreview.textContent = truncateForChat(content, 4000);
+    }
+    status.textContent = `Report generated: ${data.report?.reportPath || "report saved"}.`;
+  } catch (error) {
+    status.textContent = `Report generation failed: ${error.message}`;
+  }
 }
 
 function renderAgenticTools() {
@@ -4983,14 +5434,78 @@ function renderAgenticApprovals() {
     list.textContent = "No pending approvals.";
     return;
   }
+  const tasksById = new Map((state.agentic.tasks || []).map((task) => [task.id, task]));
+  const toolPreview = (step) => {
+    if (!step || step.type !== "tool") return "No tool details available.";
+    const toolId = step.toolId || "unknown";
+    const input = step.input || {};
+    if (toolId === "filesystem.write_text") {
+      return [
+        `toolId: ${toolId}`,
+        `path: ${input.path || "(missing)"}`,
+        `append: ${String(Boolean(input.append))}`,
+        `content: ${truncateForChat(input.content || "", 600)}`
+      ].join("\n");
+    }
+    if (toolId === "filesystem.read_text") {
+      return [
+        `toolId: ${toolId}`,
+        `path: ${input.path || "(missing)"}`,
+        `maxChars: ${input.maxChars || "(default)"}`
+      ].join("\n");
+    }
+    if (toolId === "http.request") {
+      return [
+        `toolId: ${toolId}`,
+        `method: ${input.method || "GET"}`,
+        `url: ${input.url || "(missing)"}`,
+        `headers: ${truncateForChat(JSON.stringify(input.headers || {}), 500)}`,
+        `body: ${truncateForChat(
+          typeof input.body === "string" ? input.body : JSON.stringify(input.body || {}),
+          600
+        )}`
+      ].join("\n");
+    }
+    if (toolId === "web.fetch") {
+      return [
+        `toolId: ${toolId}`,
+        `url: ${input.url || "(missing)"}`,
+        `maxChars: ${input.maxChars || "(default)"}`
+      ].join("\n");
+    }
+    if (toolId === "knowledge.ingest_url") {
+      return [
+        `toolId: ${toolId}`,
+        `url: ${input.url || "(missing)"}`,
+        `mode: ${input.mode || "create"}`,
+        `summarize: ${input.summarize !== false}`
+      ].join("\n");
+    }
+    if (toolId === "openai.generate_image") {
+      return [
+        `toolId: ${toolId}`,
+        `prompt: ${truncateForChat(input.prompt || "", 600)}`,
+        `size: ${input.size || "1024x1024"}`,
+        `quality: ${input.quality || "auto"}`
+      ].join("\n");
+    }
+    return [
+      `toolId: ${toolId}`,
+      `input: ${truncateForChat(JSON.stringify(input || {}), 800)}`
+    ].join("\n");
+  };
+
   approvals.forEach((approval) => {
     const card = document.createElement("div");
     card.className = "card";
+    const task = tasksById.get(approval.taskId);
+    const step = (task?.steps || []).find((s) => s.id === approval.stepId);
     card.innerHTML = `
       <div class="card-title">${approval.title || approval.id}</div>
       <div>task: ${approval.taskId}</div>
       <div>step: ${approval.stepId}</div>
       <div class="muted">requested: ${approval.createdAt || "n/a"}</div>
+      <pre class="knowledge-content-preview">${toolPreview(step)}</pre>
     `;
     const row = document.createElement("div");
     row.className = "row";
@@ -5034,6 +5549,164 @@ function renderAgenticApprovals() {
     card.appendChild(row);
     list.appendChild(card);
   });
+}
+
+function watcherTargetLabel(watcher) {
+  if (watcher?.check?.type === "http") return watcher.check.url || "(missing url)";
+  if (watcher?.check?.type === "file") return watcher.check.path || "(missing path)";
+  return "(unknown)";
+}
+
+function renderAgenticWatchers() {
+  const list = byId("agentic-watchers-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const watchers = state.agentic.watchers || [];
+  if (!watchers.length) {
+    list.textContent = "No watchers configured.";
+    return;
+  }
+
+  watchers.forEach((watcher) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${watcher.name || watcher.id}</div>
+      <div>type: ${watcher.check?.type || "unknown"}</div>
+      <div>target: ${watcherTargetLabel(watcher)}</div>
+      <div>enabled: ${watcher.enabled ? "true" : "false"}</div>
+      <div class="muted">last run: ${watcher.lastRunAt || "n/a"}</div>
+      <div class="muted">last change: ${watcher.lastChangeAt || "n/a"}</div>
+      <div class="muted">last task: ${watcher.lastTaskId || "n/a"}</div>
+      <div class="muted">summary: ${truncateForChat(watcher.lastSummary || "", 240)}</div>
+    `;
+    const row = document.createElement("div");
+    row.className = "row";
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.textContent = "Run Now";
+    runBtn.addEventListener("click", async () => {
+      byId("agentic-watcher-status").textContent = `Running ${watcher.id}...`;
+      try {
+        await apiSend(`/api/agentic/watchers/${encodeURIComponent(watcher.id)}/run`, "POST", {});
+        await loadAgenticData();
+        byId("agentic-watcher-status").textContent = `Watcher ${watcher.id} ran.`;
+      } catch (error) {
+        byId("agentic-watcher-status").textContent = `Watcher run failed: ${error.message}`;
+      }
+    });
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async () => {
+      const ok = window.confirm(`Delete watcher '${watcher.name || watcher.id}'?`);
+      if (!ok) return;
+      byId("agentic-watcher-status").textContent = `Deleting ${watcher.id}...`;
+      try {
+        await apiSend(`/api/agentic/watchers/${encodeURIComponent(watcher.id)}`, "DELETE", {});
+        await loadAgenticData();
+        byId("agentic-watcher-status").textContent = `Deleted ${watcher.id}.`;
+      } catch (error) {
+        byId("agentic-watcher-status").textContent = `Delete failed: ${error.message}`;
+      }
+    });
+    row.append(runBtn, delBtn);
+    card.appendChild(row);
+    list.appendChild(card);
+  });
+}
+
+async function createAgenticWatcherFromUi() {
+  const status = byId("agentic-watcher-status");
+  const name = byId("agentic-watcher-name").value.trim();
+  const type = byId("agentic-watcher-type").value || "http";
+  const actionType = byId("agentic-watcher-action").value || "task";
+  const target = byId("agentic-watcher-target").value.trim();
+  if (!name) {
+    status.textContent = "Watcher name is required.";
+    return;
+  }
+  if (!target) {
+    status.textContent = "Watcher target is required.";
+    return;
+  }
+
+  const check = type === "file" ? { type: "file", path: target } : { type: "http", url: target };
+  let payload;
+  if (actionType === "knowledge-pack") {
+    const packId = byId("agentic-watcher-pack-id").value.trim();
+    if (!packId) {
+      status.textContent = "Knowledge pack id is required for knowledge update.";
+      return;
+    }
+    payload = {
+      name,
+      enabled: true,
+      check,
+      action: {
+        type: "knowledge-pack",
+        mode: byId("agentic-watcher-knowledge-mode").value || "append",
+        summarize: Boolean(byId("agentic-watcher-summarize").checked),
+        tags: parseCsv(byId("agentic-team-tags").value),
+        template: {
+          title: byId("agentic-task-title").value.trim() || "Watcher Knowledge Update",
+          objective: byId("agentic-task-objective").value.trim(),
+          packId
+        }
+      }
+    };
+  } else {
+    let steps = [];
+    try {
+      refreshAgenticJsonFromBuilder({ silent: true });
+      steps = getAgenticStepsFromForm();
+    } catch (error) {
+      status.textContent = `Invalid steps JSON: ${error.message}`;
+      return;
+    }
+    const validation = validateAgenticSteps(steps);
+    if (validation.errors.length) {
+      status.textContent = `Fix step issues before creating watcher:\n- ${validation.errors.join("\n- ")}`;
+      return;
+    }
+    payload = {
+      name,
+      enabled: true,
+      check,
+      action: {
+        type: "task",
+        runImmediately: Boolean(byId("agentic-watcher-run-immediately").checked),
+        template: {
+          title: byId("agentic-task-title").value.trim() || "Watcher Task",
+          objective: byId("agentic-task-objective").value.trim(),
+          team: {
+            mode: byId("agentic-team-mode").value || "auto",
+            personaIds: parseCsv(byId("agentic-team-persona-ids").value),
+            tags: parseCsv(byId("agentic-team-tags").value),
+            maxAgents: safeNumberInput(byId("agentic-team-max-agents").value, 3, {
+              min: 1,
+              max: 8,
+              integer: true
+            })
+          },
+          settings: {
+            model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+            temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
+          },
+          steps
+        }
+      }
+    };
+  }
+
+  status.textContent = "Creating watcher...";
+  try {
+    await apiSend("/api/agentic/watchers", "POST", payload);
+    await loadAgenticData();
+    status.textContent = "Watcher created.";
+  } catch (error) {
+    status.textContent = `Watcher create failed: ${error.message}`;
+  }
 }
 
 function renderAgenticMetrics() {
@@ -5185,7 +5858,7 @@ async function loadAgenticData() {
   if (!state.auth.authenticated) return;
   byId("agentic-task-status").textContent = "Loading agentic workspace...";
   try {
-    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates] = await Promise.all([
+    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates, watchers] = await Promise.all([
       apiGet("/api/agentic/tools"),
       apiGet("/api/agentic/tasks"),
       apiGet("/api/agentic/approvals"),
@@ -5195,7 +5868,8 @@ async function loadAgenticData() {
       apiGet("/api/agentic/events?type=tool&limit=200"),
       apiGet("/api/agentic/mcp/status"),
       apiGet("/api/agentic/mcp/servers?includeTools=true"),
-      apiGet("/api/agentic/templates")
+      apiGet("/api/agentic/templates"),
+      apiGet("/api/agentic/watchers")
     ]);
     state.agentic.tools = tools.tools || [];
     state.agentic.tasks = tasks.tasks || [];
@@ -5207,6 +5881,7 @@ async function loadAgenticData() {
     state.agentic.mcp = mcp || null;
     state.agentic.mcpServers = mcpServers.servers || [];
     state.agentic.templates = templates.templates || [];
+    state.agentic.watchers = watchers.watchers || [];
 
     if (state.agentic.activeTaskId && !state.agentic.tasks.some((t) => t.id === state.agentic.activeTaskId)) {
       state.agentic.activeTaskId = "";
@@ -5219,6 +5894,7 @@ async function loadAgenticData() {
     renderAgenticTaskDetail();
     renderAgenticTools();
     renderAgenticApprovals();
+    renderAgenticWatchers();
     renderAgenticMetrics();
     renderAgenticPresetSelect();
     byId("agentic-task-status").textContent = "Agentic workspace loaded.";
@@ -5230,12 +5906,21 @@ async function loadAgenticData() {
 async function createAgenticTaskFromUi() {
   const status = byId("agentic-task-status");
   let steps = [];
+  let warningText = "";
   try {
     refreshAgenticJsonFromBuilder({ silent: true });
     steps = getAgenticStepsFromForm();
   } catch (error) {
     status.textContent = `Invalid steps JSON: ${error.message}`;
     return;
+  }
+  const validation = validateAgenticSteps(steps);
+  if (validation.errors.length) {
+    status.textContent = `Fix step issues before creating a task:\n- ${validation.errors.join("\n- ")}`;
+    return;
+  }
+  if (validation.warnings.length) {
+    warningText = `\nWarnings:\n- ${validation.warnings.join("\n- ")}`;
   }
 
   const payload = {
@@ -5264,7 +5949,7 @@ async function createAgenticTaskFromUi() {
     const data = await apiSend("/api/agentic/tasks", "POST", payload);
     const task = data.task;
     state.agentic.activeTaskId = task?.id || "";
-    status.textContent = `Task created: ${task?.id || "unknown"} (${task?.status || "pending"})`;
+    status.textContent = `Task created: ${task?.id || "unknown"} (${task?.status || "pending"})${warningText}`;
     await loadAgenticData();
   } catch (error) {
     status.textContent = `Task creation failed: ${error.message}`;
@@ -5351,7 +6036,14 @@ async function generateAgenticPlanFromGoal() {
       reasoning: plan.reasoning || "",
       generatedAt: new Date().toISOString()
     });
-    status.textContent = "Plan generated. Review/edit steps, then create task.";
+    const validation = validateAgenticSteps(plan.steps || []);
+    if (validation.errors.length) {
+      status.textContent = `Plan generated with issues:\n- ${validation.errors.join("\n- ")}`;
+    } else if (validation.warnings.length) {
+      status.textContent = `Plan generated with warnings:\n- ${validation.warnings.join("\n- ")}`;
+    } else {
+      status.textContent = "Plan generated. Review/edit steps, then create task.";
+    }
   } catch (error) {
     status.textContent = `Plan generation failed: ${error.message}`;
   }
@@ -5384,8 +6076,16 @@ async function saveCurrentAgenticTemplate() {
     const suggestedName = byId("agentic-task-title").value.trim() || "Agentic Template";
     const name = window.prompt("Template name:", suggestedName);
     if (!name || !name.trim()) return;
+    const templateId = `tpl-${toSafeSlug(name) || "template"}`;
+    const existing = (state.agentic.templates || []).find((item) => item.id === templateId);
+    if (existing) {
+      const ok = window.confirm(`Template "${existing.name}" already exists (v${existing.version || 1}). Update and bump version?`);
+      if (!ok) return;
+    }
     const payload = {
+      id: templateId,
       name: name.trim(),
+      bumpVersion: existing ? true : true,
       template: {
         title: byId("agentic-task-title").value.trim() || "Agentic Task",
         objective: byId("agentic-task-objective").value.trim(),
@@ -6061,7 +6761,10 @@ function wireEvents() {
   byId("agentic-save-template").addEventListener("click", saveCurrentAgenticTemplate);
   byId("agentic-refresh").addEventListener("click", loadAgenticData);
   byId("agentic-run-selected").addEventListener("click", runSelectedAgenticTask);
+  byId("agentic-open-chat").addEventListener("click", openAgenticTaskInChat);
+  byId("agentic-generate-report").addEventListener("click", generateAgenticReportForSelectedTask);
   byId("agentic-mcp-tool-run").addEventListener("click", runSelectedMcpTool);
+  byId("agentic-watcher-create").addEventListener("click", createAgenticWatcherFromUi);
   byId("agentic-router-preview").addEventListener("click", previewAgenticRouting);
   byId("agentic-step-add").addEventListener("click", () => {
     state.agentic.stepDrafts = getAgenticBuilderRowsFromDom();
@@ -6287,6 +6990,7 @@ function wireEvents() {
   byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-new-draft-main").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-refresh-list").addEventListener("click", loadPersonaChatSessions);
+  byId("persona-chat-to-agentic").addEventListener("click", createAgenticFromPersonaChat);
   byId("persona-chat-persona-filter").addEventListener("input", renderPersonaChatPersonaList);
   byId("persona-chat-select-all").addEventListener("click", () => applyPersonaChatSelectionBulk("select"));
   byId("persona-chat-clear-all").addEventListener("click", () => applyPersonaChatSelectionBulk("clear"));
@@ -6318,6 +7022,7 @@ function wireEvents() {
   byId("simple-chat-create").addEventListener("click", createSimpleChatSession);
   byId("simple-chat-new-draft").addEventListener("click", startNewSimpleChatDraft);
   byId("simple-chat-refresh-list").addEventListener("click", loadSimpleChatSessions);
+  byId("simple-chat-to-agentic").addEventListener("click", createAgenticFromSimpleChat);
   byId("simple-chat-toggle-sidebar").addEventListener("click", () => setSimpleSidebarCollapsed(true));
   byId("simple-chat-show-sidebar").addEventListener("click", () => setSimpleSidebarCollapsed(false));
   byId("simple-chat-load").addEventListener("click", () => {

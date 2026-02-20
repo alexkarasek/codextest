@@ -383,6 +383,42 @@
           </div>
           <pre id="agentic-router-result" class="preview"></pre>
           <div id="agentic-task-status" class="status"></div>
+          <h3>Watchers</h3>
+          <div class="hint">Create a watcher that checks a URL or file and triggers a task when it changes.</div>
+          <label>Watcher Name<input id="agentic-watcher-name" type="text" placeholder="Weekly status monitor"></label>
+          <div class="grid two">
+            <label>Type
+              <select id="agentic-watcher-type">
+                <option value="http" selected>HTTP</option>
+                <option value="file">File</option>
+              </select>
+            </label>
+            <label>Action
+              <select id="agentic-watcher-action">
+                <option value="task" selected>Trigger Task</option>
+                <option value="knowledge-pack">Update Knowledge Pack</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid two">
+            <label>Run Task on Change<input id="agentic-watcher-run-immediately" type="checkbox" checked></label>
+            <label>Knowledge Pack Id<input id="agentic-watcher-pack-id" type="text" placeholder="weekly-status"></label>
+          </div>
+          <label>Target URL or File Path<input id="agentic-watcher-target" type="text" placeholder="https://example.com/status or data/notes.txt"></label>
+          <div class="grid two">
+            <label>Knowledge Update Mode
+              <select id="agentic-watcher-knowledge-mode">
+                <option value="append" selected>Append</option>
+                <option value="overwrite">Overwrite</option>
+                <option value="create">Create</option>
+              </select>
+            </label>
+            <label>Summarize<input id="agentic-watcher-summarize" type="checkbox" checked></label>
+          </div>
+          <div class="row">
+            <button id="agentic-watcher-create" type="button">Create Watcher from Current Task</button>
+          </div>
+          <div id="agentic-watcher-status" class="status"></div>
         </div>
 
         <div class="panel stack">
@@ -390,11 +426,19 @@
           <div class="row">
             <button id="agentic-refresh" type="button">Refresh</button>
             <button id="agentic-run-selected" type="button">Run Selected Task</button>
+            <button id="agentic-open-chat" type="button">Open in Chat</button>
+            <button id="agentic-generate-report" type="button">Generate Report</button>
           </div>
           <label>Task<select id="agentic-task-select"></select></label>
           <pre id="agentic-task-detail" class="preview"></pre>
+          <div class="hint">Step observability shows inputs, outputs, and recent tool/task events for the selected task.</div>
+          <pre id="agentic-task-observability" class="preview"></pre>
+          <div class="hint">Latest report output (truncated):</div>
+          <pre id="agentic-task-report" class="preview"></pre>
           <h3>Pending Approvals</h3>
           <div id="agentic-approvals-list" class="list"></div>
+          <h3>Watchers</h3>
+          <div id="agentic-watchers-list" class="list"></div>
           <h3>Tool Catalog</h3>
           <div id="agentic-tools-list" class="list"></div>
         </div>
@@ -447,6 +491,7 @@
             <button id="simple-chat-show-sidebar" type="button" class="hidden">Show History</button>
             <h2>Simple Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Single-assistant conversation with optional knowledge grounding and session history.</span></span></h2>
             <button id="simple-chat-new-draft" type="button">New Chat</button>
+            <button id="simple-chat-to-agentic" type="button">Create Agentic Task</button>
           </div>
           <details id="simple-chat-config-details" class="setup-advanced" open>
             <summary>Session Configuration</summary>
@@ -482,7 +527,7 @@
             <button id="simple-chat-send" type="button">Send</button>
             <button id="simple-chat-image" type="button">Generate Image</button>
           </div>
-          <div class="hint">Citations appear automatically when matching knowledge pack evidence is found. For visuals, click Generate Image or start prompt with <code>/image</code>.</div>
+          <div class="hint">Citations appear automatically when matching knowledge pack evidence is found. For visuals, click Generate Image or start prompt with <code>/image</code>. Text-only mentions of images only trigger generation when the subject is clear.</div>
         </div>
       </div>
     </section>
@@ -503,6 +548,7 @@
             <button id="persona-chat-show-sidebar" type="button" class="hidden">Show History</button>
             <h2>Persona Collaboration Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Create a free-form chat session with one or more personas. An orchestrator picks the most relevant subset each turn, so not everyone replies every time.</span></span></h2>
             <button id="persona-chat-new-draft-main" type="button">New Chat</button>
+            <button id="persona-chat-to-agentic" type="button">Create Agentic Task</button>
           </div>
           <div class="row">
             <button id="group-work-live" type="button">Live Group Chat</button>
@@ -665,7 +711,7 @@
             <input id="persona-chat-message" type="text" placeholder="Ask your selected personas anything">
             <button id="persona-chat-send" type="button">Send</button>
           </div>
-          <div class="hint">Image intent is auto-detected. Use natural prompts like “generate an image of…” or prefix with <code>/image</code>.</div>
+          <div class="hint">Image intent is auto-detected. Use <code>/image</code> or a clear subject like "generate an image of alpine lake at sunrise." Vague mentions won't trigger image mode.</div>
         </div>
       </div>
     </section>

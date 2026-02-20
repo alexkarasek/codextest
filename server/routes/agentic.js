@@ -2,6 +2,7 @@ import express from "express";
 import { getAgenticMetricsOverview } from "../../lib/agenticMetrics.js";
 import {
   deleteTaskTemplate,
+  deleteWatcher,
   getTask,
   listApprovals,
   listJobs,
@@ -9,6 +10,7 @@ import {
   listTaskTemplates,
   listTasks,
   listToolUsage,
+  listWatchers,
   appendToolUsage,
   saveTaskTemplate
 } from "../../lib/agenticStorage.js";
@@ -18,12 +20,15 @@ import { getMcpReadinessStatus, listResolvedMcpServers } from "../../lib/mcpStat
 import { runMcpTool } from "../../lib/mcpRegistry.js";
 import { listPersonas } from "../../lib/storage.js";
 import { applyApprovalDecision, createTaskDraft, runTask } from "../../lib/taskRunner.js";
+import { createWatcher, runWatcher } from "../../lib/agenticWatchers.js";
+import { generateTaskReport } from "../../lib/agenticReports.js";
 import { routeTeam } from "../../lib/teamRouter.js";
 import { slugify } from "../../lib/utils.js";
 import {
   agenticPlanRequestSchema,
   approvalDecisionSchema,
   createAgenticTaskSchema,
+  createWatcherSchema,
   formatZodError,
   routerPreviewSchema,
   runAgenticTaskSchema
@@ -72,6 +77,74 @@ function normalizePlannedStep(step, idx) {
 
 router.get("/tools", (_req, res) => {
   sendOk(res, { tools: listTools() });
+});
+
+router.get("/watchers", async (_req, res) => {
+  try {
+    const watchers = await listWatchers();
+    sendOk(res, { watchers });
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list watchers: ${e.message}`
+    });
+  }
+});
+
+router.post("/watchers", async (req, res) => {
+  const parsed = createWatcherSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    sendError(res, 400, "VALIDATION_ERROR", "Invalid watcher payload.", formatZodError(parsed.error));
+    return;
+  }
+  try {
+    const watcher = await createWatcher({
+      name: parsed.data.name,
+      enabled: parsed.data.enabled,
+      check: parsed.data.check,
+      action: parsed.data.action,
+      createdBy: req.auth?.user || null
+    });
+    sendOk(res, { watcher }, 201);
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to create watcher: ${e.message}`
+    });
+  }
+});
+
+router.post("/watchers/:watcherId/run", async (req, res) => {
+  try {
+    const data = await runWatcher(req.params.watcherId, { user: req.auth?.user || null });
+    sendOk(res, data);
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Watcher '${req.params.watcherId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to run watcher: ${e.message}` }
+    );
+  }
+});
+
+router.delete("/watchers/:watcherId", async (req, res) => {
+  try {
+    const ok = await deleteWatcher(req.params.watcherId);
+    if (!ok) {
+      sendError(res, 404, "NOT_FOUND", `Watcher '${req.params.watcherId}' not found.`);
+      return;
+    }
+    sendOk(res, { deleted: true });
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to delete watcher: ${e.message}`
+    });
+  }
 });
 
 router.post("/router/preview", async (req, res) => {
@@ -257,7 +330,7 @@ router.post("/templates", async (req, res) => {
       team: template.team || {},
       settings: template.settings || {},
       steps: template.steps
-    });
+    }, { bumpVersion: req.body?.bumpVersion !== false });
     sendOk(res, { template: row }, 201);
   } catch (error) {
     sendMappedError(res, error, [], {
@@ -375,6 +448,20 @@ router.post("/tasks/:taskId/run", async (req, res) => {
         { code: "UNKNOWN_TOOL", status: 400 }
       ],
       { status: 500, code: "SERVER_ERROR", message: (e) => `Task run failed: ${e.message}` }
+    );
+  }
+});
+
+router.post("/tasks/:taskId/report", async (req, res) => {
+  try {
+    const report = await generateTaskReport(req.params.taskId);
+    sendOk(res, { report });
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Task '${req.params.taskId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to generate report: ${e.message}` }
     );
   }
 });

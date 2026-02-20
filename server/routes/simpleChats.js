@@ -79,11 +79,20 @@ function detectImageIntent(message, { force = false } = {}) {
     }
     return { mode: "clear", prompt };
   }
+  const discussionCue = /\b(how to|what is|explain|describe|discuss|talk about|meaning of)\b/i.test(text);
+  if (discussionCue && /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text)) {
+    return { mode: "none", prompt: "" };
+  }
   const clearMatch = text.match(
     /^(?:please\s+)?(?:generate|create|draw|make|render|illustrate|sketch)\s+(?:an?\s+)?(?:image|diagram|schematic|picture|illustration|visual)(?:\s+of|\s+for)?\s*(.+)$/i
   );
   if (clearMatch && clearMatch[1] && clearMatch[1].trim()) {
-    return { mode: "clear", prompt: clearMatch[1].trim() };
+    const subject = clearMatch[1].trim();
+    const tokenCount = subject.split(/\s+/).filter(Boolean).length;
+    if (tokenCount >= 2) {
+      return { mode: "clear", prompt: subject };
+    }
+    return { mode: "ambiguous", prompt: "", reason: "unclear_intent" };
   }
   const mentionsVisual = /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text);
   if (mentionsVisual) {
