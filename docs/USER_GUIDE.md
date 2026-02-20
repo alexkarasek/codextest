@@ -83,8 +83,9 @@ Tips:
 - `chat` (interactive, directed)
 - `panel` (moderated discussion)
 - `debate-work-order` (moderated convergence to outcome)
-6. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
-7. Send message.
+6. Optional for panel mode: set `Panel Auto Rounds` to continue moderator-facilitated follow-up rounds after the initial user turn.
+7. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
+8. Send message.
 
 What to expect:
 - In `chat` mode, personas mainly reply when directly addressed (for example, `@persona-name`).

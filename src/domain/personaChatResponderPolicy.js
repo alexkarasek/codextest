@@ -249,6 +249,34 @@ export function chooseResponders({
     };
   }
 
+  if (mode === "panel") {
+    const scoredMap = new Map(
+      personas.map((persona) => {
+        const packs = personaPacksFor(persona, knowledgeByPersona, globalKnowledgePacks);
+        const relevance = computePersonaRelevance({ userMessage, persona, personaPacks: packs });
+        const outOfScope = appearsOutOfScope({ userMessage, persona, personaPacks: packs });
+        return [persona.id, { relevance, outOfScope }];
+      })
+    );
+    const selected = personas.slice();
+    return {
+      selectedPersonas: selected,
+      rationale: selected.map((p) => {
+        const scored = scoredMap.get(p.id) || { relevance: 0, outOfScope: false };
+        return {
+          speakerId: p.id,
+          displayName: p.displayName,
+          relevance: scored.relevance,
+          outOfScope: scored.outOfScope,
+          reason: "Panel round: all participants respond in sequence."
+        };
+      }),
+      omittedCount: 0,
+      routeType: "panel-round",
+      mentionedIds
+    };
+  }
+
   const recent = recentSpeakerIds(history, 2);
   const recentPenaltyIds = new Set(recent.slice(0, 2));
 
@@ -321,4 +349,3 @@ export function buildOrchestrationContent(orchestration, mode) {
   }
   return `Orchestrator selected ${selected}${orchestration.omittedCount ? ` (${orchestration.omittedCount} omitted this turn)` : ""}.`;
 }
-

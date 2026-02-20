@@ -1568,7 +1568,10 @@ function setUnifiedDebateTopicContext(topic = "", context = "", { onlyIfEmptyCon
 }
 
 function syncDebateModeTopicContextFromGroup(force = false) {
-  if (!force && !byId("persona-chat-title") && !byId("persona-chat-context")) return;
+  // Avoid mutating live typing state; only sync on explicit force calls
+  // from template/load actions.
+  if (!force) return;
+  if (!byId("persona-chat-title") && !byId("persona-chat-context")) return;
   setUnifiedDebateTopicContext(getUnifiedDebateTopic() || "Untitled Debate", getUnifiedDebateContext());
 }
 
@@ -1578,7 +1581,7 @@ function updatePersonaChatModeHelp() {
   if (!helpEl) return;
   if (mode === "panel") {
     helpEl.textContent =
-      "Panel discussion: moderator facilitates agent-to-agent dialogue, synthesizes viewpoints, and asks one next exploration question. No winner is declared.";
+      "Panel discussion: all selected personas respond each turn, then moderator synthesizes and asks follow-up questions for ongoing rounds (no winner).";
     return;
   }
   if (mode === "debate-work-order") {
@@ -1768,6 +1771,9 @@ async function loadPersonaChatSession(chatId) {
     if (typeof data.session?.settings?.maxWordsPerTurn !== "undefined") {
       byId("persona-chat-max-words").value = String(data.session.settings.maxWordsPerTurn);
     }
+    if (typeof data.session?.settings?.panelAutoRounds !== "undefined") {
+      byId("persona-chat-panel-rounds").value = String(data.session.settings.panelAutoRounds);
+    }
     if (data.session?.settings?.engagementMode) {
       byId("persona-chat-mode").value = data.session.settings.engagementMode;
     }
@@ -1806,7 +1812,12 @@ async function createPersonaChatSession() {
         max: 400,
         integer: true
       }),
-      engagementMode: byId("persona-chat-mode").value || "chat"
+      engagementMode: byId("persona-chat-mode").value || "chat",
+      panelAutoRounds: safeNumberInput(byId("persona-chat-panel-rounds").value, 2, {
+        min: 0,
+        max: 4,
+        integer: true
+      })
     }
   };
 
@@ -1836,6 +1847,7 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-model").value = "gpt-4.1-mini";
   byId("persona-chat-temperature").value = "0.6";
   byId("persona-chat-max-words").value = "140";
+  byId("persona-chat-panel-rounds").value = "2";
   byId("persona-chat-mode").value = "chat";
   updatePersonaChatModeHelp();
   byId("persona-chat-persona-filter").value = "";
@@ -6290,7 +6302,7 @@ function wireEvents() {
       sendPersonaChatMessage();
     }
   });
-  ["persona-chat-title", "persona-chat-context", "persona-chat-model", "persona-chat-temperature", "persona-chat-max-words", "persona-chat-mode"].forEach((id) => {
+  ["persona-chat-title", "persona-chat-context", "persona-chat-model", "persona-chat-temperature", "persona-chat-max-words", "persona-chat-panel-rounds", "persona-chat-mode"].forEach((id) => {
     const el = byId(id);
     if (!el) return;
     el.addEventListener("input", () => {
