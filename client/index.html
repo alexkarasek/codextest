@@ -294,6 +294,19 @@
           <button id="security-copy-key" type="button" disabled>Copy API Key</button>
           <h3>Your API Keys</h3>
           <div id="security-api-keys" class="list"></div>
+          <h3>Demo Reset (Admin)</h3>
+          <label>Reset Scope
+            <select id="security-reset-scope">
+              <option value="usage" selected>Usage Only (Chats/Runs/Events)</option>
+              <option value="full">Full Reseed (also Personas + Knowledge)</option>
+            </select>
+          </label>
+          <label class="inline"><input id="security-reset-keep-users" type="checkbox" checked> Keep users</label>
+          <label class="inline"><input id="security-reset-keep-keys" type="checkbox" checked> Keep API keys</label>
+          <label class="inline"><input id="security-reset-keep-settings" type="checkbox" checked> Keep settings</label>
+          <label class="inline"><input id="security-reset-keep-logo" type="checkbox" checked> Keep logo</label>
+          <button id="security-reset-run" type="button">Run Reset</button>
+          <div id="security-reset-status" class="status"></div>
         </div>
 
         <div class="panel stack">

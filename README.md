@@ -454,6 +454,10 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `data/agentic/task-events.jsonl` stores orchestration lifecycle events.
 - `data/agentic/tool-usage.jsonl` stores tool execution telemetry.
 - `data/agentic/autonomy/*` stores autonomous multi-persona image run outputs.
+- Delete behavior:
+  - archive (default): hides from normal UI lists while preserving governance visibility
+  - hard delete (admin): permanently removes content
+- Admin demo reset is available in `Users & Access` to clear usage-only data or run full reseed.
 
 ## Manual Test Plan
 

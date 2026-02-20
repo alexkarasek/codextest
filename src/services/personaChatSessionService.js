@@ -48,6 +48,9 @@ export async function listPersonaChatSessions() {
 export async function getPersonaChatSessionDetail(chatId) {
   try {
     const { session } = await getPersonaChat(chatId);
+    if (session?.isArchived) {
+      throw createError("NOT_FOUND", `Persona chat '${chatId}' not found.`);
+    }
     const messages = await listPersonaChatMessages(chatId);
     return { session, messages };
   } catch (error) {

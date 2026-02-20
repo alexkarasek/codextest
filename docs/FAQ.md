@@ -18,6 +18,11 @@ Go to `Chats -> Persona Chat -> Live Group Chat -> Structured Debate Run`, compl
 ## How do I review old chats/debates?
 Use `Chats -> Persona Chat -> Conversation Explorer` to browse sessions and inspect risk/sentiment flags.
 
+## How do deletes work?
+Delete actions support two modes:
+- `archive` (default/recommended): hide from normal chat/config lists, retained for governance analysis.
+- `hard` (admin only): permanently remove content.
+
 ## Where do I configure personas and knowledge packs?
 Use `Admin & Config -> Personas` and `Admin & Config -> Knowledge Studio`.
 
@@ -44,6 +49,11 @@ Open `Admin & Config -> Theme` and edit the theme variables/typography JSON.
 
 ## Where do I find platform metrics and cost/risk views?
 Open the `Governance` tab.
+
+## Can I reset the demo quickly without terminal commands?
+Yes. Admin users can open `Admin & Config -> Users & Access` and use **Demo Reset**:
+- `Usage Only` clears chats/runs/events.
+- `Full Reseed` also clears personas and knowledge packs.
 
 ## Does the app use a database?
 No. All persistence is file-based in `data/`.

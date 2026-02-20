@@ -63,18 +63,21 @@ Response envelope:
 - `GET /:debateId/transcript`
 - `POST /:debateId/chat`
 - `GET /:debateId/chat`
+- `DELETE /:debateId?mode=archive|hard`
 
 ### Persona chats (`/api/persona-chats`) - auth required
 - `POST /`
 - `GET /`
 - `GET /:chatId`
 - `POST /:chatId/messages`
+- `DELETE /:chatId?mode=archive|hard`
 
 ### Simple chats (`/api/simple-chats`) - auth required
 - `POST /`
 - `GET /`
 - `GET /:chatId`
 - `POST /:chatId/messages`
+- `DELETE /:chatId?mode=archive|hard`
 
 ### Settings (`/api/settings`) - auth required
 - `GET /responsible-ai`
@@ -100,8 +103,11 @@ Response envelope:
 - `GET /governance-chat/:chatId`
 - `POST /governance-chat/:chatId/messages`
 - `POST /governance-chat/refresh-assets`
+- `POST /system/reset` (admin role required)
 
 Notes:
+- Delete mode defaults to `archive` (recommended) if omitted.
+- `mode=hard` permanently removes content and requires admin role.
 - Admin overview/detail responses include conversation mode fields and observability summaries.
 - Detail endpoints include sanitized observability traces (payload excerpts are redacted/masked).
 - Debate APIs remain stable and are compatibility wrappers for a unified internal conversation-mode model (`conversationMode: "debate"`).

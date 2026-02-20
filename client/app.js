@@ -566,6 +566,15 @@ async function copyGeneratedApiKey() {
   }
 }
 
+function chooseDeleteMode(label) {
+  const raw = window.prompt(
+    `Delete ${label}.\nPress Enter for Archive (recommended), or type 'hard' for permanent deletion.`,
+    ""
+  );
+  if (raw === null) return null;
+  return String(raw).trim().toLowerCase() === "hard" ? "hard" : "archive";
+}
+
 function parsePermissionsInput(input) {
   const values = parseCsv(input);
   const perms = {};
@@ -1626,15 +1635,38 @@ function renderPersonaChatSessionList() {
 
   state.personaChat.sessions.forEach((session) => {
     const active = state.personaChat.activeChatId === session.chatId;
-    const item = document.createElement("button");
-    item.type = "button";
+    const item = document.createElement("div");
     item.className = `session-item ${active ? "active" : ""}`;
     item.innerHTML = `
       <div class="session-title">${session.title || "Persona Chat"}</div>
       <div class="session-meta">${session.chatId}</div>
       <div class="session-meta">mode: ${session.engagementMode || "chat"} | messages: ${session.messageCount || 0}</div>
     `;
-    item.addEventListener("click", () => loadPersonaChatSession(session.chatId));
+    const actions = document.createElement("div");
+    actions.className = "row";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.textContent = "Open";
+    openBtn.addEventListener("click", () => loadPersonaChatSession(session.chatId));
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async () => {
+      const mode = chooseDeleteMode(`persona chat '${session.title || session.chatId}'`);
+      if (!mode) return;
+      try {
+        await apiSend(`/api/persona-chats/${encodeURIComponent(session.chatId)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
+        if (state.personaChat.activeChatId === session.chatId) {
+          startNewPersonaChatDraft();
+        }
+        await loadPersonaChatSessions();
+        byId("persona-chat-status").textContent = `Deleted ${session.chatId} (${mode}).`;
+      } catch (error) {
+        byId("persona-chat-status").textContent = `Delete failed: ${error.message}`;
+      }
+    });
+    actions.append(openBtn, delBtn);
+    item.appendChild(actions);
     container.appendChild(item);
   });
 }
@@ -1935,15 +1967,38 @@ function renderSimpleChatSessionList() {
 
   sessions.forEach((session) => {
     const active = state.simpleChat.activeChatId === session.chatId;
-    const item = document.createElement("button");
-    item.type = "button";
+    const item = document.createElement("div");
     item.className = `session-item ${active ? "active" : ""}`;
     item.innerHTML = `
       <div class="session-title">${session.title || "Simple Chat"}</div>
       <div class="session-meta">${session.chatId}</div>
       <div class="session-meta">messages: ${session.messageCount || 0}</div>
     `;
-    item.addEventListener("click", () => loadSimpleChatSession(session.chatId));
+    const actions = document.createElement("div");
+    actions.className = "row";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.textContent = "Open";
+    openBtn.addEventListener("click", () => loadSimpleChatSession(session.chatId));
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async () => {
+      const mode = chooseDeleteMode(`simple chat '${session.title || session.chatId}'`);
+      if (!mode) return;
+      try {
+        await apiSend(`/api/simple-chats/${encodeURIComponent(session.chatId)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
+        if (state.simpleChat.activeChatId === session.chatId) {
+          startNewSimpleChatDraft();
+        }
+        await loadSimpleChatSessions();
+        byId("simple-chat-status").textContent = `Deleted ${session.chatId} (${mode}).`;
+      } catch (error) {
+        byId("simple-chat-status").textContent = `Delete failed: ${error.message}`;
+      }
+    });
+    actions.append(openBtn, delBtn);
+    item.appendChild(actions);
     container.appendChild(item);
   });
 }
@@ -2452,9 +2507,10 @@ function renderPersonaList() {
     delBtn.type = "button";
     delBtn.textContent = "Delete";
     delBtn.addEventListener("click", async () => {
-      if (!window.confirm(`Delete persona '${persona.id}'?`)) return;
+      const mode = chooseDeleteMode(`persona '${persona.id}'`);
+      if (!mode) return;
       try {
-        await apiSend(`/api/personas/${persona.id}`, "DELETE", {});
+        await apiSend(`/api/personas/${encodeURIComponent(persona.id)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
         state.selectedPersonas = state.selectedPersonas.filter(
           (entry) => !(entry.type === "saved" && entry.id === persona.id)
         );
@@ -2725,9 +2781,10 @@ function renderKnowledgeStudioList() {
     delBtn.type = "button";
     delBtn.textContent = "Delete";
     delBtn.addEventListener("click", async () => {
-      if (!window.confirm(`Delete knowledge pack '${pack.id}'?`)) return;
+      const mode = chooseDeleteMode(`knowledge pack '${pack.id}'`);
+      if (!mode) return;
       try {
-        await apiSend(`/api/knowledge/${encodeURIComponent(pack.id)}`, "DELETE", {});
+        await apiSend(`/api/knowledge/${encodeURIComponent(pack.id)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
         state.selectedKnowledgePackIds = state.selectedKnowledgePackIds.filter((id) => id !== pack.id);
         await loadKnowledgePacks();
       } catch (error) {
@@ -4333,6 +4390,14 @@ function renderSessionSummary() {
     .map(([name]) => name)
     .join(", ");
   el.textContent = `Logged in as ${user.username} (${user.role}). Permissions: ${perms || "none"}.`;
+  const resetBtn = byId("security-reset-run");
+  const resetStatus = byId("security-reset-status");
+  if (resetBtn) {
+    resetBtn.disabled = user.role !== "admin";
+  }
+  if (resetStatus && user.role !== "admin") {
+    resetStatus.textContent = "Demo reset is available to admin users only.";
+  }
 }
 
 function renderSecurityUsers(users) {
@@ -4462,6 +4527,7 @@ async function loadSecurityData() {
   byId("security-key-once").textContent = "";
   byId("security-copy-key").disabled = true;
   byId("security-key-status").textContent = "";
+  byId("security-reset-status").textContent = "";
   try {
     const [keys, usage] = await Promise.all([
       apiGet("/api/auth/api-keys"),
@@ -4483,6 +4549,57 @@ async function loadSecurityData() {
     }
   } else {
     renderSecurityUsers([]);
+  }
+}
+
+async function runSystemReset() {
+  const status = byId("security-reset-status");
+  if (state.auth.user?.role !== "admin") {
+    status.textContent = "Only admins can run reset.";
+    return;
+  }
+  const scope = byId("security-reset-scope").value || "usage";
+  const keepUsers = byId("security-reset-keep-users").checked;
+  const keepApiKeys = byId("security-reset-keep-keys").checked;
+  const keepSettings = byId("security-reset-keep-settings").checked;
+  const keepLogo = byId("security-reset-keep-logo").checked;
+  const warning =
+    scope === "full"
+      ? "This will clear chats, runs, events, personas, and knowledge packs. Continue?"
+      : "This will clear chat/runs/events history. Continue?";
+  if (!window.confirm(warning)) return;
+  status.textContent = "Running reset...";
+  try {
+    await apiSend("/api/admin/system/reset", "POST", {
+      scope,
+      keepUsers,
+      keepApiKeys,
+      keepSettings,
+      keepLogo
+    });
+    status.textContent = `Reset completed (${scope}). Refreshing UI...`;
+    state.simpleChat.historyByChat = {};
+    state.simpleChat.activeChatId = null;
+    state.personaChat.historyByChat = {};
+    state.personaChat.activeChatId = null;
+    state.viewer.activeId = null;
+    state.viewer.stage.replay = null;
+    await Promise.all([
+      loadSimpleChatSessions(),
+      loadPersonaChatSessions(),
+      loadViewerHistory(byId("viewer-conversation-type").value || "debate"),
+      loadKnowledgePacks(),
+      loadPersonas(),
+      loadAdminOverview(),
+      loadSecurityData()
+    ]);
+    renderSimpleChatHistory();
+    renderPersonaChatHistory();
+    renderViewerExchanges([]);
+    byId("viewer-transcript").textContent = "";
+    byId("viewer-progress").textContent = "Reset completed.";
+  } catch (error) {
+    status.textContent = `Reset failed: ${error.message}`;
   }
 }
 
@@ -5637,7 +5754,33 @@ function renderViewerHistoryBrowser(type) {
         byId("viewer-progress").textContent = error.message;
       }
     });
-    actions.appendChild(openBtn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      const mode = chooseDeleteMode(`${type} conversation '${viewerEntryTitle(type, row)}'`);
+      if (!mode) return;
+      try {
+        if (type === "debate") {
+          await apiSend(`/api/debates/${encodeURIComponent(id)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
+        } else if (type === "group") {
+          await apiSend(`/api/persona-chats/${encodeURIComponent(id)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
+        } else {
+          await apiSend(`/api/simple-chats/${encodeURIComponent(id)}?mode=${encodeURIComponent(mode)}`, "DELETE", {});
+        }
+        if (state.viewer.activeId === id) {
+          state.viewer.activeId = null;
+          byId("viewer-transcript").textContent = "";
+          byId("viewer-progress").textContent = `Deleted ${id} (${mode}).`;
+          renderViewerExchanges([]);
+          setViewerStageReplay(null);
+        }
+        await loadViewerHistory(type);
+      } catch (error) {
+        byId("viewer-progress").textContent = `Delete failed: ${error.message}`;
+      }
+    });
+    actions.append(openBtn, deleteBtn);
     card.appendChild(actions);
     list.appendChild(card);
   });
@@ -5648,6 +5791,7 @@ async function loadViewerHistory(type) {
   const projected = projectOverviewConversations(overview);
   const rows = projected
     .filter((item) => {
+      if (item.isArchived) return false;
       if (type === "debate") return item.conversationType === "debate" && item.transcriptCapable !== false;
       if (type === "group") return item.conversationType === "group-chat";
       if (type === "simple") return item.conversationType === "simple-chat";
@@ -5897,6 +6041,7 @@ function wireEvents() {
       byId("security-user-status").textContent = `Failed: ${error.message}`;
     }
   });
+  byId("security-reset-run").addEventListener("click", runSystemReset);
   byId("agentic-create-task").addEventListener("click", createAgenticTaskFromUi);
   byId("agentic-generate-plan").addEventListener("click", generateAgenticPlanFromGoal);
   byId("agentic-load-preset").addEventListener("click", loadSelectedAgenticPreset);

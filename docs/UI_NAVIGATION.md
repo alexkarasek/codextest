@@ -79,6 +79,7 @@ Main areas:
 - Login/logout and API key generation
 - User administration
 - Usage-by-user summary
+- Demo Reset controls (admin): usage-only reset or full reseed with keep toggles
 
 ## System menu (global)
 - Login / Switch User

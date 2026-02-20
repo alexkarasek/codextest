@@ -1,8 +1,10 @@
 import express from "express";
 import {
   appendSimpleChatMessage,
+  archiveSimpleChat,
   createSimpleChatFiles,
   getKnowledgePack,
+  hardDeleteSimpleChat,
   getSimpleChat,
   listSimpleChatMessages,
   listSimpleChats,
@@ -158,6 +160,10 @@ router.get("/", async (_req, res) => {
 router.get("/:chatId", async (req, res) => {
   try {
     const { session } = await getSimpleChat(req.params.chatId);
+    if (session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Simple chat '${req.params.chatId}' not found.`);
+      return;
+    }
     const messages = await listSimpleChatMessages(req.params.chatId);
     sendOk(res, { session, messages });
   } catch (error) {
@@ -166,6 +172,39 @@ router.get("/:chatId", async (req, res) => {
       return;
     }
     sendError(res, 500, "SERVER_ERROR", "Failed to load simple chat.");
+  }
+});
+
+router.delete("/:chatId", async (req, res) => {
+  const mode = String(req.query.mode || "archive").trim().toLowerCase();
+  if (!["archive", "hard"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'archive' or 'hard'.");
+    return;
+  }
+  if (mode === "hard" && req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Hard delete requires admin role.");
+    return;
+  }
+
+  try {
+    if (mode === "hard") {
+      await hardDeleteSimpleChat(req.params.chatId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    } else {
+      await archiveSimpleChat(req.params.chatId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    }
+    sendOk(res, { deleted: req.params.chatId, mode });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      sendError(res, 404, "NOT_FOUND", `Simple chat '${req.params.chatId}' not found.`);
+      return;
+    }
+    sendError(res, 500, "SERVER_ERROR", "Failed to delete simple chat.");
   }
 });
 
@@ -181,6 +220,10 @@ router.post("/:chatId/messages", async (req, res) => {
   try {
     const data = await getSimpleChat(req.params.chatId);
     session = data.session;
+    if (session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Simple chat '${req.params.chatId}' not found.`);
+      return;
+    }
     history = await listSimpleChatMessages(req.params.chatId);
   } catch (error) {
     if (error.code === "ENOENT") {

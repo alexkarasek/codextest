@@ -10,6 +10,7 @@ import {
   listGovernanceAdminChats,
   sendGovernanceAdminChatMessage
 } from "../../lib/adminGovernanceAgent.js";
+import { resetDemoData } from "../../lib/systemReset.js";
 import {
   getConversationProjectionDetail,
   listConversationProjection
@@ -219,6 +220,39 @@ router.post("/governance-chat/refresh-assets", async (_req, res) => {
       code: "SERVER_ERROR",
       message: (e) => `Failed to refresh governance assets: ${e.message}`
     });
+  }
+});
+
+router.post("/system/reset", async (req, res) => {
+  if (req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Only admins can run system reset.");
+    return;
+  }
+  const scope = String(req.body?.scope || "usage").toLowerCase();
+  if (!["usage", "full"].includes(scope)) {
+    sendError(res, 400, "VALIDATION_ERROR", "scope must be 'usage' or 'full'.");
+    return;
+  }
+  try {
+    const data = await resetDemoData(
+      {
+        scope,
+        keepUsers: req.body?.keepUsers !== false,
+        keepApiKeys: req.body?.keepApiKeys !== false,
+        keepSettings: req.body?.keepSettings !== false,
+        keepLogo: req.body?.keepLogo !== false,
+        reason: req.body?.reason || ""
+      },
+      req.auth?.user || null
+    );
+    sendOk(res, data);
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to reset system data: ${e.message}` }
+    );
   }
 });
 

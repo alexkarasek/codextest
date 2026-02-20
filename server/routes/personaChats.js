@@ -1,4 +1,5 @@
 import express from "express";
+import { archivePersonaChat, hardDeletePersonaChat } from "../../lib/storage.js";
 import {
   createPersonaChatSchema,
   formatZodError,
@@ -110,6 +111,40 @@ router.post("/:chatId/messages", async (req, res) => {
       { status: 500, code: "SERVER_ERROR", message: "Persona chat failed." }
     );
     return;
+  }
+});
+
+router.delete("/:chatId", async (req, res) => {
+  const mode = String(req.query.mode || "archive").trim().toLowerCase();
+  if (!["archive", "hard"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'archive' or 'hard'.");
+    return;
+  }
+  if (mode === "hard" && req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Hard delete requires admin role.");
+    return;
+  }
+
+  try {
+    if (mode === "hard") {
+      await hardDeletePersonaChat(req.params.chatId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    } else {
+      await archivePersonaChat(req.params.chatId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    }
+    sendOk(res, { deleted: req.params.chatId, mode });
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Persona chat '${req.params.chatId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to delete persona chat." }
+    );
   }
 });
 

@@ -3,8 +3,10 @@ import fs from "fs/promises";
 import path from "path";
 import {
   appendDebateChat,
+  archiveDebate,
   debatePath,
   getDebate,
+  hardDeleteDebate,
   listDebateChat,
   listDebates,
   updateDebateSession
@@ -160,6 +162,10 @@ router.get("/", async (_req, res) => {
 router.get("/:debateId", async (req, res) => {
   try {
     const { session, transcript } = await getDebate(req.params.debateId);
+    if (session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
+      return;
+    }
     sendOk(res, {
       session,
       transcript,
@@ -180,6 +186,11 @@ router.get("/:debateId", async (req, res) => {
 
 router.get("/:debateId/transcript", async (req, res) => {
   try {
+    const { session } = await getDebate(req.params.debateId);
+    if (session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' transcript not found.`);
+      return;
+    }
     const filePath = path.join(debatePath(req.params.debateId), "transcript.md");
     const content = await fs.readFile(filePath, "utf8");
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
@@ -215,6 +226,10 @@ router.post("/:debateId/chat", async (req, res) => {
   let session = null;
   try {
     const debate = await getDebate(req.params.debateId);
+    if (debate.session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
+      return;
+    }
     transcript = debate.transcript || "";
     session = debate.session || null;
   } catch (error) {
@@ -300,6 +315,11 @@ router.post("/:debateId/chat", async (req, res) => {
 
 router.get("/:debateId/chat", async (req, res) => {
   try {
+    const { session } = await getDebate(req.params.debateId);
+    if (session?.isArchived) {
+      sendError(res, 404, "NOT_FOUND", `Debate '${req.params.debateId}' not found.`);
+      return;
+    }
     const rows = await listDebateChat(req.params.debateId);
     const history = [];
     let latestCitations = [];
@@ -319,6 +339,40 @@ router.get("/:debateId/chat", async (req, res) => {
       error,
       [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
       { status: 500, code: "SERVER_ERROR", message: "Failed to load persisted chat." }
+    );
+  }
+});
+
+router.delete("/:debateId", async (req, res) => {
+  const mode = String(req.query.mode || "archive").trim().toLowerCase();
+  if (!["archive", "hard"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'archive' or 'hard'.");
+    return;
+  }
+  if (mode === "hard" && req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Hard delete requires admin role.");
+    return;
+  }
+
+  try {
+    if (mode === "hard") {
+      await hardDeleteDebate(req.params.debateId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    } else {
+      await archiveDebate(req.params.debateId, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    }
+    sendOk(res, { deleted: req.params.debateId, mode });
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", code: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Debate '${req.params.debateId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: "Failed to delete debate." }
     );
   }
 });

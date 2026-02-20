@@ -26,8 +26,14 @@ export async function processPersonaChatMessage({
   try {
     const data = await getPersonaChat(chatId);
     session = data.session;
+    if (session?.isArchived) {
+      throw createError("NOT_FOUND", `Persona chat '${chatId}' not found.`);
+    }
     history = await listPersonaChatMessages(chatId);
   } catch (error) {
+    if (error.code === "NOT_FOUND") {
+      throw error;
+    }
     if (error.code === "ENOENT") {
       throw createError("NOT_FOUND", `Persona chat '${chatId}' not found.`);
     }

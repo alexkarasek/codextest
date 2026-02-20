@@ -118,6 +118,17 @@ After completion:
 
 Use this for top-down review, not only targeted search.
 
+## E) Delete / reset workflows
+1. In chat history lists (`Simple Chat` and `Persona Chat`), use **Delete** on a session.
+2. In `Admin & Config -> Personas` and `Knowledge Studio`, use **Delete** on a card.
+3. Delete prompt behavior:
+- Press Enter for `archive` (recommended): removes from normal lists but keeps governance visibility.
+- Type `hard` for permanent delete (admin only).
+4. In `Admin & Config -> Users & Access`, admins can run **Demo Reset**:
+- `Usage Only`: clears chats, runs, and events.
+- `Full Reseed`: also clears personas and knowledge packs.
+- Keep toggles let you preserve users, API keys, settings, and logo.
+
 ## E) Create and manage personas
 1. Go to `Admin & Config` -> `Personas`.
 2. Fill required fields:

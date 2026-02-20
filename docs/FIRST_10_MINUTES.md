@@ -58,3 +58,4 @@ Expected result:
 3. Adjust the UI theme in `Admin & Config -> Theme`.
 4. Add more personas and attach specialized knowledge packs (persona or chat-level).
 5. Use `Support Concierge` for grounded how-to help.
+6. Optional cleanup between demos: `Admin & Config -> Users & Access -> Demo Reset`.

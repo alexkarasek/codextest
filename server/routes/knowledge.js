@@ -2,7 +2,9 @@ import express from "express";
 import { z } from "zod";
 import multer from "multer";
 import {
+  archiveKnowledgePack,
   getKnowledgePack,
+  hardDeleteKnowledgePack,
   knowledgePackPath,
   listKnowledgePacks,
   saveKnowledgePack
@@ -28,7 +30,7 @@ router.get("/", async (_req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const pack = await getKnowledgePack(req.params.id);
-    if (pack?.isHidden) {
+    if (pack?.isHidden || pack?.isArchived) {
       sendError(res, 404, "NOT_FOUND", `Knowledge pack '${req.params.id}' not found.`);
       return;
     }
@@ -81,7 +83,7 @@ router.put("/:id", async (req, res) => {
 
   try {
     const existing = await getKnowledgePack(req.params.id);
-    if (existing?.isHidden) {
+    if (existing?.isHidden || existing?.isArchived) {
       sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
       return;
     }
@@ -103,14 +105,33 @@ router.put("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
+  const mode = String(req.query.mode || "archive").trim().toLowerCase();
+  if (!["archive", "hard"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'archive' or 'hard'.");
+    return;
+  }
+  if (mode === "hard" && req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Hard delete requires admin role.");
+    return;
+  }
   try {
     const existing = await getKnowledgePack(req.params.id);
     if (existing?.isHidden) {
       sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be deleted via this endpoint.");
       return;
     }
-    await fs.rm(knowledgePackPath(req.params.id), { force: true });
-    sendOk(res, { deleted: req.params.id });
+    if (mode === "hard") {
+      await hardDeleteKnowledgePack(req.params.id, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    } else {
+      await archiveKnowledgePack(req.params.id, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    }
+    sendOk(res, { deleted: req.params.id, mode });
   } catch {
     sendError(res, 500, "SERVER_ERROR", "Failed to delete knowledge pack.");
   }
@@ -184,7 +205,7 @@ router.post("/ingest-url", async (req, res) => {
 
     if (mode === "append") {
       const existing = await getKnowledgePack(pack.id);
-      if (existing?.isHidden) {
+      if (existing?.isHidden || existing?.isArchived) {
         sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
         return;
       }

@@ -2,7 +2,8 @@ import express from "express";
 import fs from "fs/promises";
 import { z } from "zod";
 import {
-  deletePersona,
+  archivePersona,
+  hardDeletePersona,
   getPersona,
   listPersonas,
   personaJsonPath,
@@ -98,7 +99,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const persona = await getPersona(req.params.id);
-    if (persona?.isHidden) {
+    if (persona?.isHidden || persona?.isArchived) {
       sendError(res, 404, "NOT_FOUND", `Persona '${req.params.id}' not found.`);
       return;
     }
@@ -182,7 +183,7 @@ router.put("/:id", async (req, res) => {
 
   try {
     const existing = await getPersona(req.params.id);
-    if (existing?.isHidden) {
+    if (existing?.isHidden || existing?.isArchived) {
       sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be modified via this endpoint.");
       return;
     }
@@ -211,7 +212,7 @@ router.post("/:id/duplicate", async (req, res) => {
 
   try {
     const source = await getPersona(req.params.id);
-    if (source?.isHidden) {
+    if (source?.isHidden || source?.isArchived) {
       sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be duplicated via this endpoint.");
       return;
     }
@@ -249,14 +250,33 @@ router.post("/:id/duplicate", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
+  const mode = String(req.query.mode || "archive").trim().toLowerCase();
+  if (!["archive", "hard"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'archive' or 'hard'.");
+    return;
+  }
+  if (mode === "hard" && req.auth?.user?.role !== "admin") {
+    sendError(res, 403, "FORBIDDEN", "Hard delete requires admin role.");
+    return;
+  }
   try {
     const existing = await getPersona(req.params.id);
     if (existing?.isHidden) {
       sendError(res, 403, "FORBIDDEN", "Hidden personas cannot be deleted via this endpoint.");
       return;
     }
-    await deletePersona(req.params.id);
-    sendOk(res, { deleted: req.params.id });
+    if (mode === "hard") {
+      await hardDeletePersona(req.params.id, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    } else {
+      await archivePersona(req.params.id, {
+        actor: req.auth?.user || null,
+        reason: String(req.body?.reason || "")
+      });
+    }
+    sendOk(res, { deleted: req.params.id, mode });
   } catch {
     sendError(res, 500, "SERVER_ERROR", "Failed to delete persona.");
   }
