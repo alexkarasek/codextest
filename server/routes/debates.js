@@ -212,7 +212,7 @@ router.get("/:debateId/transcript", async (req, res) => {
 router.post("/:debateId/chat", async (req, res) => {
   const question = String(req.body?.question || "").trim();
   const history = Array.isArray(req.body?.history) ? req.body.history : [];
-  const model = String(req.body?.model || "").trim() || "gpt-4.1-mini";
+  const model = String(req.body?.model || "").trim() || "gpt-5-mini";
   const temperature = Number.isFinite(Number(req.body?.temperature))
     ? Number(req.body.temperature)
     : 0.3;

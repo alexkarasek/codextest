@@ -26,7 +26,7 @@ const generateFromTopicSchema = z.object({
     }, z.number().int().min(1).max(6))
     .optional()
     .default(3),
-  model: z.string().optional().default("gpt-4.1-mini"),
+  model: z.string().optional().default("gpt-5-mini"),
   sources: z.array(topicSourceSchema).optional().default([])
 });
 

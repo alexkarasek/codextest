@@ -423,6 +423,13 @@ select {
   width: 100%;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
 input:focus,
 textarea:focus,
 select:focus {
@@ -471,6 +478,11 @@ button[type="submit"]:hover {
   max-height: 360px;
   overflow: auto;
   padding-right: 2px;
+}
+
+.list > label.inline {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .image-preview {

@@ -118,7 +118,7 @@ const AGENTIC_BUILTIN_PRESETS = [
       objective:
         "Let selected personas discuss unattended, synthesize a decision summary and action plan, and persist a report.",
       team: { mode: "auto", personaIds: [], tags: ["decision", "planning"], maxAgents: 3 },
-      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      settings: { model: "gpt-5-mini", temperature: 0.3 },
       steps: [
         {
           id: "step-1",
@@ -131,7 +131,7 @@ const AGENTIC_BUILTIN_PRESETS = [
             mode: "debate-work-order",
             rounds: 2,
             maxAgents: 3,
-            model: "gpt-4.1-mini",
+            model: "gpt-5-mini",
             temperature: 0.5,
             maxWordsPerTurn: 160
           },
@@ -162,7 +162,7 @@ const AGENTIC_BUILTIN_PRESETS = [
       objective:
         "Let selected personas discuss unattended, synthesize final image instructions, generate the image, and persist a full report.",
       team: { mode: "auto", personaIds: [], tags: ["design", "architecture"], maxAgents: 3 },
-      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      settings: { model: "gpt-5-mini", temperature: 0.3 },
       steps: [
         {
           id: "step-1",
@@ -175,7 +175,7 @@ const AGENTIC_BUILTIN_PRESETS = [
             mode: "debate-work-order",
             rounds: 2,
             maxAgents: 3,
-            model: "gpt-4.1-mini",
+            model: "gpt-5-mini",
             temperature: 0.5,
             maxWordsPerTurn: 140,
             generateImage: true,
@@ -209,7 +209,7 @@ const AGENTIC_BUILTIN_PRESETS = [
       title: "HTTP Analysis Report",
       objective: "Fetch endpoint data, summarize, and persist a concise report.",
       team: { mode: "auto", personaIds: [], tags: ["analysis"], maxAgents: 3 },
-      settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+      settings: { model: "gpt-5-mini", temperature: 0.3 },
       steps: [
         {
           id: "step-1",
@@ -252,7 +252,7 @@ const AGENTIC_BUILTIN_PRESETS = [
       title: "Approved File Write Workflow",
       objective: "Draft content and require approval before writing to disk.",
       team: { mode: "auto", personaIds: [], tags: ["governance"], maxAgents: 3 },
-      settings: { model: "gpt-4.1-mini", temperature: 0.2 },
+      settings: { model: "gpt-5-mini", temperature: 0.2 },
       steps: [
         {
           id: "step-1",
@@ -1879,7 +1879,7 @@ async function createPersonaChatSession() {
     selectedPersonas: selected.map((id) => ({ type: "saved", id })),
     knowledgePackIds: state.personaChat.selectedKnowledgePackIds.slice(),
     settings: {
-      model: byId("persona-chat-model").value.trim() || "gpt-4.1-mini",
+      model: byId("persona-chat-model").value.trim() || "gpt-5-mini",
       temperature: safeNumberInput(byId("persona-chat-temperature").value, 0.6, { min: 0, max: 2 }),
       maxWordsPerTurn: safeNumberInput(byId("persona-chat-max-words").value, 140, {
         min: 40,
@@ -1918,7 +1918,7 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-id").value = "";
   byId("persona-chat-title").value = "Persona Collaboration Chat";
   byId("persona-chat-context").value = "";
-  byId("persona-chat-model").value = "gpt-4.1-mini";
+  byId("persona-chat-model").value = "gpt-5-mini";
   byId("persona-chat-temperature").value = "0.6";
   byId("persona-chat-max-words").value = "140";
   byId("persona-chat-panel-rounds").value = "2";
@@ -2162,7 +2162,7 @@ async function createSimpleChatSession() {
     context: byId("simple-chat-context").value.trim(),
     knowledgePackIds: state.simpleChat.selectedKnowledgePackIds.slice(),
     settings: {
-      model: byId("simple-chat-model").value.trim() || "gpt-4.1-mini",
+      model: byId("simple-chat-model").value.trim() || "gpt-5-mini",
       temperature: safeNumberInput(byId("simple-chat-temperature").value, 0.4, { min: 0, max: 2 }),
       maxResponseWords: safeNumberInput(byId("simple-chat-max-words").value, 220, {
         min: 40,
@@ -2190,7 +2190,7 @@ function startNewSimpleChatDraft() {
   byId("simple-chat-id").value = "";
   byId("simple-chat-title").value = "Simple Chat";
   byId("simple-chat-context").value = "";
-  byId("simple-chat-model").value = "gpt-4.1-mini";
+  byId("simple-chat-model").value = "gpt-5-mini";
   byId("simple-chat-temperature").value = "0.4";
   byId("simple-chat-max-words").value = "220";
   byId("simple-chat-status").textContent =
@@ -3016,7 +3016,7 @@ async function generatePersonasFromSelectedTopic() {
       topic: selected.title,
       context: [selected.snippet, manualContext].filter(Boolean).join(" | "),
       count,
-      model: byId("debate-model").value.trim() || "gpt-4.1-mini",
+      model: byId("debate-model").value.trim() || "gpt-5-mini",
       sources: selected.source === "Manual Topic" ? [] : (state.topicDiscovery.results || []).slice(0, 8)
     });
     state.topicDiscovery.generatedDrafts = Array.isArray(data.drafts) ? data.drafts : [];
@@ -4731,7 +4731,7 @@ function normalizeAgenticTemplate(template = {}) {
       maxAgents: safeNumberInput(template.team?.maxAgents, 3, { min: 1, max: 8, integer: true })
     },
     settings: {
-      model: String(template.settings?.model || "gpt-4.1-mini"),
+      model: String(template.settings?.model || "gpt-5-mini"),
       temperature: safeNumberInput(template.settings?.temperature, 0.3, { min: 0, max: 2 })
     },
     steps: (Array.isArray(template.steps) && template.steps.length ? template.steps : getDefaultAgenticSteps()).map(
@@ -4760,7 +4760,7 @@ function latestMessageByRole(history, role) {
 function buildAgenticTemplateFromSimpleChat() {
   const title = byId("simple-chat-title")?.value.trim() || "Simple Chat";
   const context = byId("simple-chat-context")?.value.trim() || "";
-  const model = byId("simple-chat-model")?.value.trim() || "gpt-4.1-mini";
+  const model = byId("simple-chat-model")?.value.trim() || "gpt-5-mini";
   const temperature = safeNumberInput(byId("simple-chat-temperature")?.value, 0.4, { min: 0, max: 2 });
   const chatId = state.simpleChat.activeChatId || "";
   const session = (state.simpleChat.sessions || []).find((s) => s.chatId === chatId) || null;
@@ -4822,7 +4822,7 @@ function buildAgenticTemplateFromSimpleChat() {
 function buildAgenticTemplateFromPersonaChat() {
   const title = byId("persona-chat-title")?.value.trim() || "Persona Collaboration Chat";
   const context = byId("persona-chat-context")?.value.trim() || "";
-  const model = byId("persona-chat-model")?.value.trim() || "gpt-4.1-mini";
+  const model = byId("persona-chat-model")?.value.trim() || "gpt-5-mini";
   const temperature = safeNumberInput(byId("persona-chat-temperature")?.value, 0.6, { min: 0, max: 2 });
   const personaIds =
     state.personaChat.activeSessionPersonaIds.length
@@ -4940,7 +4940,7 @@ async function openAgenticTaskInChat() {
     context: `Agentic task review session for ${task.title || task.id}.`,
     knowledgePackIds: [],
     settings: {
-      model: task.settings?.model || "gpt-4.1-mini",
+      model: task.settings?.model || "gpt-5-mini",
       temperature: Number.isFinite(Number(task.settings?.temperature)) ? Number(task.settings.temperature) : 0.4,
       maxResponseWords: 240
     }
@@ -5001,7 +5001,7 @@ function resetAgenticBuilderToBlank() {
     title: "Agentic Task",
     objective: "",
     team: { mode: "auto", personaIds: [], tags: [], maxAgents: 3 },
-    settings: { model: "gpt-4.1-mini", temperature: 0.3 },
+    settings: { model: "gpt-5-mini", temperature: 0.3 },
     steps: [
       {
         id: "step-1",
@@ -5171,7 +5171,7 @@ function renderAgenticStepBuilder() {
       <label>Tool Id (tool only)<input class="agentic-step-toolid" type="text" value="${step.toolId || ""}" placeholder="filesystem.read_text"></label>
       <label>Prompt (llm only)<textarea class="agentic-step-prompt" rows="2" placeholder="Summarize {{steps.step-1.result.bodyPreview}}">${step.prompt || ""}</textarea></label>
       <div class="grid two">
-        <label>Model (optional)<input class="agentic-step-model" type="text" value="${step.model || ""}" placeholder="gpt-4.1-mini"></label>
+        <label>Model (optional)<input class="agentic-step-model" type="text" value="${step.model || ""}" placeholder="gpt-5-mini" list="llm-model-options"></label>
         <label class="inline"><input class="agentic-step-approval" type="checkbox"${step.requiresApproval ? " checked" : ""}> Requires approval</label>
       </div>
       <label>Input JSON<textarea class="agentic-step-input" rows="4">${toPrettyJson(step.input || {})}</textarea></label>
@@ -5719,7 +5719,7 @@ async function createAgenticWatcherFromUi() {
             })
           },
           settings: {
-            model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+            model: byId("agentic-task-model").value.trim() || "gpt-5-mini",
             temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
           },
           steps
@@ -5966,7 +5966,7 @@ async function createAgenticTaskFromUi() {
       })
     },
     settings: {
-      model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+      model: byId("agentic-task-model").value.trim() || "gpt-5-mini",
       temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
     },
     steps,
@@ -6129,7 +6129,7 @@ async function saveCurrentAgenticTemplate() {
           })
         },
         settings: {
-          model: byId("agentic-task-model").value.trim() || "gpt-4.1-mini",
+          model: byId("agentic-task-model").value.trim() || "gpt-5-mini",
           temperature: safeNumberInput(byId("agentic-task-temperature").value, 0.3, { min: 0, max: 2 })
         },
         steps
@@ -6955,7 +6955,7 @@ function wireEvents() {
         }),
         moderationStyle: byId("debate-moderation-style").value.trim() || "neutral",
         sourceGroundingMode: byId("debate-source-grounding").value || "light",
-        model: byId("debate-model").value.trim() || "gpt-4.1-mini",
+        model: byId("debate-model").value.trim() || "gpt-5-mini",
         temperature: safeNumberInput(byId("debate-temperature").value, 0.7, { min: 0, max: 2 }),
         includeModerator: byId("debate-include-moderator").checked
       }

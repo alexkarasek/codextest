@@ -399,7 +399,7 @@ paths:
                 topic: { type: string }
                 context: { type: string, default: '' }
                 count: { type: integer, minimum: 1, maximum: 6, default: 3 }
-                model: { type: string, default: gpt-4.1-mini }
+                model: { type: string, default: gpt-5-mini }
                 sources:
                   type: array
                   items: { $ref: '#/components/schemas/TopicSource' }
@@ -615,7 +615,7 @@ paths:
                     maxWordsPerTurn: 120
                     moderationStyle: neutral
                     sourceGroundingMode: light
-                    model: gpt-4.1-mini
+                    model: gpt-5-mini
                     temperature: 0.7
                     includeModerator: true
       responses:
@@ -693,7 +693,7 @@ paths:
                     properties:
                       role: { type: string, enum: [user, assistant] }
                       content: { type: string }
-                model: { type: string, default: gpt-4.1-mini }
+                model: { type: string, default: gpt-5-mini }
                 temperature: { type: number, default: 0.3 }
       responses:
         '200':
@@ -735,7 +735,7 @@ paths:
                     - type: saved
                       id: big-tex
                   settings:
-                    model: gpt-4.1-mini
+                    model: gpt-5-mini
                     temperature: 0.6
                     maxWordsPerTurn: 140
                     engagementMode: chat
@@ -815,7 +815,7 @@ paths:
                   context: General help
                   knowledgePackIds: []
                   settings:
-                    model: gpt-4.1-mini
+                    model: gpt-5-mini
                     temperature: 0.4
                     maxResponseWords: 220
       responses:
@@ -1583,7 +1583,7 @@ components:
         maxWordsPerTurn: { type: integer, minimum: 40, maximum: 400, default: 120 }
         moderationStyle: { type: string, default: neutral }
         sourceGroundingMode: { type: string, enum: [off, light, strict], default: light }
-        model: { type: string, default: gpt-4.1-mini }
+        model: { type: string, default: gpt-5-mini }
         temperature: { type: number, minimum: 0, maximum: 2, default: 0.7 }
         includeModerator: { type: boolean, default: true }
     CreateDebateRequest:
@@ -1613,7 +1613,7 @@ components:
     PersonaChatSettings:
       type: object
       properties:
-        model: { type: string, default: gpt-4.1-mini }
+        model: { type: string, default: gpt-5-mini }
         temperature: { type: number, minimum: 0, maximum: 2, default: 0.6 }
         maxWordsPerTurn: { type: integer, minimum: 40, maximum: 400, default: 140 }
         engagementMode: { type: string, enum: [chat, panel, debate-work-order], default: chat }
@@ -1635,7 +1635,7 @@ components:
     SimpleChatSettings:
       type: object
       properties:
-        model: { type: string, default: gpt-4.1-mini }
+        model: { type: string, default: gpt-5-mini }
         temperature: { type: number, minimum: 0, maximum: 2, default: 0.4 }
         maxResponseWords: { type: integer, minimum: 40, maximum: 800, default: 220 }
     CreateSimpleChatRequest:
@@ -1734,7 +1734,7 @@ components:
         settings:
           type: object
           properties:
-            model: { type: string, default: gpt-4.1-mini }
+            model: { type: string, default: gpt-5-mini }
             temperature: { type: number, minimum: 0, maximum: 2, default: 0.3 }
         steps:
           type: array

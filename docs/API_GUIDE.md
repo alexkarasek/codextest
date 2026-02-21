@@ -172,7 +172,7 @@ curl -X POST http://localhost:3000/api/simple-chats \
     "title":"Simple Chat",
     "context":"General support",
     "knowledgePackIds":[],
-    "settings":{"model":"gpt-4.1-mini","temperature":0.4,"maxResponseWords":220}
+    "settings":{"model":"gpt-5-mini","temperature":0.4,"maxResponseWords":220}
   }'
 ```
 
@@ -195,7 +195,7 @@ curl -X POST http://localhost:3000/api/persona-chats \
     "context":"Planning discussion",
     "knowledgePackIds":[],
     "selectedPersonas":[{"type":"saved","id":"big-tex"}],
-    "settings":{"model":"gpt-4.1-mini","temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat"}
+    "settings":{"model":"gpt-5-mini","temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat"}
   }'
 ```
 Notes:
@@ -220,7 +220,7 @@ curl -X POST http://localhost:3000/api/debates \
     "context":"Public health perspective",
     "selectedPersonas":[{"type":"saved","id":"big-tex"}],
     "knowledgePackIds":[],
-    "settings":{"rounds":3,"maxWordsPerTurn":120,"moderationStyle":"neutral","sourceGroundingMode":"light","model":"gpt-4.1-mini","temperature":0.7,"includeModerator":true}
+    "settings":{"rounds":3,"maxWordsPerTurn":120,"moderationStyle":"neutral","sourceGroundingMode":"light","model":"gpt-5-mini","temperature":0.7,"includeModerator":true}
   }'
 ```
 

@@ -98,7 +98,7 @@ export async function answerSupportMessage({ message, user }) {
     try {
       const { pack, persona } = await ensureSupportConciergeAssets();
       const completion = await chatCompletion({
-        model: "gpt-4.1-mini",
+        model: "gpt-5-mini",
         temperature: 0.3,
         messages: [
           {

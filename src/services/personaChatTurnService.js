@@ -67,7 +67,7 @@ export async function maybeGeneratePanelFollowUp({
 
   const response = await withTimeout(
     chatCompletion({
-      model: session.settings?.model || "gpt-4.1-mini",
+      model: session.settings?.model || "gpt-5-mini",
       temperature: Number(session.settings?.temperature ?? 0.5),
       messages: [
         {
@@ -137,7 +137,7 @@ export async function maybeGenerateModeratorTurn({ session, history, userEntry, 
         ].join("\n");
   const completion = await withTimeout(
     chatCompletion({
-      model: session.settings?.model || "gpt-4.1-mini",
+      model: session.settings?.model || "gpt-5-mini",
       temperature: 0.3,
       messages: [
         {
@@ -248,7 +248,7 @@ export async function executePersonaChatTurn({
 
       const firstCompletion = await withTimeout(
         chatCompletion({
-          model: session.settings?.model || "gpt-4.1-mini",
+          model: session.settings?.model || "gpt-5-mini",
           temperature: Number(session.settings?.temperature ?? 0.6),
           messages
         }),
@@ -288,7 +288,7 @@ export async function executePersonaChatTurn({
         } else {
           const repair = await withTimeout(
             chatCompletion({
-              model: session.settings?.model || "gpt-4.1-mini",
+              model: session.settings?.model || "gpt-5-mini",
               temperature: Number(session.settings?.temperature ?? 0.2),
               messages: [
                 {
@@ -451,7 +451,7 @@ export async function executePersonaChatTurn({
             };
             const followUpFinal = await withTimeout(
               chatCompletion({
-                model: session.settings?.model || "gpt-4.1-mini",
+                model: session.settings?.model || "gpt-5-mini",
                 temperature: Number(session.settings?.temperature ?? 0.6),
                 messages: [
                   {

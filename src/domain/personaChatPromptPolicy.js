@@ -151,6 +151,11 @@ export function detectImageIntent(message, { force = false } = {}) {
   if (discussionCue && /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text)) {
     return { mode: "none", prompt: "" };
   }
+  const promptAuthoringCue = /\b(prompt|wording|caption)\b/i.test(text);
+  const promptAuthoringVerb = /\b(generate|create|write|draft|craft|improve|optimize)\b/i.test(text);
+  if (promptAuthoringCue && promptAuthoringVerb) {
+    return { mode: "none", prompt: "" };
+  }
   const clearMatch = text.match(
     /^(?:please\s+)?(?:generate|create|draw|make|render|illustrate|sketch)\s+(?:an?\s+)?(?:image|diagram|schematic|picture|illustration|visual)(?:\s+of|\s+for)?\s*(.+)$/i
   );

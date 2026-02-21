@@ -245,7 +245,7 @@ router.post("/plan", async (req, res) => {
       .join("\n");
 
     const response = await chatCompletion({
-      model: "gpt-4.1-mini",
+      model: "gpt-5-mini",
       temperature: 0.2,
       messages: [
         {
