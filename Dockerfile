@@ -12,7 +12,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY server ./server
 COPY client ./client
+COPY src ./src
 COPY lib ./lib
+COPY docs ./docs
+COPY README.md ./README.md
 COPY data ./data
 COPY settings.example.json ./settings.example.json
 
