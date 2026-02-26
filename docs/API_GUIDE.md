@@ -148,6 +148,7 @@ Notes:
 ### Runs (`/runs`) - auth required
 - `GET /runs?limit=25`
 - `GET /runs/:runId`
+- `GET /runs/compare/:runA/:runB`
 
 ## Working examples (curl)
 
