@@ -7,5 +7,9 @@
   "azureOpenAIApiVersion": "2024-10-21",
   "port": 3000,
   "newsProvider": "google",
-  "newsApiKey": ""
+  "newsApiKey": "",
+  "toolPolicy": {
+    "timeoutMs": 45000,
+    "fileAllowlist": []
+  }
 }
