@@ -20,6 +20,7 @@ A local-first web application to create/edit personas and run conversation modes
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
+- Production Checklist: `docs/PRODUCTION_CHECKLIST.md`
 - OpenAPI spec: `docs/openapi.yaml`
 - Browser API docs: `http://localhost:3000/docs/api`
 - Documentation module (rendered guides): `http://localhost:3000/documentation`
