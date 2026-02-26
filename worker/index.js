@@ -1,7 +1,7 @@
 import { dequeue, ack, fail } from "../packages/core/queue/index.js";
 import { runConversationSession } from "../src/services/conversationEngine.js";
 import { getDebate } from "../lib/storage.js";
-import { appendEvent, EVENT_TYPES, recordErrorEvent } from "../packages/core/events/index.js";
+import { appendEvent, EVENT_TYPES, getRunDetails, recordErrorEvent } from "../packages/core/events/index.js";
 import { runWithObservabilityContext, logEvent } from "../lib/observability.js";
 import { getRunRepository } from "../lib/runRepository.js";
 import {
@@ -129,6 +129,27 @@ async function loop() {
             attempt: job.attempts
           }
         });
+        if (runId) {
+          const details = await getRunDetails(runId);
+          await runRepo.upsert({
+            id: runId,
+            requestId,
+            kind: String(job.type || "run").toLowerCase(),
+            status: "completed",
+            startedAt: details.summary?.startedAt || null,
+            finishedAt: details.summary?.finishedAt || null,
+            durationMs: details.summary?.durationMs ?? null,
+            tokens: details.summary?.tokens || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            estimatedCostUsd: Number(details.summary?.estimatedCostUsd || 0),
+            score: details.summary?.score || null,
+            error: details.summary?.error || null,
+            metadata: {
+              jobId: job.id,
+              jobType: job.type,
+              result
+            }
+          });
+        }
 
         const started = Date.now();
         const result = await processJob(job);
@@ -191,12 +212,17 @@ async function loop() {
         await fail(job.id, error, { backoffBaseMs: 500 });
       }
       if (runId) {
+        const details = await getRunDetails(runId).catch(() => null);
         await runRepo.upsert({
           id: runId,
           requestId,
           kind: String(job?.type || "run").toLowerCase(),
           status: "failed",
-          finishedAt: new Date().toISOString(),
+          finishedAt: details?.summary?.finishedAt || new Date().toISOString(),
+          durationMs: details?.summary?.durationMs ?? null,
+          tokens: details?.summary?.tokens || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          estimatedCostUsd: Number(details?.summary?.estimatedCostUsd || 0),
+          score: details?.summary?.score || null,
           error: {
             code: error?.code || "WORKER_JOB_ERROR",
             message: error?.message || "Worker job failed."

@@ -3,6 +3,7 @@ import path from "path";
 import { DATA_DIR } from "../../../lib/storage.js";
 import { getObservabilityContext } from "../../../lib/observability.js";
 import { getRunRepository } from "../../../lib/runRepository.js";
+import { compareScorecards, computeRunScorecard } from "../../../lib/runScorecard.js";
 import { safeJsonParse } from "../../../lib/utils.js";
 import { listJobs } from "../queue/index.js";
 
@@ -135,7 +136,7 @@ export function summarizeRunEvents(runId, events = []) {
     status = "failed";
   }
 
-  return {
+  const base = {
     runId,
     requestId: started?.requestId || rows.find((e) => e.requestId)?.requestId || null,
     component: started?.component || rows.find((e) => e.component)?.component || null,
@@ -153,6 +154,10 @@ export function summarizeRunEvents(runId, events = []) {
     },
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(8)),
     error: errored?.error || finished?.error || null
+  };
+  return {
+    ...base,
+    score: computeRunScorecard(base, rows)
   };
 }
 
@@ -176,7 +181,8 @@ export async function listRuns({ limit = 25 } = {}) {
       totalTokens: 0
     },
     estimatedCostUsd: Number(run.estimatedCostUsd || 0),
-    error: run.error || null
+    error: run.error || null,
+    score: run.score || null
   }));
 
   const events = await listEvents({ limit: 5000 });
@@ -204,7 +210,8 @@ export async function listRuns({ limit = 25 } = {}) {
         totalTokens: 0
       },
       estimatedCostUsd: 0,
-      error: job.lastError || null
+      error: job.lastError || null,
+      score: null
     });
   }
   const byRun = new Map();
@@ -233,9 +240,19 @@ export async function listRuns({ limit = 25 } = {}) {
 
 export async function getRunDetails(runId) {
   const events = await listEvents({ limit: 5000, runId });
+  const summary = summarizeRunEvents(runId, events);
   return {
-    summary: summarizeRunEvents(runId, events),
+    summary,
     events
+  };
+}
+
+export async function compareRuns(runA, runB) {
+  const [a, b] = await Promise.all([getRunDetails(runA), getRunDetails(runB)]);
+  return {
+    runA: a.summary,
+    runB: b.summary,
+    comparison: compareScorecards(a.summary?.score || {}, b.summary?.score || {})
   };
 }
 

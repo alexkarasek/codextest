@@ -37,6 +37,7 @@ function normalizeRun(input = {}) {
     durationMs: Number.isFinite(Number(input.durationMs)) ? Number(input.durationMs) : null,
     tokens: normalizeTokens(input.tokens),
     estimatedCostUsd: Number(input.estimatedCostUsd || 0) || 0,
+    score: input.score && typeof input.score === "object" ? input.score : null,
     error: input.error || null,
     metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
     createdAt,

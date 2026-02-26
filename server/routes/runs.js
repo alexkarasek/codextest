@@ -1,7 +1,8 @@
 import express from "express";
 import { sendError, sendOk } from "../response.js";
-import { getRunDetails, listRuns } from "../../packages/core/events/index.js";
+import { compareRuns, getRunDetails, listRuns } from "../../packages/core/events/index.js";
 import { findJobByRunId } from "../../packages/core/queue/index.js";
+import { computeRunScorecard } from "../../lib/runScorecard.js";
 import { getRunRepository } from "../../lib/runRepository.js";
 
 const router = express.Router();
@@ -38,7 +39,8 @@ router.get("/:runId", async (req, res) => {
           eventCount: 0,
           tokens: repoRun.tokens || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           estimatedCostUsd: Number(repoRun.estimatedCostUsd || 0),
-          error: repoRun.error || null
+          error: repoRun.error || null,
+          score: repoRun.score || computeRunScorecard(repoRun, [])
         },
         events: []
       });
@@ -68,6 +70,7 @@ router.get("/:runId", async (req, res) => {
         },
         estimatedCostUsd: 0,
         error: job.lastError || null,
+        score: null,
         job
       },
       events: []
@@ -76,6 +79,17 @@ router.get("/:runId", async (req, res) => {
   }
 
   sendOk(res, details);
+});
+
+router.get("/compare/:runA/:runB", async (req, res) => {
+  const runA = String(req.params?.runA || "").trim();
+  const runB = String(req.params?.runB || "").trim();
+  if (!runA || !runB) {
+    sendError(res, 400, "VALIDATION_ERROR", "Both runA and runB are required.");
+    return;
+  }
+  const data = await compareRuns(runA, runB);
+  sendOk(res, data);
 });
 
 export default router;

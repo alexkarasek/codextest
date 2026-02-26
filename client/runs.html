@@ -17,8 +17,17 @@
 </head>
 <body>
   <h1>Run History</h1>
-  <div class="muted">Phase 1 observability view. Requires authenticated session.</div>
+  <div class="muted">Observability + scorecard view. Requires authenticated session.</div>
   <p><button id="refresh">Refresh</button></p>
+  <div class="panel" style="margin-bottom:12px">
+    <h3>Compare Runs</h3>
+    <div class="grid" style="grid-template-columns: 1fr 1fr auto;">
+      <label>Run A<select id="run-a"></select></label>
+      <label>Run B<select id="run-b"></select></label>
+      <button id="compare">Compare</button>
+    </div>
+    <pre id="compare-output">Select two runs and click Compare.</pre>
+  </div>
   <div class="grid">
     <div class="panel">
       <h3>Runs</h3>
@@ -47,13 +56,29 @@
         runsEl.textContent = 'No runs found yet.';
         return;
       }
+      const runA = document.getElementById('run-a');
+      const runB = document.getElementById('run-b');
+      runA.innerHTML = '';
+      runB.innerHTML = '';
       runsEl.innerHTML = '';
       for (const run of runs) {
         const item = document.createElement('div');
         item.className = 'item';
-        item.innerHTML = `<div><strong>${run.runId}</strong></div><div class="muted">${run.status} | events=${run.eventCount} | tokens=${run.tokens?.totalTokens || 0}</div>`;
+        item.innerHTML = `<div><strong>${run.runId}</strong></div><div class="muted">${run.status} | score=${run.score?.overall ?? "n/a"} | events=${run.eventCount} | tokens=${run.tokens?.totalTokens || 0}</div>`;
         item.onclick = () => loadRun(run.runId);
         runsEl.appendChild(item);
+        const optA = document.createElement('option');
+        optA.value = run.runId;
+        optA.textContent = run.runId;
+        runA.appendChild(optA);
+        const optB = document.createElement('option');
+        optB.value = run.runId;
+        optB.textContent = run.runId;
+        runB.appendChild(optB);
+      }
+      if (runs.length >= 2) {
+        runA.value = runs[0].runId;
+        runB.value = runs[1].runId;
       }
     }
 
@@ -69,6 +94,27 @@
     }
 
     document.getElementById('refresh').onclick = loadRuns;
+    document.getElementById('compare').onclick = async () => {
+      const runA = document.getElementById('run-a').value;
+      const runB = document.getElementById('run-b').value;
+      const out = document.getElementById('compare-output');
+      if (!runA || !runB) {
+        out.textContent = 'Select both runs.';
+        return;
+      }
+      out.textContent = 'Loading...';
+      try {
+        const res = await fetch(`/runs/compare/${encodeURIComponent(runA)}/${encodeURIComponent(runB)}`, { credentials: 'include' });
+        const data = await res.json();
+        if (!data.ok) {
+          out.textContent = data.error?.message || 'Compare failed.';
+          return;
+        }
+        out.textContent = JSON.stringify(data.data, null, 2);
+      } catch (e) {
+        out.textContent = e.message;
+      }
+    };
     loadRuns().catch((e) => {
       runsEl.textContent = e.message;
     });
