@@ -3,10 +3,12 @@ import { runConversationSession } from "../src/services/conversationEngine.js";
 import { getDebate } from "../lib/storage.js";
 import { appendEvent, EVENT_TYPES, recordErrorEvent } from "../packages/core/events/index.js";
 import { runWithObservabilityContext, logEvent } from "../lib/observability.js";
+import { getRunRepository } from "../lib/runRepository.js";
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 1000);
 const WORKER_ID = String(process.env.WORKER_ID || `worker-${process.pid}`);
 const JOB_TYPES = ["RUN_DEBATE", "RUN_WORKFLOW", "INGEST_DOCS"];
+const runRepo = getRunRepository();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +76,17 @@ async function loop() {
       const requestId = String(job.payload?.requestId || "").trim() || null;
 
       await runWithObservabilityContext({ requestId, runId }, async () => {
+        await runRepo.upsert({
+          id: runId || job.id,
+          requestId,
+          kind: String(job.type || "run").toLowerCase(),
+          status: "running",
+          startedAt: new Date().toISOString(),
+          metadata: {
+            jobId: job.id,
+            jobType: job.type
+          }
+        });
         await appendEvent({
           eventType: EVENT_TYPES.RunStarted,
           component: "worker",
@@ -91,6 +104,19 @@ async function loop() {
         const latencyMs = Date.now() - started;
 
         await ack(job.id, result);
+        await runRepo.upsert({
+          id: runId || job.id,
+          requestId,
+          kind: String(job.type || "run").toLowerCase(),
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+          error: null,
+          metadata: {
+            jobId: job.id,
+            jobType: job.type,
+            result
+          }
+        });
         await appendEvent({
           eventType: EVENT_TYPES.RunFinished,
           component: "worker",
@@ -121,6 +147,23 @@ async function loop() {
 
       if (job?.id) {
         await fail(job.id, error, { backoffBaseMs: 500 });
+      }
+      if (runId) {
+        await runRepo.upsert({
+          id: runId,
+          requestId,
+          kind: String(job?.type || "run").toLowerCase(),
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          error: {
+            code: error?.code || "WORKER_JOB_ERROR",
+            message: error?.message || "Worker job failed."
+          },
+          metadata: {
+            jobId: job?.id || null,
+            jobType: job?.type || null
+          }
+        });
       }
 
       await recordErrorEvent({

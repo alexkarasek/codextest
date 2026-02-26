@@ -9,6 +9,7 @@
     "dev:worker": "nodemon worker/index.js",
     "start": "node server/index.js",
     "worker": "node worker/index.js",
+    "migrate:runs": "node scripts/migrate-runs-metadata.js",
     "test": "node --test",
     "docker:release": "bash scripts/docker-release.sh"
   },

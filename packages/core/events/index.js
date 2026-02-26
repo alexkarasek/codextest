@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { DATA_DIR } from "../../../lib/storage.js";
 import { getObservabilityContext } from "../../../lib/observability.js";
+import { getRunRepository } from "../../../lib/runRepository.js";
 import { safeJsonParse } from "../../../lib/utils.js";
 import { listJobs } from "../queue/index.js";
 
@@ -156,9 +157,31 @@ export function summarizeRunEvents(runId, events = []) {
 }
 
 export async function listRuns({ limit = 25 } = {}) {
+  const runRepo = getRunRepository();
+  const repoRuns = await runRepo.list({ limit: 2000 });
+  const summaries = repoRuns.map((run) => ({
+    runId: run.id,
+    requestId: run.requestId || null,
+    component: "runs-repository",
+    status: run.status,
+    startedAt: run.startedAt || run.createdAt || null,
+    finishedAt: run.finishedAt || null,
+    durationMs: run.durationMs,
+    llmCalls: 0,
+    toolCalls: 0,
+    eventCount: 0,
+    tokens: run.tokens || {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0
+    },
+    estimatedCostUsd: Number(run.estimatedCostUsd || 0),
+    error: run.error || null
+  }));
+
   const events = await listEvents({ limit: 5000 });
   const runIds = [...new Set(events.map((e) => String(e.runId || "").trim()).filter(Boolean))];
-  const summaries = runIds.map((runId) => summarizeRunEvents(runId, events));
+  summaries.push(...runIds.map((runId) => summarizeRunEvents(runId, events)));
   const existing = new Set(summaries.map((s) => String(s.runId || "")));
   const jobs = await listJobs({ limit: 2000 });
   for (const job of jobs) {
@@ -184,8 +207,28 @@ export async function listRuns({ limit = 25 } = {}) {
       error: job.lastError || null
     });
   }
-  summaries.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
-  return summaries.slice(0, Math.max(1, Number(limit) || 25));
+  const byRun = new Map();
+  for (const summary of summaries) {
+    const key = String(summary.runId || "").trim();
+    if (!key) continue;
+    const prev = byRun.get(key);
+    if (!prev) {
+      byRun.set(key, summary);
+      continue;
+    }
+    if (Number(summary.eventCount || 0) > Number(prev.eventCount || 0)) {
+      byRun.set(key, summary);
+      continue;
+    }
+    const prevRank = Number(prev.status === "running" ? 2 : prev.status === "pending" ? 1 : 0);
+    const nextRank = Number(summary.status === "running" ? 2 : summary.status === "pending" ? 1 : 0);
+    if (nextRank > prevRank) {
+      byRun.set(key, summary);
+    }
+  }
+  const merged = [...byRun.values()];
+  merged.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
+  return merged.slice(0, Math.max(1, Number(limit) || 25));
 }
 
 export async function getRunDetails(runId) {

@@ -19,6 +19,7 @@ import { ensureDataDirs, IMAGES_DIR } from "../lib/storage.js";
 import { getThemeSettings } from "../lib/themeSettings.js";
 import { ensureAuthFiles } from "../lib/auth.js";
 import { ensureDefaultAgenticTemplates } from "../lib/agenticTemplateDefaults.js";
+import { ensureRunMetadataSeeded } from "../lib/runMigration.js";
 import { sendError } from "./response.js";
 import { requestCorrelationMiddleware, requestLoggingMiddleware } from "../lib/observability.js";
 import docsRouter from "../src/docs/docsRouter.js";
@@ -45,6 +46,7 @@ const PORT = getServerPort();
 await ensureDataDirs();
 await ensureAuthFiles();
 await ensureDefaultAgenticTemplates();
+await ensureRunMetadataSeeded();
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(clientDir));
