@@ -135,6 +135,12 @@ Notes:
 - `GET /mcp/servers?includeTools=true`
 - `GET /mcp/servers/:serverId/tools`
 - `POST /mcp/servers/:serverId/call`
+- `GET /workflows`
+- `POST /workflows`
+- `PUT /workflows/:workflowId`
+- `DELETE /workflows/:workflowId`
+- `POST /workflows/:workflowId/run`
+- `POST /workflows/:workflowId/trigger`
 
 ### Support (`/api/support`) - auth required (session or API key)
 - `POST /messages`

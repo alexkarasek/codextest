@@ -15,6 +15,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Phase 2 Worker Queue: `docs/execution/phase-2-worker.md`
 - Phase 3 Storage Split: `docs/execution/phase-3-storage.md`
 - Phase 4 Tool Boundary: `docs/execution/phase-4-tool-boundary.md`
+- Phase 5 Workflow MVP: `docs/execution/phase-5-workflows.md`
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
