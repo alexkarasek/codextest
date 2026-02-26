@@ -35,6 +35,9 @@ The system uses file-based persistence only. Core data is stored under `data/` u
   - `reports/*`, `autonomy/*`, `notes/*`: generated outputs
 - `data/support/`
   - `messages.jsonl`: support concierge conversation logs
+- `data/runs/`
+  - `meta/<runId>.json`: canonical run metadata records (repository-backed)
+  - `artifacts/`: reserved for run artifact pointers/files
 - `data/images/`
   - `<imageId>.json`: image metadata
   - `<imageId>.png`: generated image binary

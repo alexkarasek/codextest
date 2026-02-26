@@ -13,6 +13,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Current Execution Model: `docs/execution/current-execution.md`
 - Phase 1 Events Foundation: `docs/execution/phase-1-events.md`
 - Phase 2 Worker Queue: `docs/execution/phase-2-worker.md`
+- Phase 3 Storage Split: `docs/execution/phase-3-storage.md`
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
@@ -176,6 +177,12 @@ Worker process (production/local):
 
 ```bash
 npm run worker
+```
+
+Run metadata migration (legacy debate folders -> run metadata store):
+
+```bash
+npm run migrate:runs
 ```
 
 Open in browser:
