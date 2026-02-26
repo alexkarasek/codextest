@@ -138,6 +138,10 @@ Notes:
 ### Support (`/api/support`) - auth required (session or API key)
 - `POST /messages`
 
+### Runs (`/runs`) - auth required
+- `GET /runs?limit=25`
+- `GET /runs/:runId`
+
 ## Working examples (curl)
 
 ### A) Bootstrap, login, and create API key

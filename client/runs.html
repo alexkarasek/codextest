@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run History</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; color: #1f2937; }
+    .grid { display: grid; grid-template-columns: 320px 1fr; gap: 12px; }
+    .panel { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; }
+    .item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; cursor: pointer; margin-bottom: 8px; }
+    .item:hover { background: #f9fafb; }
+    .muted { color: #6b7280; font-size: 12px; }
+    pre { white-space: pre-wrap; word-break: break-word; max-height: 70vh; overflow: auto; }
+    button { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Run History</h1>
+  <div class="muted">Phase 1 observability view. Requires authenticated session.</div>
+  <p><button id="refresh">Refresh</button></p>
+  <div class="grid">
+    <div class="panel">
+      <h3>Runs</h3>
+      <div id="runs"></div>
+    </div>
+    <div class="panel">
+      <h3>Details</h3>
+      <pre id="details">Select a run...</pre>
+    </div>
+  </div>
+
+  <script>
+    const runsEl = document.getElementById('runs');
+    const detailsEl = document.getElementById('details');
+
+    async function loadRuns() {
+      runsEl.textContent = 'Loading...';
+      const res = await fetch('/runs?limit=50', { credentials: 'include' });
+      const data = await res.json();
+      if (!data.ok) {
+        runsEl.textContent = data.error?.message || 'Failed to load runs.';
+        return;
+      }
+      const runs = data.data?.runs || [];
+      if (!runs.length) {
+        runsEl.textContent = 'No runs found yet.';
+        return;
+      }
+      runsEl.innerHTML = '';
+      for (const run of runs) {
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.innerHTML = `<div><strong>${run.runId}</strong></div><div class="muted">${run.status} | events=${run.eventCount} | tokens=${run.tokens?.totalTokens || 0}</div>`;
+        item.onclick = () => loadRun(run.runId);
+        runsEl.appendChild(item);
+      }
+    }
+
+    async function loadRun(runId) {
+      detailsEl.textContent = 'Loading...';
+      const res = await fetch(`/runs/${encodeURIComponent(runId)}`, { credentials: 'include' });
+      const data = await res.json();
+      if (!data.ok) {
+        detailsEl.textContent = data.error?.message || 'Failed to load run.';
+        return;
+      }
+      detailsEl.textContent = JSON.stringify(data.data, null, 2);
+    }
+
+    document.getElementById('refresh').onclick = loadRuns;
+    loadRuns().catch((e) => {
+      runsEl.textContent = e.message;
+    });
+  </script>
+</body>
+</html>

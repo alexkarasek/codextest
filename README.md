@@ -8,12 +8,18 @@ A local-first web application to create/edit personas and run conversation modes
 - First 10 Minutes: `docs/FIRST_10_MINUTES.md`
 - UI Navigation Map: `docs/UI_NAVIGATION.md`
 - Refactor Blueprint: `docs/REFACTOR_BLUEPRINT.md`
+- Current Architecture: `docs/architecture/current.md`
+- Current Data Model: `docs/data/current-data-model.md`
+- Current Execution Model: `docs/execution/current-execution.md`
+- Phase 1 Events Foundation: `docs/execution/phase-1-events.md`
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
 - OpenAPI spec: `docs/openapi.yaml`
 - Browser API docs: `http://localhost:3000/docs/api`
 - Documentation module (rendered guides): `http://localhost:3000/documentation`
+- Run History API: `http://localhost:3000/runs`
+- Run History UI: `http://localhost:3000/runs/ui`
 
 ## Features
 
