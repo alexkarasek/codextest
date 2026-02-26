@@ -11,9 +11,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY server ./server
+COPY worker ./worker
 COPY client ./client
 COPY src ./src
 COPY lib ./lib
+COPY packages ./packages
 COPY docs ./docs
 COPY README.md ./README.md
 COPY data ./data

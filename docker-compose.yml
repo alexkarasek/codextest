@@ -11,3 +11,14 @@ services:
       - ./data:/app/data
       - ./settings.local.json:/app/settings.local.json:ro
     restart: unless-stopped
+  worker:
+    build: .
+    container_name: persona-debate-worker
+    command: ["npm", "run", "worker"]
+    environment:
+      PORT: 3000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./settings.local.json:/app/settings.local.json:ro
+    restart: unless-stopped

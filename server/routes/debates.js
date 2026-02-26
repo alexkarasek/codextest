@@ -8,8 +8,7 @@ import {
   getDebate,
   hardDeleteDebate,
   listDebateChat,
-  listDebates,
-  updateDebateSession
+  listDebates
 } from "../../lib/storage.js";
 import {
   createDebateSchema,
@@ -19,13 +18,10 @@ import { sendError, sendOk } from "../response.js";
 import { sendMappedError } from "../errorMapper.js";
 import { truncateText } from "../../lib/utils.js";
 import { chatCompletion } from "../../lib/llm.js";
-import { runConversationSession } from "../../src/services/conversationEngine.js";
 import { createConversationSession } from "../../src/services/createConversationSession.js";
-import { appendEvent, EVENT_TYPES, recordErrorEvent } from "../../packages/core/events/index.js";
-import { runWithObservabilityContext } from "../../lib/observability.js";
+import { enqueue } from "../../packages/core/queue/index.js";
 
 const router = express.Router();
-let runQueue = Promise.resolve();
 
 function transcriptSnippetsForQuestion(transcript, question, maxSnippets = 5) {
   const blocks = String(transcript || "")
@@ -62,90 +58,11 @@ function transcriptSnippetsForQuestion(transcript, question, maxSnippets = 5) {
   return selected;
 }
 
-async function runDebateQueued(debateId, { requestId = null, runId = null } = {}) {
-  runQueue = runQueue.then(async () => {
-    await runWithObservabilityContext({ requestId, runId: runId || debateId }, async () => {
-      await appendEvent({
-        eventType: EVENT_TYPES.RunStarted,
-        component: "debate-engine",
-        requestId,
-        runId: runId || debateId,
-        data: {
-          kind: "debate",
-          debateId
-        }
-      });
-
-      try {
-        const { session } = await getDebate(debateId);
-        await runConversationSession({
-          conversationMode: session?.conversationMode || "debate",
-          conversationId: debateId,
-          session
-        });
-        await appendEvent({
-          eventType: EVENT_TYPES.RunFinished,
-          component: "debate-engine",
-          requestId,
-          runId: runId || debateId,
-          data: {
-            status: "completed",
-            kind: "debate",
-            debateId
-          }
-        });
-      } catch (error) {
-        await recordErrorEvent({
-          component: "debate-engine",
-          requestId,
-          runId: runId || debateId,
-          error,
-          data: {
-            kind: "debate",
-            debateId
-          }
-        });
-        await appendEvent({
-          eventType: EVENT_TYPES.RunFinished,
-          component: "debate-engine",
-          requestId,
-          runId: runId || debateId,
-          level: "error",
-          error: {
-            code: error?.code || "DEBATE_RUN_ERROR",
-            message: error?.message || "Debate run failed."
-          },
-          data: {
-            status: "failed",
-            kind: "debate",
-            debateId
-          }
-        });
-        await updateDebateSession(debateId, (current) => ({
-          ...current,
-          status: "failed",
-          error: {
-            message: error.message,
-            code: error.code || "DEBATE_RUN_ERROR"
-          },
-          progress: {
-            round: current.progress?.round || 0,
-            currentSpeaker: null,
-            message: "Debate failed"
-          }
-        }));
-      }
-    });
-  });
-
-  return runQueue;
-}
-
-router.post("/", async (req, res) => {
+async function createAndQueueDebate(req, res) {
   const parsed = createDebateSchema.safeParse(req.body);
   if (!parsed.success) {
     sendError(res, 400, "VALIDATION_ERROR", "Invalid debate payload.", formatZodError(parsed.error));
-    return;
+    return false;
   }
 
   let selectionMeta = { mode: "manual", reasoning: "Used manually selected personas." };
@@ -186,27 +103,46 @@ router.post("/", async (req, res) => {
       ],
       { status: 500, code: "SERVER_ERROR", message: "Failed to resolve selected personas." }
     );
-    return;
+    return false;
   }
 
   const runId = debateId;
-  runDebateQueued(debateId, { requestId: req.requestId || null, runId });
+  const queued = await enqueue(
+    "RUN_DEBATE",
+    {
+      debateId,
+      requestId: req.requestId || null,
+      runId
+    },
+    {
+      runId,
+      idempotencyKey: `RUN_DEBATE:${debateId}`,
+      maxAttempts: 3
+    }
+  );
 
   sendOk(
     res,
     {
       debateId,
       runId,
+      jobId: queued.job.id,
+      deduped: queued.deduped,
       status: "queued",
       personaSelection: selectionMeta,
       links: {
         self: `/api/debates/${debateId}`,
-        transcript: `/api/debates/${debateId}/transcript`
+        transcript: `/api/debates/${debateId}/transcript`,
+        run: `/runs/${runId}`
       }
     },
     202
   );
-});
+  return true;
+}
+
+router.post("/", createAndQueueDebate);
+router.post("/run", createAndQueueDebate);
 
 router.get("/", async (_req, res) => {
   const debates = await listDebates();

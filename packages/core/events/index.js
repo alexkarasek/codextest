@@ -3,6 +3,7 @@ import path from "path";
 import { DATA_DIR } from "../../../lib/storage.js";
 import { getObservabilityContext } from "../../../lib/observability.js";
 import { safeJsonParse } from "../../../lib/utils.js";
+import { listJobs } from "../queue/index.js";
 
 export const EVENT_TYPES = {
   RunStarted: "RunStarted",
@@ -158,6 +159,31 @@ export async function listRuns({ limit = 25 } = {}) {
   const events = await listEvents({ limit: 5000 });
   const runIds = [...new Set(events.map((e) => String(e.runId || "").trim()).filter(Boolean))];
   const summaries = runIds.map((runId) => summarizeRunEvents(runId, events));
+  const existing = new Set(summaries.map((s) => String(s.runId || "")));
+  const jobs = await listJobs({ limit: 2000 });
+  for (const job of jobs) {
+    const runId = String(job.runId || "").trim();
+    if (!runId || existing.has(runId)) continue;
+    summaries.push({
+      runId,
+      requestId: String(job.payload?.requestId || "") || null,
+      component: "queue",
+      status: String(job.status || "pending"),
+      startedAt: job.startedAt || null,
+      finishedAt: job.completedAt || job.failedAt || null,
+      durationMs: null,
+      llmCalls: 0,
+      toolCalls: 0,
+      eventCount: 0,
+      tokens: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0
+      },
+      estimatedCostUsd: 0,
+      error: job.lastError || null
+    });
+  }
   summaries.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
   return summaries.slice(0, Math.max(1, Number(limit) || 25));
 }

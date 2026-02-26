@@ -1,6 +1,7 @@
 import express from "express";
 import { sendError, sendOk } from "../response.js";
 import { getRunDetails, listRuns } from "../../packages/core/events/index.js";
+import { findJobByRunId } from "../../packages/core/queue/index.js";
 
 const router = express.Router();
 
@@ -19,7 +20,34 @@ router.get("/:runId", async (req, res) => {
 
   const details = await getRunDetails(runId);
   if (!details?.events?.length) {
-    sendError(res, 404, "NOT_FOUND", `Run '${runId}' not found.`);
+    const job = await findJobByRunId(runId);
+    if (!job) {
+      sendError(res, 404, "NOT_FOUND", `Run '${runId}' not found.`);
+      return;
+    }
+    sendOk(res, {
+      summary: {
+        runId,
+        requestId: String(job.payload?.requestId || "") || null,
+        component: "queue",
+        status: job.status,
+        startedAt: job.startedAt || null,
+        finishedAt: job.completedAt || job.failedAt || null,
+        durationMs: null,
+        llmCalls: 0,
+        toolCalls: 0,
+        eventCount: 0,
+        tokens: {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0
+        },
+        estimatedCostUsd: 0,
+        error: job.lastError || null,
+        job
+      },
+      events: []
+    });
     return;
   }
 

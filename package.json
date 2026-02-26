@@ -6,7 +6,9 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "nodemon server/index.js",
+    "dev:worker": "nodemon worker/index.js",
     "start": "node server/index.js",
+    "worker": "node worker/index.js",
     "test": "node --test",
     "docker:release": "bash scripts/docker-release.sh"
   },
