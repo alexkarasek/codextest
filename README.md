@@ -12,6 +12,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Current Data Model: `docs/data/current-data-model.md`
 - Current Execution Model: `docs/execution/current-execution.md`
 - Phase 1 Events Foundation: `docs/execution/phase-1-events.md`
+- Phase 2 Worker Queue: `docs/execution/phase-2-worker.md`
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
@@ -159,10 +160,22 @@ Development mode (auto-reload):
 npm run dev
 ```
 
+Run background worker (required for queued debate execution in Phase 2):
+
+```bash
+npm run dev:worker
+```
+
 Production mode:
 
 ```bash
 npm start
+```
+
+Worker process (production/local):
+
+```bash
+npm run worker
 ```
 
 Open in browser:

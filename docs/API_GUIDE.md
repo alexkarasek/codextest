@@ -58,6 +58,7 @@ Response envelope:
 
 ### Debates (`/api/debates`) - auth required
 - `POST /` (create + queue run)
+- `POST /run` (alias: create + queue run)
 - `GET /`
 - `GET /:debateId`
 - `GET /:debateId/transcript`
