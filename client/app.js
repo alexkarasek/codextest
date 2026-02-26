@@ -80,6 +80,8 @@ const state = {
     approvals: [],
     jobs: [],
     watchers: [],
+    workflows: [],
+    workflowRuns: [],
     metrics: null,
     mcp: null,
     mcpServers: [],
@@ -5645,6 +5647,170 @@ function renderAgenticWatchers() {
   });
 }
 
+function parseWorkflowStepsJson(raw) {
+  const parsed = JSON.parse(String(raw || "[]"));
+  if (!Array.isArray(parsed)) {
+    throw new Error("Workflow steps JSON must be an array.");
+  }
+  return parsed;
+}
+
+function renderAgenticWorkflows() {
+  const list = byId("agentic-workflows-list");
+  const runsList = byId("agentic-workflow-runs-list");
+  if (!list || !runsList) return;
+  list.innerHTML = "";
+  runsList.innerHTML = "";
+  const workflows = state.agentic.workflows || [];
+  const workflowRuns = state.agentic.workflowRuns || [];
+
+  if (!workflows.length) {
+    list.textContent = "No workflows configured.";
+  } else {
+    workflows.forEach((workflow) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const trigger = workflow.trigger || {};
+      const latest = workflow.latestRun || null;
+      card.innerHTML = `
+        <div class="card-title">${workflow.name || workflow.id}</div>
+        <div>id: ${workflow.id}</div>
+        <div>enabled: ${workflow.enabled ? "true" : "false"}</div>
+        <div>trigger: ${trigger.type || "manual"} ${trigger.cron ? `| cron=${trigger.cron}` : ""} ${trigger.event ? `| event=${trigger.event}` : ""}</div>
+        <div class="muted">last run: ${latest?.id || workflow.lastRunId || "n/a"} | status: ${latest?.status || "n/a"}</div>
+      `;
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const runBtn = document.createElement("button");
+      runBtn.type = "button";
+      runBtn.textContent = "Run Now";
+      runBtn.addEventListener("click", async () => {
+        byId("agentic-workflow-status").textContent = `Queueing workflow ${workflow.id}...`;
+        try {
+          const data = await apiSend(`/api/agentic/workflows/${encodeURIComponent(workflow.id)}/run`, "POST", {});
+          byId("agentic-workflow-status").textContent = `Queued ${workflow.id}: runId=${data.runId}`;
+          await loadAgenticData();
+        } catch (error) {
+          byId("agentic-workflow-status").textContent = `Run failed: ${error.message}`;
+        }
+      });
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.textContent = workflow.enabled ? "Disable" : "Enable";
+      toggleBtn.addEventListener("click", async () => {
+        byId("agentic-workflow-status").textContent = `${workflow.enabled ? "Disabling" : "Enabling"} ${workflow.id}...`;
+        try {
+          await apiSend(`/api/agentic/workflows/${encodeURIComponent(workflow.id)}`, "PUT", {
+            enabled: !workflow.enabled
+          });
+          byId("agentic-workflow-status").textContent = `${workflow.enabled ? "Disabled" : "Enabled"} ${workflow.id}.`;
+          await loadAgenticData();
+        } catch (error) {
+          byId("agentic-workflow-status").textContent = `Update failed: ${error.message}`;
+        }
+      });
+
+      const triggerBtn = document.createElement("button");
+      triggerBtn.type = "button";
+      triggerBtn.textContent = "Webhook Trigger";
+      triggerBtn.addEventListener("click", async () => {
+        byId("agentic-workflow-status").textContent = `Triggering ${workflow.id} webhook...`;
+        try {
+          const payload = { payload: { source: "ui", ts: new Date().toISOString() } };
+          if (workflow.trigger?.secret) payload.secret = workflow.trigger.secret;
+          await apiSend(`/api/agentic/workflows/${encodeURIComponent(workflow.id)}/trigger`, "POST", payload);
+          byId("agentic-workflow-status").textContent = `Webhook triggered for ${workflow.id}.`;
+          await loadAgenticData();
+        } catch (error) {
+          byId("agentic-workflow-status").textContent = `Webhook trigger failed: ${error.message}`;
+        }
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", async () => {
+        const ok = window.confirm(`Delete workflow '${workflow.name || workflow.id}'?`);
+        if (!ok) return;
+        byId("agentic-workflow-status").textContent = `Deleting ${workflow.id}...`;
+        try {
+          await apiSend(`/api/agentic/workflows/${encodeURIComponent(workflow.id)}`, "DELETE", {});
+          byId("agentic-workflow-status").textContent = `Deleted ${workflow.id}.`;
+          await loadAgenticData();
+        } catch (error) {
+          byId("agentic-workflow-status").textContent = `Delete failed: ${error.message}`;
+        }
+      });
+
+      row.append(runBtn, toggleBtn, triggerBtn, delBtn);
+      card.appendChild(row);
+      list.appendChild(card);
+    });
+  }
+
+  if (!workflowRuns.length) {
+    runsList.textContent = "No workflow runs yet.";
+  } else {
+    workflowRuns.slice(0, 50).forEach((run) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="card-title">${run.id}</div>
+        <div>workflow: ${run.workflowId}</div>
+        <div>status: ${run.status}</div>
+        <div>trigger: ${run.triggerType || "manual"}</div>
+        <div class="muted">updated: ${run.updatedAt || run.createdAt || "n/a"}</div>
+      `;
+      runsList.appendChild(card);
+    });
+  }
+}
+
+async function createAgenticWorkflowFromUi() {
+  const status = byId("agentic-workflow-status");
+  const name = byId("agentic-workflow-name").value.trim();
+  const idRaw = byId("agentic-workflow-id").value.trim();
+  const id = idRaw || toSafeSlug(name);
+  if (!name) {
+    status.textContent = "Workflow name is required.";
+    return;
+  }
+  if (!id) {
+    status.textContent = "Workflow id is required.";
+    return;
+  }
+  let steps = [];
+  try {
+    steps = parseWorkflowStepsJson(byId("agentic-workflow-steps-json").value);
+  } catch (error) {
+    status.textContent = `Invalid workflow steps JSON: ${error.message}`;
+    return;
+  }
+  const triggerType = byId("agentic-workflow-trigger-type").value || "manual";
+  const payload = {
+    id,
+    name,
+    enabled: true,
+    trigger: {
+      type: triggerType,
+      cron: byId("agentic-workflow-cron").value.trim(),
+      event: byId("agentic-workflow-event").value.trim() || "run.finished",
+      secret: byId("agentic-workflow-secret").value.trim()
+    },
+    steps
+  };
+  status.textContent = "Creating workflow...";
+  try {
+    await apiSend("/api/agentic/workflows", "POST", payload);
+    status.textContent = `Created workflow ${id}.`;
+    await loadAgenticData();
+  } catch (error) {
+    status.textContent = `Workflow create failed: ${error.message}`;
+  }
+}
+
 async function createAgenticWatcherFromUi() {
   const status = byId("agentic-watcher-status");
   const name = byId("agentic-watcher-name").value.trim();
@@ -5750,6 +5916,8 @@ function renderAgenticMetrics() {
   const totals = state.agentic.metrics?.totals || {};
   [
     ["Tasks", totals.tasks || 0],
+    ["Workflows", totals.workflows || 0],
+    ["Workflow Runs", totals.workflowRuns || 0],
     ["Approvals", totals.approvals || 0],
     ["Jobs", totals.jobs || 0],
     ["Task Events", totals.taskEvents || 0],
@@ -5887,7 +6055,7 @@ async function loadAgenticData() {
   if (!state.auth.authenticated) return;
   byId("agentic-task-status").textContent = "Loading agentic workspace...";
   try {
-    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates, watchers] = await Promise.all([
+    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates, watchers, workflows] = await Promise.all([
       apiGet("/api/agentic/tools"),
       apiGet("/api/agentic/tasks"),
       apiGet("/api/agentic/approvals"),
@@ -5898,7 +6066,8 @@ async function loadAgenticData() {
       apiGet("/api/agentic/mcp/status"),
       apiGet("/api/agentic/mcp/servers?includeTools=true"),
       apiGet("/api/agentic/templates"),
-      apiGet("/api/agentic/watchers")
+      apiGet("/api/agentic/watchers"),
+      apiGet("/api/agentic/workflows")
     ]);
     state.agentic.tools = tools.tools || [];
     state.agentic.tasks = tasks.tasks || [];
@@ -5911,6 +6080,8 @@ async function loadAgenticData() {
     state.agentic.mcpServers = mcpServers.servers || [];
     state.agentic.templates = templates.templates || [];
     state.agentic.watchers = watchers.watchers || [];
+    state.agentic.workflows = workflows.workflows || [];
+    state.agentic.workflowRuns = workflows.runs || [];
 
     if (state.agentic.activeTaskId && !state.agentic.tasks.some((t) => t.id === state.agentic.activeTaskId)) {
       state.agentic.activeTaskId = "";
@@ -5924,6 +6095,7 @@ async function loadAgenticData() {
     renderAgenticTools();
     renderAgenticApprovals();
     renderAgenticWatchers();
+    renderAgenticWorkflows();
     renderAgenticMetrics();
     renderAgenticPresetSelect();
     byId("agentic-task-status").textContent = "Agentic workspace loaded.";
@@ -6833,6 +7005,8 @@ function wireEvents() {
   byId("agentic-generate-report").addEventListener("click", generateAgenticReportForSelectedTask);
   byId("agentic-mcp-tool-run").addEventListener("click", runSelectedMcpTool);
   byId("agentic-watcher-create").addEventListener("click", createAgenticWatcherFromUi);
+  byId("agentic-workflow-create").addEventListener("click", createAgenticWorkflowFromUi);
+  byId("agentic-workflow-refresh").addEventListener("click", loadAgenticData);
   byId("agentic-router-preview").addEventListener("click", previewAgenticRouting);
   byId("agentic-step-add").addEventListener("click", () => {
     state.agentic.stepDrafts = getAgenticBuilderRowsFromDom();

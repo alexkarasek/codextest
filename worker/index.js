@@ -4,6 +4,11 @@ import { getDebate } from "../lib/storage.js";
 import { appendEvent, EVENT_TYPES, recordErrorEvent } from "../packages/core/events/index.js";
 import { runWithObservabilityContext, logEvent } from "../lib/observability.js";
 import { getRunRepository } from "../lib/runRepository.js";
+import {
+  executeWorkflowRun,
+  pollAndQueueCronWorkflows,
+  queueRunCompletedWorkflows
+} from "../lib/workflowEngine.js";
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 1000);
 const WORKER_ID = String(process.env.WORKER_ID || `worker-${process.pid}`);
@@ -50,6 +55,31 @@ async function processJob(job) {
   if (job.type === "RUN_DEBATE") {
     return runDebateJob(job);
   }
+  if (job.type === "RUN_WORKFLOW") {
+    const workflowId = String(job?.payload?.workflowId || "").trim();
+    const workflowRunId = String(job?.payload?.runId || "").trim();
+    if (!workflowId || !workflowRunId) {
+      const err = new Error("RUN_WORKFLOW payload requires workflowId and runId.");
+      err.code = "INVALID_JOB_PAYLOAD";
+      throw err;
+    }
+    const run = await executeWorkflowRun({
+      workflowId,
+      workflowRunId,
+      requestId: String(job?.payload?.requestId || "").trim() || null,
+      triggerType: String(job?.payload?.triggerType || "manual"),
+      triggerPayload: job?.payload?.triggerPayload || {},
+      user: {
+        id: String(job?.payload?.userId || "") || null,
+        username: String(job?.payload?.username || "") || null
+      }
+    });
+    return {
+      workflowId,
+      workflowRunId,
+      status: run.status
+    };
+  }
 
   const err = new Error(`Unsupported job type '${job.type}'.`);
   err.code = "UNSUPPORTED_JOB_TYPE";
@@ -66,6 +96,7 @@ async function loop() {
   while (true) {
     let job = null;
     try {
+      await pollAndQueueCronWorkflows({ requestId: null }).catch(() => []);
       job = await dequeue({ workerId: WORKER_ID, jobTypes: JOB_TYPES });
       if (!job) {
         await sleep(POLL_MS);
@@ -130,6 +161,17 @@ async function loop() {
             result
           }
         });
+        if (job.type !== "RUN_WORKFLOW") {
+          await queueRunCompletedWorkflows({
+            runId: runId || job.id,
+            requestId,
+            event: "run.finished",
+            payload: {
+              jobType: job.type,
+              jobId: job.id
+            }
+          }).catch(() => []);
+        }
 
         logEvent("info", {
           component: "worker",

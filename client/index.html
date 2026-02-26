@@ -447,6 +447,37 @@
           <div id="agentic-approvals-list" class="list"></div>
           <h3>Watchers</h3>
           <div id="agentic-watchers-list" class="list"></div>
+          <h3>Workflows</h3>
+          <div class="hint">MVP trigger-action workflows. Use cron (`*/5 * * * *`), webhook, runCompleted, or manual.</div>
+          <label>Workflow Name<input id="agentic-workflow-name" type="text" placeholder="Daily debate monitor"></label>
+          <div class="grid two">
+            <label>Workflow Id<input id="agentic-workflow-id" type="text" placeholder="daily-debate-monitor"></label>
+            <label>Trigger Type
+              <select id="agentic-workflow-trigger-type">
+                <option value="manual" selected>manual</option>
+                <option value="cron">cron</option>
+                <option value="webhook">webhook</option>
+                <option value="runCompleted">runCompleted</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid two">
+            <label>Cron (if cron trigger)<input id="agentic-workflow-cron" type="text" placeholder="*/5 * * * *"></label>
+            <label>Event (runCompleted)<input id="agentic-workflow-event" type="text" placeholder="run.finished"></label>
+          </div>
+          <label>Webhook Secret (optional)<input id="agentic-workflow-secret" type="text" placeholder="shared-secret"></label>
+          <label>Workflow Steps JSON<textarea id="agentic-workflow-steps-json" rows="8">[
+  {"id":"step-1","name":"Call endpoint","type":"httpRequest","input":{"url":"https://example.com","method":"GET"}},
+  {"id":"step-2","name":"Persist result","type":"persistRecord","input":{"path":"data/agentic/workflow-records/example.txt","content":"{{steps.step-1.bodyPreview}}","append":false}}
+]</textarea></label>
+          <div class="row">
+            <button id="agentic-workflow-create" type="button">Create Workflow</button>
+            <button id="agentic-workflow-refresh" type="button">Refresh Workflows</button>
+          </div>
+          <div id="agentic-workflow-status" class="status"></div>
+          <div id="agentic-workflows-list" class="list"></div>
+          <h3>Workflow Runs</h3>
+          <div id="agentic-workflow-runs-list" class="list"></div>
           <h3>Tool Catalog</h3>
           <div id="agentic-tools-list" class="list"></div>
         </div>

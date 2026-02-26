@@ -12,6 +12,9 @@ import {
   listToolUsage,
   listWatchers,
   appendToolUsage,
+  deleteWorkflow,
+  getWorkflow,
+  saveWorkflow,
   saveTaskTemplate
 } from "../../lib/agenticStorage.js";
 import { listTools } from "../../lib/agenticTools.js";
@@ -21,6 +24,11 @@ import { runMcpTool } from "../../lib/mcpRegistry.js";
 import { listPersonas } from "../../lib/storage.js";
 import { applyApprovalDecision, createTaskDraft, runTask } from "../../lib/taskRunner.js";
 import { createWatcher, runWatcher } from "../../lib/agenticWatchers.js";
+import {
+  createWorkflow,
+  getWorkflowOverview,
+  queueWorkflowRun
+} from "../../lib/workflowEngine.js";
 import { generateTaskReport } from "../../lib/agenticReports.js";
 import { routeTeam } from "../../lib/teamRouter.js";
 import { slugify } from "../../lib/utils.js";
@@ -29,8 +37,11 @@ import {
   approvalDecisionSchema,
   createAgenticTaskSchema,
   createWatcherSchema,
+  createWorkflowSchema,
   formatZodError,
   routerPreviewSchema,
+  updateWorkflowSchema,
+  workflowSchema,
   runAgenticTaskSchema
 } from "../../lib/validators.js";
 import { sendError, sendOk } from "../response.js";
@@ -89,6 +100,145 @@ router.get("/watchers", async (_req, res) => {
       code: "SERVER_ERROR",
       message: (e) => `Failed to list watchers: ${e.message}`
     });
+  }
+});
+
+router.get("/workflows", async (req, res) => {
+  try {
+    const limitRuns = Number(req.query?.limitRuns || 200);
+    const data = await getWorkflowOverview({ limitRuns: Number.isFinite(limitRuns) ? limitRuns : 200 });
+    sendOk(res, data);
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to list workflows: ${e.message}`
+    });
+  }
+});
+
+router.post("/workflows", async (req, res) => {
+  const parsed = createWorkflowSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    sendError(res, 400, "VALIDATION_ERROR", "Invalid workflow payload.", formatZodError(parsed.error));
+    return;
+  }
+  try {
+    const workflow = await createWorkflow({
+      ...parsed.data,
+      user: req.auth?.user || null
+    });
+    sendOk(res, { workflow }, 201);
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to create workflow: ${e.message}`
+    });
+  }
+});
+
+router.put("/workflows/:workflowId", async (req, res) => {
+  const parsed = updateWorkflowSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    sendError(res, 400, "VALIDATION_ERROR", "Invalid workflow update payload.", formatZodError(parsed.error));
+    return;
+  }
+  try {
+    const current = await getWorkflow(req.params.workflowId);
+    const merged = {
+      ...current,
+      ...parsed.data,
+      id: req.params.workflowId,
+      updatedAt: new Date().toISOString()
+    };
+    const validated = workflowSchema.safeParse(merged);
+    if (!validated.success) {
+      sendError(res, 400, "VALIDATION_ERROR", "Invalid workflow payload.", formatZodError(validated.error));
+      return;
+    }
+    const saved = await saveWorkflow(validated.data);
+    sendOk(res, { workflow: saved });
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Workflow '${req.params.workflowId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to update workflow: ${e.message}` }
+    );
+  }
+});
+
+router.delete("/workflows/:workflowId", async (req, res) => {
+  try {
+    const ok = await deleteWorkflow(req.params.workflowId);
+    if (!ok) {
+      sendError(res, 404, "NOT_FOUND", `Workflow '${req.params.workflowId}' not found.`);
+      return;
+    }
+    sendOk(res, { deleted: true });
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to delete workflow: ${e.message}`
+    });
+  }
+});
+
+router.post("/workflows/:workflowId/run", async (req, res) => {
+  try {
+    const data = await queueWorkflowRun({
+      workflowId: req.params.workflowId,
+      triggerType: "manual",
+      triggerPayload: req.body?.payload && typeof req.body.payload === "object" ? req.body.payload : {},
+      requestId: req.requestId || null,
+      user: req.auth?.user || null
+    });
+    sendOk(res, data, 202);
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [
+        { matchCode: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Workflow '${req.params.workflowId}' not found.` },
+        { code: "WORKFLOW_DISABLED", status: 400 }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to run workflow: ${e.message}` }
+    );
+  }
+});
+
+router.post("/workflows/:workflowId/trigger", async (req, res) => {
+  try {
+    const workflow = await getWorkflow(req.params.workflowId);
+    const secret = String(workflow?.trigger?.secret || "").trim();
+    if (workflow?.trigger?.type !== "webhook") {
+      sendError(res, 400, "VALIDATION_ERROR", "Workflow trigger type must be webhook for this endpoint.");
+      return;
+    }
+    if (secret) {
+      const provided = String(req.headers["x-workflow-secret"] || req.body?.secret || "").trim();
+      if (!provided || provided !== secret) {
+        sendError(res, 401, "UNAUTHORIZED", "Invalid workflow secret.");
+        return;
+      }
+    }
+    const data = await queueWorkflowRun({
+      workflowId: req.params.workflowId,
+      triggerType: "webhook",
+      triggerPayload: req.body?.payload && typeof req.body.payload === "object" ? req.body.payload : {},
+      requestId: req.requestId || null,
+      user: req.auth?.user || null
+    });
+    sendOk(res, data, 202);
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ matchCode: "ENOENT", status: 404, responseCode: "NOT_FOUND", message: `Workflow '${req.params.workflowId}' not found.` }],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to trigger workflow: ${e.message}` }
+    );
   }
 });
 
