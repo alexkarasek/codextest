@@ -70,6 +70,8 @@ test("/docs/openapi.yaml points to valid yaml file", async () => {
   const parsed = YAML.parse(raw);
   assert.equal(parsed.openapi, "3.0.3");
   assert.ok(parsed.paths["/api/support/messages"]);
+  assert.ok(parsed.paths["/api/agentic/workflows"]);
+  assert.ok(parsed.paths["/runs/compare/{runA}/{runB}"]);
 });
 
 test("requireAuth rejects unauthenticated request with 401", async () => {

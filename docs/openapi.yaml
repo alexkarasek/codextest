@@ -635,6 +635,23 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/debates/run:
+    post:
+      tags: [Debates]
+      summary: Create and queue debate run (alias)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDebateRequest' }
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+
   /api/debates/{debateId}:
     get:
       tags: [Debates]
@@ -988,6 +1005,28 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/settings/logo:
+    post:
+      tags: [Settings]
+      summary: Upload brand/logo image
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [logo]
+              properties:
+                logo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Saved logo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
   /theme:
     get:
       tags: [Settings]
@@ -1187,6 +1226,25 @@ paths:
       responses:
         '200': { description: Refreshed, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
 
+  /api/admin/system/reset:
+    post:
+      tags: [Admin]
+      summary: Reset demo data (admin role)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  enum: [usage, all]
+                  default: usage
+      responses:
+        '200': { description: Reset complete, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /api/agentic/tools:
     get:
       tags: [Agentic]
@@ -1319,6 +1377,92 @@ paths:
       responses:
         '200': { description: Task run result, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
 
+  /api/agentic/tasks/{taskId}/report:
+    post:
+      tags: [Agentic]
+      summary: Generate task report
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format: { type: string, enum: [markdown], default: markdown }
+      responses:
+        '200': { description: Report generated, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/watchers:
+    get:
+      tags: [Agentic]
+      summary: List watchers
+      responses:
+        '200': { description: Watchers, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+    post:
+      tags: [Agentic]
+      summary: Create watcher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, trigger, taskId]
+              properties:
+                name: { type: string }
+                description: { type: string, default: '' }
+                enabled: { type: boolean, default: true }
+                taskId: { type: string }
+                trigger:
+                  type: object
+                  required: [type]
+                  properties:
+                    type: { type: string, enum: [cron, runCompleted] }
+                    expression: { type: string, default: '' }
+                    source: { type: string, default: '*' }
+                    eventType: { type: string, default: '' }
+      responses:
+        '201': { description: Watcher created, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/watchers/{watcherId}/run:
+    post:
+      tags: [Agentic]
+      summary: Queue watcher execution
+      parameters:
+        - in: path
+          name: watcherId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                triggerData:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '202': { description: Queued, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/watchers/{watcherId}:
+    delete:
+      tags: [Agentic]
+      summary: Delete watcher
+      parameters:
+        - in: path
+          name: watcherId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
   /api/agentic/approvals:
     get:
       tags: [Agentic]
@@ -1432,6 +1576,139 @@ paths:
       responses:
         '200': { description: MCP tool output, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
 
+  /api/agentic/workflows:
+    get:
+      tags: [Agentic]
+      summary: List workflows
+      parameters:
+        - in: query
+          name: includeRuns
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { description: Workflows, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+    post:
+      tags: [Agentic]
+      summary: Create workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, trigger, steps]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                description: { type: string, default: '' }
+                enabled: { type: boolean, default: true }
+                trigger:
+                  type: object
+                  required: [type]
+                  properties:
+                    type: { type: string, enum: [manual, webhook, runCompleted, cron] }
+                    source: { type: string, default: '*' }
+                    expression: { type: string, default: '' }
+                    eventType: { type: string, default: '' }
+                steps:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [name, type]
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      type: { type: string, enum: [condition, httpRequest, sendMessage, runDebate, transform, persistRecord] }
+                      config: { type: object, additionalProperties: true, default: {} }
+                      timeoutMs: { type: integer, minimum: 200, maximum: 120000, default: 15000 }
+                      retries: { type: integer, minimum: 0, maximum: 5, default: 0 }
+                      onFailure: { type: string, enum: [stop, continue], default: stop }
+      responses:
+        '201': { description: Workflow created, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/workflows/{workflowId}:
+    put:
+      tags: [Agentic]
+      summary: Update workflow
+      parameters:
+        - in: path
+          name: workflowId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                enabled: { type: boolean }
+                trigger:
+                  type: object
+                  properties:
+                    type: { type: string, enum: [manual, webhook, runCompleted, cron] }
+                    source: { type: string }
+                    expression: { type: string }
+                    eventType: { type: string }
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        '200': { description: Workflow updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+    delete:
+      tags: [Agentic]
+      summary: Delete workflow
+      parameters:
+        - in: path
+          name: workflowId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Workflow deleted, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/workflows/{workflowId}/run:
+    post:
+      tags: [Agentic]
+      summary: Queue a workflow run
+      parameters:
+        - in: path
+          name: workflowId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                triggerData: { type: object, additionalProperties: true, default: {} }
+      responses:
+        '202': { description: Workflow run queued, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /api/agentic/workflows/{workflowId}/trigger:
+    post:
+      tags: [Agentic]
+      summary: Trigger a webhook workflow
+      parameters:
+        - in: path
+          name: workflowId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '202': { description: Trigger accepted, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
   /api/support/messages:
     post:
       tags: [Support]
@@ -1467,6 +1744,47 @@ paths:
                           $ref: '#/components/schemas/SupportCitation'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /runs:
+    get:
+      tags: [Admin]
+      summary: List run history
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 25 }
+      responses:
+        '200': { description: Run list, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+
+  /runs/{runId}:
+    get:
+      tags: [Admin]
+      summary: Get run details
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Run detail, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /runs/compare/{runA}/{runB}:
+    get:
+      tags: [Admin]
+      summary: Compare two runs
+      parameters:
+        - in: path
+          name: runA
+          required: true
+          schema: { type: string }
+        - in: path
+          name: runB
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Comparison payload, content: { application/json: { schema: { $ref: '#/components/schemas/OkResponse' } } } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
 components:
   securitySchemes:
