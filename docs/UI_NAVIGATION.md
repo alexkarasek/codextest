@@ -15,6 +15,7 @@
 ### Subtab: Simple Chat
 Purpose:
 - Single-assistant chat with optional knowledge packs.
+- Optional side-by-side model comparison for the same prompt.
 
 Main areas:
 - Left: chat history list + load controls

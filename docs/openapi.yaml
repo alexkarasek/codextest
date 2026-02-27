@@ -833,6 +833,7 @@ paths:
                   knowledgePackIds: []
                   settings:
                     model: gpt-5-mini
+                    compareModels: [llama-3.3-70b-instruct, gpt-4o]
                     temperature: 0.4
                     maxResponseWords: 220
       responses:
@@ -1956,6 +1957,11 @@ components:
         model: { type: string, default: gpt-5-mini }
         temperature: { type: number, minimum: 0, maximum: 2, default: 0.4 }
         maxResponseWords: { type: integer, minimum: 40, maximum: 800, default: 220 }
+        compareModels:
+          type: array
+          items: { type: string }
+          maxItems: 4
+          default: []
     CreateSimpleChatRequest:
       type: object
       properties:

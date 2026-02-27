@@ -830,10 +830,10 @@
 
     <section id="tab-admin" class="tab-section">
       <div class="grid two">
-        <div class="panel stack">
+        <div class="panel stack governance-panel governance-panel-main">
           <h2>Governance Dashboard <span class="tip" tabindex="0">?<span class="tip-flyout">Use matrix drilldowns to inspect usage, cost, risk, sentiment, and user dimensions.</span></span></h2>
           <div id="admin-summary-cards" class="summary-cards"></div>
-          <div class="admin-matrix-controls row">
+          <div class="admin-matrix-controls admin-matrix-toolbar row">
             <span class="hint">Matrix Dimension</span>
             <button id="admin-dim-channel" type="button">Channel</button>
             <button id="admin-dim-model" type="button">Model</button>
@@ -843,7 +843,7 @@
           </div>
           <div id="admin-filter-summary" class="hint">No active drill filter.</div>
           <div id="admin-matrix" class="admin-matrix"></div>
-          <div class="row">
+          <div class="row admin-view-toolbar">
             <button id="admin-view-debates" type="button">Conversation View</button>
             <button id="admin-view-chats" type="button">Chat View</button>
             <button id="admin-view-personas" type="button">Persona View</button>
@@ -851,30 +851,35 @@
             <button id="admin-refresh" type="button">Refresh</button>
           </div>
           <div id="admin-pricing-note" class="hint"></div>
+          <div class="governance-section-label">Drillthrough Details</div>
           <div id="admin-list" class="list"></div>
         </div>
 
-        <div class="panel stack">
+        <div class="panel stack governance-panel">
           <h2>Visual Analytics</h2>
           <div id="admin-chart-status" class="status">Charts update from current matrix filters.</div>
-          <div class="row">
-            <label>Coverage Heatmap
-              <select id="admin-heatmap-mode">
-                <option value="capability">Agent x Capability</option>
-                <option value="topic">Agent x Topic</option>
-              </select>
-            </label>
-            <button id="admin-heatmap-refresh" type="button">Refresh Heatmap</button>
-          </div>
-          <div id="admin-heatmap-status" class="status">Loading heatmap...</div>
-          <div id="admin-heatmap-note" class="hint">
-            Heatmap score blends message share, token share, novelty, citation/tool activity, and user follow-up engagement.
-          </div>
-          <div id="admin-heatmap-legend" class="hint"></div>
-          <div id="admin-heatmap" class="admin-heatmap"></div>
+          <details class="admin-heatmap-section">
+            <summary>Coverage Heatmap</summary>
+            <div class="row governance-control-row">
+              <label>Coverage Heatmap
+                <select id="admin-heatmap-mode">
+                  <option value="capability">Agent x Capability</option>
+                  <option value="topic">Agent x Topic</option>
+                </select>
+              </label>
+              <button id="admin-heatmap-refresh" type="button">Refresh Heatmap</button>
+            </div>
+            <div id="admin-heatmap-status" class="status">Loading heatmap...</div>
+            <div id="admin-heatmap-note" class="hint">
+              Heatmap score blends message share, token share, novelty, citation/tool activity, and user follow-up engagement.
+            </div>
+            <div id="admin-heatmap-legend" class="hint"></div>
+            <div id="admin-heatmap" class="admin-heatmap"></div>
+          </details>
           <div id="admin-charts" class="stack"></div>
+          <div class="governance-section-label">Operational Monitoring</div>
           <h3>Tool Usage Monitor</h3>
-          <div class="row">
+          <div class="row governance-control-row">
             <label>Tool
               <input id="admin-tool-filter-tool" type="text" placeholder="web.fetch">
             </label>
@@ -896,13 +901,14 @@
           </div>
           <div id="admin-tool-status" class="status">Loading tool usage...</div>
           <div id="admin-tool-usage-list" class="list"></div>
-          <div class="row">
+          <div class="row governance-nav-row">
             <button id="admin-nav-group-history" type="button">Open Group Chat History</button>
             <button id="admin-nav-simple-history" type="button">Open Simple Chat History</button>
             <button id="admin-nav-debate-history" type="button">Open Conversation Explorer</button>
           </div>
+          <div class="governance-section-label">Governance Assistant</div>
           <h3>Governance Admin Chat <span class="tip" tabindex="0">?<span class="tip-flyout">Admin-only chat backed by a hidden governance dataset knowledge pack and hidden governance persona.</span></span></h3>
-          <div class="row">
+          <div class="row governance-control-row">
             <button id="gov-chat-create" type="button">New Governance Chat</button>
             <label>Find Past Chat<input id="gov-chat-search" type="text" placeholder="Search by id or title"></label>
             <button id="gov-chat-search-btn" type="button">Search</button>
@@ -910,7 +916,7 @@
           <div id="gov-chat-create-status" class="status">Create or load a governance chat session.</div>
           <div id="gov-chat-search-status" class="hint hidden">Search results appear here.</div>
           <div id="gov-chat-session-list" class="list hidden"></div>
-          <div class="row">
+          <div class="row governance-control-row">
             <label>Chat Id<input id="gov-chat-id" type="text" placeholder="Load governance chat id"></label>
             <button id="gov-chat-load" type="button">Load</button>
           </div>

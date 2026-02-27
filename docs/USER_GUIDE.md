@@ -66,13 +66,16 @@ Configuration workspace with subtabs:
 1. Go to `Chats` -> `Simple Chat`.
 2. Enter title/context (optional).
 3. Choose model/settings.
-4. Optionally select knowledge packs.
-5. Click create/start.
-6. Send messages in chat.
+4. Optional: enable **Compare with additional models** to run the same prompt across multiple models side-by-side.
+5. Optionally select knowledge packs.
+6. Click create/start.
+7. Send messages in chat.
 
 Tips:
 - Use history panel on the left to load previous sessions.
 - Start a new session from the create controls to avoid continuing old context.
+- The main assistant bubble shows the primary model used for that reply.
+- Comparison results open in a separate collapsible panel below the main answer.
 
 ## B) Start a Group Chat with Personas
 1. Go to `Chats` -> `Group Chat` -> `Live Group Chat`.

@@ -3377,12 +3377,27 @@ function buildAdminMatrixRows() {
     channelRow.scopeRefusals += scopeRefusals;
     channelRow.grounded += grounded;
 
-    modelRow.conversations += 1;
-    modelRow.tokens += tokens;
-    modelRow.cost += cost;
-    modelRow.messages += messages;
-    modelRow.scopeRefusals += scopeRefusals;
-    modelRow.grounded += grounded;
+    const modelBreakdown = Array.isArray(chat.modelBreakdown) && chat.modelBreakdown.length ? chat.modelBreakdown : null;
+    if (modelBreakdown) {
+      modelBreakdown.forEach((entry) => {
+        const perModelRow = ensureMetricRow(modelMap, entry.model || "unknown", entry.model || "unknown");
+        perModelRow.conversations += 1;
+        perModelRow.tokens += Number(entry.tokenUsage?.totalTokens || 0);
+        perModelRow.cost += Number(entry.estimatedCostUsd || 0);
+        perModelRow.messages += Number(entry.responseCount || 0);
+        if ((entry.model || "unknown") === model) {
+          perModelRow.scopeRefusals += scopeRefusals;
+          perModelRow.grounded += grounded;
+        }
+      });
+    } else {
+      modelRow.conversations += 1;
+      modelRow.tokens += tokens;
+      modelRow.cost += cost;
+      modelRow.messages += messages;
+      modelRow.scopeRefusals += scopeRefusals;
+      modelRow.grounded += grounded;
+    }
     userRow.conversations += 1;
     userRow.tokens += tokens;
     userRow.cost += cost;
@@ -4259,15 +4274,21 @@ function renderAdminChatsList() {
   chats.forEach((chat) => {
     const item = document.createElement("div");
     item.className = "admin-item";
+    const modelsUsed = Array.isArray(chat.modelsInSession) && chat.modelsInSession.length
+      ? chat.modelsInSession.join(", ")
+      : chat.model || "unknown";
     item.innerHTML = `
       <div class="admin-item-head">
         <strong>${chat.title || chat.chatId}</strong>
         <span class="admin-item-sub">${chat.kind || "chat"} | ${chat.chatId}</span>
       </div>
       <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : chat.kind === "support" ? "support-chat" : "chat")}</div>
+      <div class="admin-item-sub">Models: ${modelsUsed}</div>
       <div class="admin-item-sub">Participants: ${(chat.participants || []).join(", ") || "n/a"}</div>
       <div class="admin-item-sub">Created by: ${chat.createdByUsername || "unknown"}</div>
-      <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}</div>
+      <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}${
+        chat.comparisonRunCount ? ` | Comparisons: ${chat.comparisonRunCount}` : ""
+      }</div>
       <div class="admin-item-sub">Tokens: ${Number(chat.tokenUsage?.totalTokens || 0).toLocaleString()} | Est. Cost: ${
         typeof chat.estimatedCostUsd === "number" ? `$${chat.estimatedCostUsd.toFixed(6)}` : "n/a"
       }</div>
@@ -6971,11 +6992,13 @@ async function loadViewerConversation(type, id) {
   if (type === "simple") {
     const data = await apiGet(`/api/simple-chats/${encodeURIComponent(id)}`);
     const session = data.session || {};
+    const compareModels = Array.isArray(session.settings?.compareModels) ? session.settings.compareModels : [];
     byId("viewer-progress").textContent = `SIMPLE CHAT | ${session.title || id} | messages=${(data.messages || []).length}`;
     byId("viewer-transcript").textContent = [
       `Title: ${session.title || id}`,
       `Type: Simple Chat`,
       `Model: ${session.settings?.model || "n/a"}`,
+      `Comparison Models: ${compareModels.join(", ") || "none"}`,
       `Context: ${session.context || "(none)"}`,
       `Knowledge Packs: ${(session.knowledgePackIds || []).join(", ") || "none"}`
     ].join("\n");

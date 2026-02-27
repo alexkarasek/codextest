@@ -268,6 +268,10 @@ main {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+#tab-admin .grid.two {
+  align-items: start;
+}
+
 .grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -619,11 +623,12 @@ button[type="submit"]:hover {
 
 .admin-item {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--card);
-  padding: 10px;
+  padding: 14px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 45%, transparent);
 }
 
 .admin-item-head {
@@ -708,6 +713,7 @@ button[type="submit"]:hover {
 .admin-item-sub {
   color: var(--ink-soft);
   font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .admin-matrix-controls {
@@ -715,30 +721,116 @@ button[type="submit"]:hover {
   flex-wrap: wrap;
 }
 
+.admin-matrix-toolbar,
+.admin-view-toolbar,
+.governance-control-row,
+.governance-nav-row {
+  gap: 10px 12px;
+}
+
+.governance-panel {
+  gap: 14px;
+}
+
+.governance-panel-main {
+  gap: 8px;
+}
+
+.governance-panel-main .summary-cards {
+  gap: 8px;
+}
+
+.governance-panel-main .hint,
+.governance-panel-main .governance-section-label {
+  margin: 0;
+}
+
+.governance-panel-main #admin-matrix,
+.governance-panel-main #admin-list {
+  margin-top: 2px;
+}
+
+.governance-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-top: 2px;
+}
+
+.admin-heatmap-section {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 94%, var(--bg-soft) 6%);
+  padding: 10px 12px;
+}
+
+.admin-heatmap-section > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+  list-style: none;
+}
+
+.admin-heatmap-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-heatmap-section > summary::after {
+  content: "Show";
+  float: right;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.admin-heatmap-section[open] > summary::after {
+  content: "Hide";
+}
+
+.admin-heatmap-section[open] {
+  padding-bottom: 12px;
+}
+
+.admin-heatmap-section > :not(summary) {
+  margin-top: 10px;
+}
+
 .admin-matrix {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--card);
   overflow: auto;
+  padding: 2px;
 }
 
 .admin-matrix-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+  min-width: 760px;
 }
 
 .admin-matrix-table th,
 .admin-matrix-table td {
   border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line);
-  padding: 8px 9px;
+  padding: 10px 11px;
   text-align: right;
+}
+
+.admin-matrix-table th {
+  background: color-mix(in srgb, var(--bg-soft) 82%, white 18%);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .admin-matrix-table th:first-child,
 .admin-matrix-table td:first-child {
   text-align: left;
+  min-width: 150px;
 }
 
 .admin-matrix-table th:last-child,
@@ -776,10 +868,11 @@ button[type="submit"]:hover {
   background: transparent;
   cursor: pointer;
   text-align: right;
-  padding: 2px 4px;
+  padding: 6px 8px;
   border-radius: 8px;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
+  font-weight: 600;
 }
 
 .admin-matrix-cell:hover {
@@ -814,9 +907,10 @@ button[type="submit"]:hover {
 
 .admin-heatmap {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--card);
   overflow: auto;
+  padding: 2px;
 }
 
 .admin-heatmap-table {
@@ -829,9 +923,24 @@ button[type="submit"]:hover {
 .admin-heatmap-table td {
   border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line);
-  padding: 6px 8px;
+  padding: 8px 10px;
   text-align: center;
   vertical-align: middle;
+}
+
+#admin-list,
+#admin-tool-usage-list {
+  display: grid;
+  gap: 12px;
+}
+
+#gov-chat-history {
+  min-height: 180px;
+  max-height: 340px;
+}
+
+#admin-charts {
+  gap: 12px;
 }
 
 .admin-heatmap-table th:first-child,

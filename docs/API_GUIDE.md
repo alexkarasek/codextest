@@ -184,9 +184,12 @@ curl -X POST http://localhost:3000/api/simple-chats \
     "title":"Simple Chat",
     "context":"General support",
     "knowledgePackIds":[],
-    "settings":{"model":"gpt-5-mini","temperature":0.4,"maxResponseWords":220}
+    "settings":{"model":"gpt-5-mini","compareModels":["llama-3.3-70b-instruct","gpt-4o"],"temperature":0.4,"maxResponseWords":220}
   }'
 ```
+Notes:
+- `compareModels` is optional. When present, the primary assistant response still uses `settings.model`, and comparison outputs are returned alongside it.
+- In hybrid routing setups, `modelRouting` can send selected comparison models to Azure while the rest remain on OpenAI.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash
