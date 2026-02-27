@@ -130,7 +130,7 @@ export function startServer(port = PORT) {
   if (!isLlmConfigured()) {
     if (getLlmProvider() === "azure") {
       console.warn(
-        `Azure OpenAI is selected but not fully configured. Set azureOpenAIApiKey, azureOpenAIEndpoint, and azureOpenAIDeployment (or per-request model) in ${getSettingsPath()} or env vars.`
+        `Azure OpenAI is selected but not fully configured. Set azureInference.apiKey, azureInference.endpoint, and azureInference.defaultDeployment or azureInference.deployments in ${getSettingsPath()} (legacy azureOpenAI* fields still work), or use env vars.`
       );
     } else if (!getOpenAIApiKey()) {
       console.warn(
@@ -141,7 +141,7 @@ export function startServer(port = PORT) {
     const dep = getAzureOpenAIDeployment();
     const endpoint = getAzureOpenAIEndpoint();
     console.log(
-      `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "per-request model"})`
+      `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "model-mapped/per-request"})`
     );
   }
   });

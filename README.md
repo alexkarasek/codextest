@@ -138,6 +138,18 @@ cp settings.example.json settings.local.json
 {
   "llmProvider": "openai",
   "openaiApiKey": "sk-your-key-here",
+  "openaiBaseUrl": "",
+  "azureInference": {
+    "apiKey": "",
+    "endpoint": "",
+    "apiVersion": "2024-10-21",
+    "defaultDeployment": "",
+    "deployments": {
+      "gpt-5-mini": "gpt-5-mini",
+      "gpt-4o": "gpt-4o",
+      "claude-sonnet": "claude-sonnet"
+    }
+  },
   "azureOpenAIApiKey": "",
   "azureOpenAIEndpoint": "",
   "azureOpenAIDeployment": "",
@@ -153,9 +165,18 @@ You can still override via environment variables if needed, but it is not requir
 Notes:
 - `llmProvider`:
   - `openai`: uses `openaiApiKey` or `OPENAI_API_KEY`
-  - `azure`: uses `azureOpenAIApiKey` / `AZURE_OPENAI_API_KEY`, `azureOpenAIEndpoint` / `AZURE_OPENAI_ENDPOINT`, and `azureOpenAIDeployment` / `AZURE_OPENAI_DEPLOYMENT`
+  - `azure`: prefers `azureInference.apiKey`, `azureInference.endpoint`, `azureInference.apiVersion`, and `azureInference.deployments`
 - `newsProvider`: `google` (default, no API key) or `newsapi`.
 - If using `newsapi`, set `newsApiKey`.
+- `openaiBaseUrl` is included for future OpenAI-compatible endpoint routing; the current runtime still uses the standard OpenAI API base URL.
+- `azureInference.deployments` maps UI/runtime model labels to Azure deployment names. This is the recommended way to support Azure-hosted model comparisons.
+- Legacy top-level Azure fields (`azureOpenAIApiKey`, `azureOpenAIEndpoint`, `azureOpenAIDeployment`, `azureOpenAIApiVersion`) are still supported for backward compatibility.
+- Environment overrides still work:
+  - `AZURE_OPENAI_API_KEY`
+  - `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_OPENAI_DEPLOYMENT`
+  - `AZURE_OPENAI_API_VERSION`
+  - `AZURE_OPENAI_DEPLOYMENTS_JSON` (JSON object mapping model labels to deployment names)
 
 ## Run
 

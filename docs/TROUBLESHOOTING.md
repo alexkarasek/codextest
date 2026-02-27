@@ -88,6 +88,8 @@ Cause:
 
 Fix:
 - Set `llmProvider: "azure"` and provide required Azure fields in `settings.local.json`.
+- Prefer `azureInference.apiKey`, `azureInference.endpoint`, and `azureInference.deployments` for Azure-hosted model routing.
+- Legacy top-level `azureOpenAI*` fields still work if you have an older settings file.
 
 ## Docker port conflicts
 
