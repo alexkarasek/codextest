@@ -370,8 +370,8 @@
             </label>
             <label>Temperature<input id="agentic-task-temperature" type="number" min="0" max="2" step="0.1" value="0.3"></label>
           </div>
-          <div class="hint">If `llmProvider` is set to Azure, this label is resolved through `azureInference.deployments` in `settings.local.json`.</div>
-          <div id="agentic-task-model-meta" class="hint"></div>
+          <div class="hint model-routing-hint">If `llmProvider` is set to Azure, this label is resolved through `azureInference.deployments` in `settings.local.json`.</div>
+          <div id="agentic-task-model-meta" class="model-runtime-meta"></div>
           <h3>Step Builder</h3>
           <div class="hint">Build steps visually, then create task. You can reference prior outputs with templates like <code>{{steps.step-1.result.bodyPreview}}</code>.</div>
           <div class="row">
@@ -541,13 +541,15 @@
               <label>Temperature<input id="simple-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.4"></label>
               <label>Max Response Words<input id="simple-chat-max-words" type="number" min="40" max="800" value="220"></label>
             </div>
-            <div class="hint">Azure mode: the selected model label maps to an Azure deployment using `azureInference.deployments`.</div>
-            <div id="simple-chat-model-meta" class="hint"></div>
-            <label class="inline"><input id="simple-chat-compare-enabled" type="checkbox"> Compare with additional models</label>
-            <div id="simple-chat-compare-wrap" class="stack hidden">
-              <div class="hint">Optional: run the same prompt through extra models and show their outputs under the main answer. Primary reply behavior stays unchanged.</div>
-              <div id="simple-chat-compare-models" class="list"></div>
-              <div id="simple-chat-compare-summary" class="muted">No comparison models selected.</div>
+            <div class="hint model-routing-hint">Azure mode: the selected model label maps to an Azure deployment using `azureInference.deployments`.</div>
+            <div id="simple-chat-model-meta" class="model-runtime-meta"></div>
+            <div class="compare-config">
+              <label class="inline compare-toggle"><input id="simple-chat-compare-enabled" type="checkbox"> Compare with additional models</label>
+              <div id="simple-chat-compare-wrap" class="stack compare-config-body hidden">
+                <div class="compare-config-note">Run the same prompt through extra models. The primary answer still drives the conversation.</div>
+                <div id="simple-chat-compare-models" class="list compare-model-list"></div>
+                <div id="simple-chat-compare-summary" class="compare-config-summary">No comparison models selected.</div>
+              </div>
             </div>
             <h3>Knowledge Packs (Optional)</h3>
             <div id="simple-chat-knowledge-list" class="list"></div>
@@ -616,13 +618,15 @@
                 <input id="persona-chat-panel-rounds" type="number" min="0" max="4" value="2">
               </label>
             </div>
-            <div class="hint">Azure mode: this model label is translated to an Azure deployment name through `azureInference.deployments`.</div>
-            <div id="persona-chat-model-meta" class="hint"></div>
-            <label class="inline"><input id="persona-chat-compare-enabled" type="checkbox"> Compare persona turns across additional models</label>
-            <div id="persona-chat-compare-wrap" class="stack hidden">
-              <div class="hint">Optional: run the same persona prompt through extra models. Tool-using turns skip comparison to avoid duplicate side effects.</div>
-              <div id="persona-chat-compare-models" class="list"></div>
-              <div id="persona-chat-compare-summary" class="muted">No comparison models selected.</div>
+            <div class="hint model-routing-hint">Azure mode: this model label is translated to an Azure deployment name through `azureInference.deployments`.</div>
+            <div id="persona-chat-model-meta" class="model-runtime-meta"></div>
+            <div class="compare-config">
+              <label class="inline compare-toggle"><input id="persona-chat-compare-enabled" type="checkbox"> Compare persona turns across additional models</label>
+              <div id="persona-chat-compare-wrap" class="stack compare-config-body hidden">
+                <div class="compare-config-note">Run the same persona prompt through extra models. Tool-using turns skip comparison to avoid duplicate side effects.</div>
+                <div id="persona-chat-compare-models" class="list compare-model-list"></div>
+                <div id="persona-chat-compare-summary" class="compare-config-summary">No comparison models selected.</div>
+              </div>
             </div>
             <div id="persona-chat-mode-help" class="hint">Interactive chat: personas mostly reply when directly addressed. If unclear, moderator routes the turn and gives guidance.</div>
             <h3>Knowledge Packs (Optional)</h3>
@@ -687,8 +691,8 @@
               </select>
             </label>
           </div>
-          <div class="hint">Azure mode: the selected model is used as a lookup key in `azureInference.deployments` before the request is sent.</div>
-          <div id="debate-model-meta" class="hint"></div>
+          <div class="hint model-routing-hint">Azure mode: the selected model is used as a lookup key in `azureInference.deployments` before the request is sent.</div>
+          <div id="debate-model-meta" class="model-runtime-meta"></div>
           <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
           <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
           </div>

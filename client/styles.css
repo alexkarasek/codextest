@@ -1295,6 +1295,70 @@ button[type="submit"]:hover {
   line-height: 1.45;
 }
 
+.model-routing-hint {
+  padding: 6px 8px;
+  font-size: 0.84rem;
+}
+
+.model-runtime-meta {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--bg-soft) 84%, white 16%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  line-height: 1.4;
+}
+
+.compare-config {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 92%, var(--bg-soft) 8%);
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.compare-toggle {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.compare-config-body {
+  gap: 8px;
+}
+
+.compare-config-note {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.compare-config-summary {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.compare-model-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 10px;
+}
+
+.compare-model-list .inline {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  margin: 0;
+}
+
+.compare-model-list .inline:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--card) 65%);
+}
+
 .chat-msg.system {
   background: #fff7e8;
   border-color: #f0d7a7;
