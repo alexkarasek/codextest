@@ -2,19 +2,8 @@
   "llmProvider": "openai",
   "openaiApiKey": "sk-your-key-here",
   "openaiBaseUrl": "",
-  "azureInference": {
-    "apiKey": "",
-    "endpoint": "",
-    "apiVersion": "2024-10-21",
-    "defaultDeployment": "",
-    "deployments": {
-      "gpt-5-mini": "gpt-5-mini",
-      "gpt-5.2": "gpt-5.2",
-      "gpt-4.1": "gpt-4.1",
-      "gpt-4o": "gpt-4o",
-      "gpt-4o-mini": "gpt-4o-mini",
-      "claude-sonnet": "claude-sonnet"
-    }
+  "modelRouting": {
+    "gpt-5-mini": "azure"
   },
   "azureOpenAIApiKey": "",
   "azureOpenAIEndpoint": "",
@@ -26,5 +15,44 @@
   "toolPolicy": {
     "timeoutMs": 45000,
     "fileAllowlist": []
+  },
+  "_examples": {
+    "openaiMinimal": {
+      "llmProvider": "openai",
+      "openaiApiKey": "sk-your-key-here"
+    },
+    "azureRecommended": {
+      "llmProvider": "azure",
+      "azureInference": {
+        "apiKey": "",
+        "endpoint": "https://your-resource.openai.azure.com",
+        "apiVersion": "2024-10-21",
+        "defaultDeployment": "gpt-5-mini",
+        "deployments": {
+          "gpt-5-mini": "gpt-5-mini",
+          "gpt-5.2": "gpt-5.2",
+          "gpt-4.1": "gpt-4.1",
+          "gpt-4o": "gpt-4o",
+          "gpt-4o-mini": "gpt-4o-mini",
+          "claude-sonnet": "claude-sonnet"
+        }
+      }
+    },
+    "hybridRouting": {
+      "llmProvider": "openai",
+      "openaiApiKey": "sk-your-key-here",
+      "modelRouting": {
+        "gpt-5-mini": "azure"
+      },
+      "azureInference": {
+        "apiKey": "",
+        "endpoint": "https://your-resource.openai.azure.com",
+        "apiVersion": "2024-10-21",
+        "defaultDeployment": "gpt-5-mini",
+        "deployments": {
+          "gpt-5-mini": "gpt-5-mini"
+        }
+      }
+    }
   }
 }

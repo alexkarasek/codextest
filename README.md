@@ -132,31 +132,57 @@ npm install
 cp settings.example.json settings.local.json
 ```
 
-3. Edit `settings.local.json` and configure an LLM provider:
+3. Edit `settings.local.json` and configure an LLM provider.
+
+Minimal OpenAI setup:
+
+```json
+{
+  "llmProvider": "openai",
+  "openaiApiKey": "sk-your-key-here"
+}
+```
+
+Recommended Azure setup for model-to-deployment mapping:
+
+```json
+{
+  "llmProvider": "azure",
+  "azureInference": {
+    "apiKey": "",
+    "endpoint": "https://your-resource.openai.azure.com",
+    "apiVersion": "2024-10-21",
+    "defaultDeployment": "gpt-5-mini",
+    "deployments": {
+      "gpt-5-mini": "gpt-5-mini",
+      "gpt-5.2": "gpt-5.2",
+      "gpt-4.1": "gpt-4.1",
+      "gpt-4o": "gpt-4o",
+      "gpt-4o-mini": "gpt-4o-mini",
+      "claude-sonnet": "claude-sonnet"
+    }
+  }
+}
+```
+
+Hybrid routing example (OpenAI by default, but route `gpt-5-mini` to Azure):
 
 ```json
 {
   "llmProvider": "openai",
   "openaiApiKey": "sk-your-key-here",
-  "openaiBaseUrl": "",
+  "modelRouting": {
+    "gpt-5-mini": "azure"
+  },
   "azureInference": {
     "apiKey": "",
-    "endpoint": "",
+    "endpoint": "https://your-resource.openai.azure.com",
     "apiVersion": "2024-10-21",
-    "defaultDeployment": "",
+    "defaultDeployment": "gpt-5-mini",
     "deployments": {
-      "gpt-5-mini": "gpt-5-mini",
-      "gpt-4o": "gpt-4o",
-      "claude-sonnet": "claude-sonnet"
+      "gpt-5-mini": "gpt-5-mini"
     }
-  },
-  "azureOpenAIApiKey": "",
-  "azureOpenAIEndpoint": "",
-  "azureOpenAIDeployment": "",
-  "azureOpenAIApiVersion": "2024-10-21",
-  "port": 3000,
-  "newsProvider": "google",
-  "newsApiKey": ""
+  }
 }
 ```
 
@@ -166,12 +192,14 @@ Notes:
 - `llmProvider`:
   - `openai`: uses `openaiApiKey` or `OPENAI_API_KEY`
   - `azure`: prefers `azureInference.apiKey`, `azureInference.endpoint`, `azureInference.apiVersion`, and `azureInference.deployments`
+- `modelRouting` is optional. It maps a model label to the provider to use for `chatCompletion` calls. Example: `"gpt-5-mini": "azure"`.
 - `newsProvider`: `google` (default, no API key) or `newsapi`.
 - If using `newsapi`, set `newsApiKey`.
-- `openaiBaseUrl` is included for future OpenAI-compatible endpoint routing; the current runtime still uses the standard OpenAI API base URL.
+- `openaiBaseUrl` is optional and reserved for future OpenAI-compatible endpoint routing; the current runtime still uses the standard OpenAI API base URL.
 - `azureInference.deployments` maps UI/runtime model labels to Azure deployment names. This is the recommended way to support Azure-hosted model comparisons.
 - Legacy top-level Azure fields (`azureOpenAIApiKey`, `azureOpenAIEndpoint`, `azureOpenAIDeployment`, `azureOpenAIApiVersion`) are still supported for backward compatibility.
 - Environment overrides still work:
+  - `LLM_MODEL_ROUTING_JSON` (JSON object mapping model labels to `openai` or `azure`)
   - `AZURE_OPENAI_API_KEY`
   - `AZURE_OPENAI_ENDPOINT`
   - `AZURE_OPENAI_DEPLOYMENT`
