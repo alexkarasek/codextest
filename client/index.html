@@ -541,6 +541,8 @@
               <label>Model
                 <select id="simple-chat-model">
                   <option value="gpt-5-mini" selected>gpt-5-mini</option>
+                  <option value="llama-3.3-70b-instruct">llama-3.3-70b-instruct</option>
+                  <option value="gpt-5.2">gpt-5.2</option>
                   <option value="gpt-4.1">gpt-4.1</option>
                   <option value="gpt-4o-mini">gpt-4o-mini</option>
                   <option value="gpt-4o">gpt-4o</option>
@@ -550,6 +552,11 @@
               <label>Max Response Words<input id="simple-chat-max-words" type="number" min="40" max="800" value="220"></label>
             </div>
             <div class="hint">Azure mode: the selected model label maps to an Azure deployment using `azureInference.deployments`.</div>
+            <label class="inline"><input id="simple-chat-compare-enabled" type="checkbox"> Compare with additional models</label>
+            <div id="simple-chat-compare-wrap" class="stack hidden">
+              <div class="hint">Optional: run the same prompt through extra models and show their outputs under the main answer. Primary reply behavior stays unchanged.</div>
+              <div id="simple-chat-compare-models" class="list"></div>
+            </div>
             <h3>Knowledge Packs (Optional)</h3>
             <div id="simple-chat-knowledge-list" class="list"></div>
             <div class="row">

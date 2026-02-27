@@ -2042,6 +2042,51 @@ function renderSimpleChatKnowledgeList() {
   });
 }
 
+function simpleChatModelOptions() {
+  return [
+    "gpt-5-mini",
+    "llama-3.3-70b-instruct",
+    "gpt-5.2",
+    "gpt-4.1",
+    "gpt-4o-mini",
+    "gpt-4o"
+  ];
+}
+
+function getSimpleChatSelectedCompareModels() {
+  const wrap = byId("simple-chat-compare-models");
+  if (!wrap) return [];
+  return [...wrap.querySelectorAll("input[type='checkbox']:checked")]
+    .map((el) => String(el.value || "").trim())
+    .filter(Boolean);
+}
+
+function renderSimpleChatCompareModelList() {
+  const container = byId("simple-chat-compare-models");
+  const primary = byId("simple-chat-model")?.value?.trim() || "gpt-5-mini";
+  if (!container) return;
+  container.innerHTML = "";
+  const selected = new Set(getSimpleChatSelectedCompareModels());
+  simpleChatModelOptions()
+    .filter((model) => model !== primary)
+    .forEach((model) => {
+      const label = document.createElement("label");
+      label.className = "inline";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = model;
+      checkbox.checked = selected.has(model);
+      label.append(checkbox, document.createTextNode(` ${model}`));
+      container.appendChild(label);
+    });
+}
+
+function toggleSimpleChatCompareUi() {
+  const enabled = Boolean(byId("simple-chat-compare-enabled")?.checked);
+  byId("simple-chat-compare-wrap")?.classList.toggle("hidden", !enabled);
+  if (enabled) renderSimpleChatCompareModelList();
+}
+
 function renderSimpleChatSessionList() {
   const container = byId("simple-chat-session-list");
   if (!container) return;
@@ -2119,9 +2164,46 @@ function renderSimpleChatHistory() {
       content: `${msg.content || ""}${citations}`,
       image: msg.image || null
     });
+    if (msg.role === "assistant" && Array.isArray(msg.comparisons) && msg.comparisons.length) {
+      renderSimpleChatComparisonPanel(container, msg.comparisons);
+    }
   });
 
   container.scrollTop = container.scrollHeight;
+}
+
+function renderSimpleChatComparisonPanel(container, comparisons) {
+  const panel = document.createElement("div");
+  panel.className = "simple-chat-comparison-panel";
+
+  const heading = document.createElement("div");
+  heading.className = "simple-chat-comparison-heading";
+  heading.textContent = "Model Comparison";
+  panel.appendChild(heading);
+
+  const grid = document.createElement("div");
+  grid.className = "simple-chat-comparison-grid";
+
+  comparisons.forEach((row) => {
+    const card = document.createElement("div");
+    card.className = "simple-chat-comparison-card";
+
+    const title = document.createElement("div");
+    title.className = "simple-chat-comparison-title";
+    title.textContent = String(row.model || "model");
+
+    const body = document.createElement("div");
+    body.className = "simple-chat-comparison-body";
+    body.textContent = row.error
+      ? `Error: ${row.error}`
+      : String(row.content || "").trim() || "(no content)";
+
+    card.append(title, body);
+    grid.appendChild(card);
+  });
+
+  panel.appendChild(grid);
+  container.appendChild(panel);
 }
 
 async function loadSimpleChatSessions() {
@@ -2170,7 +2252,8 @@ async function createSimpleChatSession() {
         min: 40,
         max: 800,
         integer: true
-      })
+      }),
+      compareModels: byId("simple-chat-compare-enabled").checked ? getSimpleChatSelectedCompareModels() : []
     }
   };
   status.textContent = "Creating simple chat session...";
@@ -2195,6 +2278,8 @@ function startNewSimpleChatDraft() {
   byId("simple-chat-model").value = "gpt-5-mini";
   byId("simple-chat-temperature").value = "0.4";
   byId("simple-chat-max-words").value = "220";
+  byId("simple-chat-compare-enabled").checked = false;
+  toggleSimpleChatCompareUi();
   byId("simple-chat-status").textContent =
     "Draft reset. Configure settings and click New Chat to create a fresh session.";
   const configDetails = byId("simple-chat-config-details");
@@ -2231,7 +2316,8 @@ async function sendSimpleChatMessage({ forceImage = false } = {}) {
       state.simpleChat.historyByChat[chatId].push(data.assistant);
     }
     renderSimpleChatHistory();
-    status.textContent = `Response ready${Array.isArray(data.citations) && data.citations.length ? ` with ${data.citations.length} citations.` : "."}`;
+    const compareCount = Array.isArray(data.comparisons) ? data.comparisons.length : 0;
+    status.textContent = `Response ready${Array.isArray(data.citations) && data.citations.length ? ` with ${data.citations.length} citations` : ""}${compareCount ? ` and ${compareCount} model comparison${compareCount === 1 ? "" : "s"}` : ""}.`;
     await loadSimpleChatSessions();
   } catch (error) {
     status.textContent = `Simple chat failed: ${error.message}`;
@@ -7272,6 +7358,8 @@ function wireEvents() {
   });
   byId("simple-chat-send").addEventListener("click", sendSimpleChatMessage);
   byId("simple-chat-image").addEventListener("click", sendSimpleChatImageMessage);
+  byId("simple-chat-compare-enabled").addEventListener("change", toggleSimpleChatCompareUi);
+  byId("simple-chat-model").addEventListener("change", renderSimpleChatCompareModelList);
   byId("simple-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
