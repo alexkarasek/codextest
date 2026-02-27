@@ -65,6 +65,7 @@ const state = {
     sessions: [],
     activeChatId: null,
     historyByChat: {},
+    currentSession: null,
     sidebarCollapsed: false
   },
   supportConcierge: {
@@ -398,14 +399,28 @@ function assessExchange(content) {
   return { stoplight, sentiment };
 }
 
-function renderExchangeMessage(container, { roleClass, title, content, image = null, citation = null }) {
+function renderExchangeMessage(container, { roleClass, title, content, image = null, citation = null, metaChips = [] }) {
   const signal = assessExchange(content);
   const el = document.createElement("div");
   el.className = `chat-msg ${roleClass}`;
   const head = document.createElement("div");
   head.className = "chat-msg-head";
+  const titleWrap = document.createElement("span");
+  titleWrap.className = "chat-msg-title-wrap";
   const titleEl = document.createElement("span");
   titleEl.textContent = String(title || "");
+  titleWrap.appendChild(titleEl);
+  if (Array.isArray(metaChips) && metaChips.length) {
+    const chipWrap = document.createElement("span");
+    chipWrap.className = "chat-meta-chips";
+    metaChips.filter(Boolean).forEach((chip) => {
+      const chipEl = document.createElement("span");
+      chipEl.className = "chat-meta-chip";
+      chipEl.textContent = String(chip);
+      chipWrap.appendChild(chipEl);
+    });
+    titleWrap.appendChild(chipWrap);
+  }
   const badges = document.createElement("span");
   badges.className = "risk-badges";
   const riskChip = document.createElement("span");
@@ -415,7 +430,7 @@ function renderExchangeMessage(container, { roleClass, title, content, image = n
   sentimentChip.className = `risk-chip sentiment-${signal.sentiment}`;
   sentimentChip.textContent = signal.sentiment;
   badges.append(riskChip, sentimentChip);
-  head.append(titleEl, badges);
+  head.append(titleWrap, badges);
   const body = document.createElement("div");
   body.textContent = String(content || "");
   if (image?.url) {
@@ -2063,10 +2078,12 @@ function getSimpleChatSelectedCompareModels() {
 
 function renderSimpleChatCompareModelList() {
   const container = byId("simple-chat-compare-models");
+  const summary = byId("simple-chat-compare-summary");
   const primary = byId("simple-chat-model")?.value?.trim() || "gpt-5-mini";
   if (!container) return;
+  const selectedBefore = new Set(getSimpleChatSelectedCompareModels());
   container.innerHTML = "";
-  const selected = new Set(getSimpleChatSelectedCompareModels());
+  const selectedAfter = [];
   simpleChatModelOptions()
     .filter((model) => model !== primary)
     .forEach((model) => {
@@ -2075,16 +2092,48 @@ function renderSimpleChatCompareModelList() {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.value = model;
-      checkbox.checked = selected.has(model);
+      checkbox.checked = selectedBefore.has(model);
+      if (checkbox.checked) selectedAfter.push(model);
+      checkbox.addEventListener("change", () => {
+        const checked = getSimpleChatSelectedCompareModels();
+        if (checked.length > 4) {
+          checkbox.checked = false;
+        }
+        updateSimpleChatCompareSummary();
+      });
       label.append(checkbox, document.createTextNode(` ${model}`));
       container.appendChild(label);
     });
+  if (summary) {
+    summary.textContent = selectedAfter.length
+      ? `Comparing ${selectedAfter.length} model${selectedAfter.length === 1 ? "" : "s"} against primary model ${primary}.`
+      : `No comparison models selected. Primary model: ${primary}.`;
+  }
 }
 
 function toggleSimpleChatCompareUi() {
   const enabled = Boolean(byId("simple-chat-compare-enabled")?.checked);
   byId("simple-chat-compare-wrap")?.classList.toggle("hidden", !enabled);
-  if (enabled) renderSimpleChatCompareModelList();
+  if (enabled) {
+    renderSimpleChatCompareModelList();
+  } else {
+    updateSimpleChatCompareSummary();
+  }
+}
+
+function updateSimpleChatCompareSummary() {
+  const summary = byId("simple-chat-compare-summary");
+  if (!summary) return;
+  const enabled = Boolean(byId("simple-chat-compare-enabled")?.checked);
+  const primary = byId("simple-chat-model")?.value?.trim() || "gpt-5-mini";
+  if (!enabled) {
+    summary.textContent = "Comparison disabled.";
+    return;
+  }
+  const selected = getSimpleChatSelectedCompareModels();
+  summary.textContent = selected.length
+    ? `Comparing ${selected.length} model${selected.length === 1 ? "" : "s"} against primary model ${primary}.`
+    : `No comparison models selected. Primary model: ${primary}.`;
 }
 
 function renderSimpleChatSessionList() {
@@ -2155,6 +2204,10 @@ function renderSimpleChatHistory() {
   history.forEach((msg) => {
     const role = msg.role === "user" ? "user" : "assistant";
     const title = msg.role === "user" ? "You" : "Assistant";
+    const primaryModel =
+      msg.role === "assistant"
+        ? String(msg.model || state.simpleChat.currentSession?.settings?.model || "unknown")
+        : "";
     const citations = Array.isArray(msg.citations) && msg.citations.length
       ? `\n\nCitations: ${msg.citations.map((c) => c.id || c.title).join(", ")}`
       : "";
@@ -2162,24 +2215,30 @@ function renderSimpleChatHistory() {
       roleClass: role,
       title,
       content: `${msg.content || ""}${citations}`,
-      image: msg.image || null
+      image: msg.image || null,
+      metaChips: msg.role === "assistant" ? [`Model: ${primaryModel}`] : []
     });
     if (msg.role === "assistant" && Array.isArray(msg.comparisons) && msg.comparisons.length) {
-      renderSimpleChatComparisonPanel(container, msg.comparisons);
+      renderSimpleChatComparisonPanel(container, msg.comparisons, primaryModel);
     }
   });
 
   container.scrollTop = container.scrollHeight;
 }
 
-function renderSimpleChatComparisonPanel(container, comparisons) {
-  const panel = document.createElement("div");
+function renderSimpleChatComparisonPanel(container, comparisons, primaryModel = "") {
+  const panel = document.createElement("details");
   panel.className = "simple-chat-comparison-panel";
 
-  const heading = document.createElement("div");
+  const heading = document.createElement("summary");
   heading.className = "simple-chat-comparison-heading";
-  heading.textContent = "Model Comparison";
+  heading.textContent = `Compare ${comparisons.length} model${comparisons.length === 1 ? "" : "s"} against ${primaryModel || "primary response"}`;
   panel.appendChild(heading);
+
+  const context = document.createElement("div");
+  context.className = "simple-chat-comparison-context";
+  context.textContent = `Primary response model: ${primaryModel || "unknown"}`;
+  panel.appendChild(context);
 
   const grid = document.createElement("div");
   grid.className = "simple-chat-comparison-grid";
@@ -2228,8 +2287,26 @@ async function loadSimpleChatSession(chatId) {
   try {
     const data = await apiGet(`/api/simple-chats/${encodeURIComponent(chatId)}`);
     state.simpleChat.activeChatId = chatId;
+    state.simpleChat.currentSession = data.session || null;
+    state.simpleChat.selectedKnowledgePackIds = Array.isArray(data.session?.knowledgePackIds)
+      ? data.session.knowledgePackIds.slice()
+      : [];
     state.simpleChat.historyByChat[chatId] = Array.isArray(data.messages) ? data.messages : [];
     byId("simple-chat-id").value = chatId;
+    byId("simple-chat-title").value = data.session?.title || "Simple Chat";
+    byId("simple-chat-context").value = data.session?.context || "";
+    byId("simple-chat-model").value = data.session?.settings?.model || "gpt-5-mini";
+    byId("simple-chat-temperature").value = String(data.session?.settings?.temperature ?? "0.4");
+    byId("simple-chat-max-words").value = String(data.session?.settings?.maxResponseWords ?? "220");
+    byId("simple-chat-compare-enabled").checked = Boolean((data.session?.settings?.compareModels || []).length);
+    renderSimpleChatCompareModelList();
+    const compareSet = new Set(data.session?.settings?.compareModels || []);
+    byId("simple-chat-compare-models")
+      ?.querySelectorAll("input[type='checkbox']")
+      .forEach((el) => {
+        el.checked = compareSet.has(el.value);
+      });
+    toggleSimpleChatCompareUi();
     renderSimpleChatHistory();
     const configDetails = byId("simple-chat-config-details");
     if (configDetails) configDetails.open = false;
@@ -2272,6 +2349,7 @@ async function createSimpleChatSession() {
 
 function startNewSimpleChatDraft() {
   state.simpleChat.activeChatId = null;
+  state.simpleChat.currentSession = null;
   byId("simple-chat-id").value = "";
   byId("simple-chat-title").value = "Simple Chat";
   byId("simple-chat-context").value = "";
@@ -2314,6 +2392,11 @@ async function sendSimpleChatMessage({ forceImage = false } = {}) {
     });
     if (data.assistant) {
       state.simpleChat.historyByChat[chatId].push(data.assistant);
+    }
+    if (state.simpleChat.currentSession?.settings) {
+      state.simpleChat.currentSession.settings.compareModels = byId("simple-chat-compare-enabled").checked
+        ? getSimpleChatSelectedCompareModels()
+        : [];
     }
     renderSimpleChatHistory();
     const compareCount = Array.isArray(data.comparisons) ? data.comparisons.length : 0;
@@ -7359,7 +7442,10 @@ function wireEvents() {
   byId("simple-chat-send").addEventListener("click", sendSimpleChatMessage);
   byId("simple-chat-image").addEventListener("click", sendSimpleChatImageMessage);
   byId("simple-chat-compare-enabled").addEventListener("change", toggleSimpleChatCompareUi);
-  byId("simple-chat-model").addEventListener("change", renderSimpleChatCompareModelList);
+  byId("simple-chat-model").addEventListener("change", () => {
+    renderSimpleChatCompareModelList();
+    updateSimpleChatCompareSummary();
+  });
   byId("simple-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
