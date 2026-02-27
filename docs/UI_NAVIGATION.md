@@ -34,6 +34,7 @@ In `Live Group Chat`, you can:
 - open **Structured Debate Run** inside Session Configuration
 - use **Debate Mode Template** to carry selected personas/knowledge/context into those options
 - choose interaction mode: `chat`, `panel`, or `debate-work-order` (orchestrator routes responses each turn)
+- optionally compare persona turns across alternate models (tool-using turns skip comparisons)
 
 ## Tab: Governance
 Purpose:

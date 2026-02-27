@@ -1006,6 +1006,17 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/settings/models:
+    get:
+      tags: [Settings]
+      summary: Get resolved model catalog and image generation availability
+      responses:
+        '200':
+          description: Model catalog
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
   /api/settings/logo:
     post:
       tags: [Settings]
@@ -1936,6 +1947,12 @@ components:
         temperature: { type: number, minimum: 0, maximum: 2, default: 0.6 }
         maxWordsPerTurn: { type: integer, minimum: 40, maximum: 400, default: 140 }
         engagementMode: { type: string, enum: [chat, panel, debate-work-order], default: chat }
+        panelAutoRounds: { type: integer, minimum: 0, maximum: 4, default: 2 }
+        compareModels:
+          type: array
+          items: { type: string }
+          maxItems: 4
+          default: []
     CreatePersonaChatRequest:
       type: object
       required: [selectedPersonas]

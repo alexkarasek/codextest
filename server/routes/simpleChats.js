@@ -387,7 +387,11 @@ router.post("/:chatId/messages", async (req, res) => {
         comparisons.push({
           model,
           content: String(result.text || "").trim(),
-          usage: result.raw?.usage || null
+          usage: result.raw?.usage || null,
+          provider: result.meta?.effectiveProvider || null,
+          providerLabel: result.meta?.providerLabel || null,
+          deployment: result.meta?.deployment || null,
+          temperatureApplied: typeof result.meta?.temperatureApplied === "boolean" ? result.meta.temperatureApplied : null
         });
       } catch (compareError) {
         comparisons.push({
@@ -402,6 +406,10 @@ router.post("/:chatId/messages", async (req, res) => {
       role: "assistant",
       content: String(completion.text || "").trim(),
       model: primaryModel,
+      provider: completion.meta?.effectiveProvider || null,
+      providerLabel: completion.meta?.providerLabel || null,
+      deployment: completion.meta?.deployment || null,
+      temperatureApplied: typeof completion.meta?.temperatureApplied === "boolean" ? completion.meta.temperatureApplied : null,
       usage: completion.raw?.usage || null,
       citations: citations.map((c) => ({ id: c.id, title: c.title })),
       comparisons

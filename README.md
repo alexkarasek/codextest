@@ -66,6 +66,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Persona Collaboration Chat
   - Create free-form chat sessions with one or more personas (no moderator rounds)
   - Engagement mode is configurable per group session: `chat` (directed), `panel` (moderated), `debate-work-order` (decision-oriented)
+  - Optional side-by-side model comparison per persona turn for prompt-only responses
   - Attach knowledge packs at the chat session level to ground all personas
   - Sends each user message through a transparent moderator/orchestrator that routes directed turns in chat mode and facilitates multi-agent turns in panel/debate modes
   - Scope guardrails prevent personas from answering outside their defined expertise/knowledge
@@ -75,7 +76,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding
   - Optional side-by-side model comparison in the same session (primary response remains unchanged; alternate model outputs appear in a separate comparison panel)
-  - Supports inline image generation (`Generate Image` button or `/image ...`)
+  - Supports inline image generation (automatic intent detection, `Force Image`, or `/image ...`)
   - Persists chat sessions to `data/simple-chats/<chatId>/`
 - Topic Discovery + Persona Generation
   - Search current events and select a topic from live web results

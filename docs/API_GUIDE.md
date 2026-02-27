@@ -190,6 +190,7 @@ curl -X POST http://localhost:3000/api/simple-chats \
 Notes:
 - `compareModels` is optional. When present, the primary assistant response still uses `settings.model`, and comparison outputs are returned alongside it.
 - In hybrid routing setups, `modelRouting` can send selected comparison models to Azure while the rest remain on OpenAI.
+- The UI resolves available model labels and effective provider/deployment details from `GET /api/settings/models`.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash
@@ -210,11 +211,13 @@ curl -X POST http://localhost:3000/api/persona-chats \
     "context":"Planning discussion",
     "knowledgePackIds":[],
     "selectedPersonas":[{"type":"saved","id":"big-tex"}],
-    "settings":{"model":"gpt-5-mini","temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat"}
+    "settings":{"model":"gpt-5-mini","compareModels":["gpt-4o"],"temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat","panelAutoRounds":2}
   }'
 ```
 Notes:
 - `knowledgePackIds` are optional and apply to all personas in the session.
+- `compareModels` is optional. When used, each persona turn can include alternate prompt-only completions from those models.
+- Tool-using persona turns intentionally skip comparison runs to avoid duplicate side effects.
 
 Send message (payload uses `message`, not role/content pairs):
 ```bash

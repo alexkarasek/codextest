@@ -11,6 +11,7 @@ import { getWebPolicy, saveWebPolicy } from "../../lib/webPolicy.js";
 import { formatZodError, responsibleAiPolicySchema, webPolicySchema } from "../../lib/validators.js";
 import { getThemeSettings, saveThemeSettings } from "../../lib/themeSettings.js";
 import { IMAGES_DIR } from "../../lib/storage.js";
+import { getImageGenerationStatus, listModelCatalog } from "../../lib/modelCatalog.js";
 
 const router = express.Router();
 const upload = multer({
@@ -86,6 +87,17 @@ router.get("/theme", async (_req, res) => {
     sendOk(res, { theme });
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to load theme: ${error.message}`);
+  }
+});
+
+router.get("/models", async (_req, res) => {
+  try {
+    sendOk(res, {
+      models: listModelCatalog(),
+      imageGeneration: getImageGenerationStatus()
+    });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load model catalog: ${error.message}`);
   }
 });
 

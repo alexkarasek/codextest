@@ -76,6 +76,7 @@ Tips:
 - Start a new session from the create controls to avoid continuing old context.
 - The main assistant bubble shows the primary model used for that reply.
 - Comparison results open in a separate collapsible panel below the main answer.
+- Use `Force Image` only when you want to bypass image-intent detection and force the image path for the current prompt.
 
 ## B) Start a Group Chat with Personas
 1. Go to `Chats` -> `Group Chat` -> `Live Group Chat`.
@@ -88,11 +89,13 @@ Tips:
 - `debate-work-order` (moderated convergence to outcome)
 6. Optional for panel mode: set `Panel Auto Rounds` to continue moderator-facilitated follow-up rounds after the initial user turn.
 7. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
-8. Send message.
+8. Optional: enable **Compare persona turns across additional models** if you want each persona reply shadowed by alternate prompt-only completions.
+9. Send message.
 
 What to expect:
 - In `chat` mode, personas mainly reply when directly addressed (for example, `@persona-name`).
 - If no clear addressee is provided, moderator/orchestrator routes the turn and gives guidance.
+- Comparison runs are skipped automatically when a persona turn uses tools, so the app does not duplicate external tool side effects.
 - In `panel` mode, moderator facilitates discussion and asks one follow-up question (no winner).
 - In `debate-work-order` mode, moderator drives toward a practical outcome, open risks, and next actions.
 

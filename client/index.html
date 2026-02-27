@@ -366,16 +366,12 @@
           <div class="grid two">
             <label>Model
               <select id="agentic-task-model">
-                <option value="gpt-5-mini" selected>gpt-5-mini</option>
-                <option value="gpt-5.2">gpt-5.2</option>
-                <option value="gpt-4.1">gpt-4.1</option>
-                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                <option value="gpt-4o">gpt-4o</option>
               </select>
             </label>
             <label>Temperature<input id="agentic-task-temperature" type="number" min="0" max="2" step="0.1" value="0.3"></label>
           </div>
           <div class="hint">If `llmProvider` is set to Azure, this label is resolved through `azureInference.deployments` in `settings.local.json`.</div>
+          <div id="agentic-task-model-meta" class="hint"></div>
           <h3>Step Builder</h3>
           <div class="hint">Build steps visually, then create task. You can reference prior outputs with templates like <code>{{steps.step-1.result.bodyPreview}}</code>.</div>
           <div class="row">
@@ -540,18 +536,13 @@
             <div class="grid two">
               <label>Model
                 <select id="simple-chat-model">
-                  <option value="gpt-5-mini" selected>gpt-5-mini</option>
-                  <option value="llama-3.3-70b-instruct">llama-3.3-70b-instruct</option>
-                  <option value="gpt-5.2">gpt-5.2</option>
-                  <option value="gpt-4.1">gpt-4.1</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="gpt-4o">gpt-4o</option>
                 </select>
               </label>
               <label>Temperature<input id="simple-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.4"></label>
               <label>Max Response Words<input id="simple-chat-max-words" type="number" min="40" max="800" value="220"></label>
             </div>
             <div class="hint">Azure mode: the selected model label maps to an Azure deployment using `azureInference.deployments`.</div>
+            <div id="simple-chat-model-meta" class="hint"></div>
             <label class="inline"><input id="simple-chat-compare-enabled" type="checkbox"> Compare with additional models</label>
             <div id="simple-chat-compare-wrap" class="stack hidden">
               <div class="hint">Optional: run the same prompt through extra models and show their outputs under the main answer. Primary reply behavior stays unchanged.</div>
@@ -574,9 +565,9 @@
           <div class="row">
             <input id="simple-chat-message" type="text" placeholder="Ask anything, optionally grounded in selected knowledge packs">
             <button id="simple-chat-send" type="button">Send</button>
-            <button id="simple-chat-image" type="button">Generate Image</button>
+            <button id="simple-chat-image" type="button">Force Image</button>
           </div>
-          <div class="hint">Citations appear automatically when matching knowledge pack evidence is found. For visuals, click Generate Image or start prompt with <code>/image</code>. Text-only mentions of images only trigger generation when the subject is clear.</div>
+          <div class="hint">Citations appear automatically when matching knowledge pack evidence is found. Use normal Send for clear image requests; use Force Image or <code>/image</code> only when you want to bypass intent detection.</div>
         </div>
       </div>
     </section>
@@ -610,11 +601,6 @@
             <div class="grid two">
               <label>Model
                 <select id="persona-chat-model">
-                  <option value="gpt-5-mini" selected>gpt-5-mini</option>
-                  <option value="gpt-5.2">gpt-5.2</option>
-                  <option value="gpt-4.1">gpt-4.1</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="gpt-4o">gpt-4o</option>
                 </select>
               </label>
               <label>Temperature<input id="persona-chat-temperature" type="number" min="0" max="2" step="0.1" value="0.6"></label>
@@ -631,6 +617,13 @@
               </label>
             </div>
             <div class="hint">Azure mode: this model label is translated to an Azure deployment name through `azureInference.deployments`.</div>
+            <div id="persona-chat-model-meta" class="hint"></div>
+            <label class="inline"><input id="persona-chat-compare-enabled" type="checkbox"> Compare persona turns across additional models</label>
+            <div id="persona-chat-compare-wrap" class="stack hidden">
+              <div class="hint">Optional: run the same persona prompt through extra models. Tool-using turns skip comparison to avoid duplicate side effects.</div>
+              <div id="persona-chat-compare-models" class="list"></div>
+              <div id="persona-chat-compare-summary" class="muted">No comparison models selected.</div>
+            </div>
             <div id="persona-chat-mode-help" class="hint">Interactive chat: personas mostly reply when directly addressed. If unclear, moderator routes the turn and gives guidance.</div>
             <h3>Knowledge Packs (Optional)</h3>
             <div id="persona-chat-knowledge-list" class="list"></div>
@@ -684,11 +677,6 @@
             <label>Temperature<input id="debate-temperature" type="number" min="0" max="2" step="0.1" value="0.7"></label>
             <label>Model
               <select id="debate-model">
-                <option value="gpt-5-mini" selected>gpt-5-mini</option>
-                <option value="gpt-5.2">gpt-5.2</option>
-                <option value="gpt-4.1">gpt-4.1</option>
-                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                <option value="gpt-4o">gpt-4o</option>
               </select>
             </label>
             <label>Source Grounding
@@ -700,6 +688,7 @@
             </label>
           </div>
           <div class="hint">Azure mode: the selected model is used as a lookup key in `azureInference.deployments` before the request is sent.</div>
+          <div id="debate-model-meta" class="hint"></div>
           <label>Moderation Style<input id="debate-moderation-style" type="text" value="neutral"></label>
           <label class="inline"><input id="debate-include-moderator" type="checkbox" checked> Include moderator</label>
           </div>

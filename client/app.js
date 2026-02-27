@@ -108,6 +108,10 @@ const state = {
       speed: 1,
       timerId: null
     }
+  },
+  modelCatalog: {
+    models: [],
+    imageGeneration: null
   }
 };
 
@@ -545,6 +549,143 @@ async function apiSend(url, method, body) {
   return payload.data;
 }
 
+function fallbackModelCatalog() {
+  return [
+    { id: "gpt-5-mini", label: "gpt-5-mini", compareEligible: true, supportsTemperature: false, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null },
+    { id: "llama-3.3-70b-instruct", label: "llama-3.3-70b-instruct", compareEligible: true, supportsTemperature: true, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null },
+    { id: "gpt-5.2", label: "gpt-5.2", compareEligible: true, supportsTemperature: false, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null },
+    { id: "gpt-4.1", label: "gpt-4.1", compareEligible: true, supportsTemperature: true, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null },
+    { id: "gpt-4o-mini", label: "gpt-4o-mini", compareEligible: true, supportsTemperature: true, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null },
+    { id: "gpt-4o", label: "gpt-4o", compareEligible: true, supportsTemperature: true, effectiveProvider: "openai", providerLabel: "OpenAI", deployment: null }
+  ];
+}
+
+function getTextModels({ compareOnly = false } = {}) {
+  const models = Array.isArray(state.modelCatalog.models) && state.modelCatalog.models.length
+    ? state.modelCatalog.models
+    : fallbackModelCatalog();
+  return compareOnly ? models.filter((model) => model.compareEligible !== false) : models;
+}
+
+function getModelInfo(modelId = "") {
+  const safeId = String(modelId || "").trim().toLowerCase();
+  return getTextModels().find((entry) => String(entry.id || "").trim().toLowerCase() === safeId) || null;
+}
+
+function populateModelSelect(selectId, { includeBlank = false } = {}) {
+  const select = byId(selectId);
+  if (!select) return;
+  const currentValue = String(select.value || "").trim();
+  const models = getTextModels();
+  const fragment = document.createDocumentFragment();
+  if (includeBlank) {
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "";
+    fragment.appendChild(blank);
+  }
+  models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.label || model.id;
+    fragment.appendChild(option);
+  });
+  if (currentValue && !models.some((model) => model.id === currentValue)) {
+    const custom = document.createElement("option");
+    custom.value = currentValue;
+    custom.textContent = `${currentValue} (custom)`;
+    fragment.appendChild(custom);
+  }
+  select.innerHTML = "";
+  select.appendChild(fragment);
+  const fallbackValue = currentValue || String(models[0]?.id || "gpt-5-mini");
+  select.value = getModelInfo(fallbackValue)?.id || fallbackValue;
+}
+
+function populateModelDatalist(listId) {
+  const datalist = byId(listId);
+  if (!datalist) return;
+  datalist.innerHTML = "";
+  getTextModels().forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model.id;
+    datalist.appendChild(option);
+  });
+}
+
+function renderModelSelectionMeta(selectId, targetId, temperatureId) {
+  const target = byId(targetId);
+  const select = byId(selectId);
+  if (!target || !select) return;
+  const info = getModelInfo(select.value) || {
+    id: String(select.value || "").trim() || "unknown",
+    providerLabel: "OpenAI",
+    effectiveProvider: "openai",
+    deployment: null,
+    supportsTemperature: true
+  };
+  const parts = [
+    `Provider: ${info.providerLabel || (info.effectiveProvider === "azure" ? "Azure OpenAI" : "OpenAI")}`
+  ];
+  if (info.deployment) {
+    parts.push(`Deployment: ${info.deployment}`);
+  }
+  parts.push(info.supportsTemperature === false ? "Temperature is auto-managed for this model." : "Temperature is applied directly.");
+  target.textContent = parts.join(" | ");
+
+  const tempInput = byId(temperatureId);
+  if (tempInput) {
+    tempInput.disabled = info.supportsTemperature === false;
+    tempInput.title = info.supportsTemperature === false
+      ? "This model ignores temperature in the current endpoint path. The app sends no temperature parameter."
+      : "";
+  }
+}
+
+function renderAllModelSelectionMeta() {
+  renderModelSelectionMeta("simple-chat-model", "simple-chat-model-meta", "simple-chat-temperature");
+  renderModelSelectionMeta("persona-chat-model", "persona-chat-model-meta", "persona-chat-temperature");
+  renderModelSelectionMeta("debate-model", "debate-model-meta", "debate-temperature");
+  renderModelSelectionMeta("agentic-task-model", "agentic-task-model-meta", "agentic-task-temperature");
+}
+
+function refreshModelSelectors() {
+  ["simple-chat-model", "persona-chat-model", "debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
+  populateModelDatalist("llm-model-options");
+  renderAllModelSelectionMeta();
+  if (byId("simple-chat-compare-enabled")?.checked) {
+    renderSimpleChatCompareModelList();
+  } else {
+    updateSimpleChatCompareSummary();
+  }
+  if (byId("persona-chat-compare-enabled")?.checked) {
+    renderPersonaChatCompareModelList();
+  } else {
+    updatePersonaChatCompareSummary();
+  }
+  const imageButton = byId("simple-chat-image");
+  if (imageButton) {
+    const imageStatus = state.modelCatalog.imageGeneration;
+    const available = imageStatus ? imageStatus.available !== false : true;
+    imageButton.disabled = !available;
+    imageButton.title = available
+      ? "Force image generation for this prompt."
+      : String(imageStatus?.requirement || "Image generation is unavailable until openaiApiKey is configured.");
+  }
+}
+
+async function loadModelCatalog() {
+  try {
+    const data = await apiGet("/api/settings/models");
+    state.modelCatalog.models = Array.isArray(data.models) ? data.models : fallbackModelCatalog();
+    state.modelCatalog.imageGeneration = data.imageGeneration || null;
+  } catch (_error) {
+    state.modelCatalog.models = fallbackModelCatalog();
+    state.modelCatalog.imageGeneration = null;
+  }
+  refreshModelSelectors();
+}
+
 function showAuthGate(statusMessage = "") {
   closeSystemMenu();
   document.body.classList.add("auth-locked");
@@ -740,6 +881,7 @@ async function logout() {
 async function refreshAfterAuth() {
   renderSessionSummary();
   await loadThemeSettings();
+  await loadModelCatalog();
   await loadPersonas();
   await loadKnowledgePacks();
   await loadResponsibleAiPolicy();
@@ -1815,8 +1957,19 @@ function renderPersonaChatHistory() {
       title,
       content,
       image: msg.image || null,
-      citation
+      citation,
+      metaChips: msg.role === "persona"
+        ? [
+            msg.model ? `Model: ${msg.model}` : "",
+            msg.providerLabel ? `Provider: ${msg.providerLabel}` : "",
+            msg.deployment ? `Deployment: ${msg.deployment}` : "",
+            msg.temperatureApplied === false ? "Temp: auto" : ""
+          ].filter(Boolean)
+        : []
     });
+    if (msg.role === "persona" && Array.isArray(msg.comparisons) && msg.comparisons.length) {
+      renderModelComparisonPanel(container, msg.comparisons, String(msg.model || ""));
+    }
   });
 
   container.scrollTop = container.scrollHeight;
@@ -1868,6 +2021,16 @@ async function loadPersonaChatSession(chatId) {
     if (data.session?.settings?.engagementMode) {
       byId("persona-chat-mode").value = data.session.settings.engagementMode;
     }
+    byId("persona-chat-compare-enabled").checked = Boolean((data.session?.settings?.compareModels || []).length);
+    renderPersonaChatCompareModelList();
+    const compareSet = new Set(data.session?.settings?.compareModels || []);
+    byId("persona-chat-compare-models")
+      ?.querySelectorAll("input[type='checkbox']")
+      .forEach((el) => {
+        el.checked = compareSet.has(el.value);
+      });
+    togglePersonaChatCompareUi();
+    renderModelSelectionMeta("persona-chat-model", "persona-chat-model-meta", "persona-chat-temperature");
     updatePersonaChatModeHelp();
     renderPersonaChatPersonaList();
     renderPersonaChatKnowledgeList();
@@ -1908,7 +2071,8 @@ async function createPersonaChatSession() {
         min: 0,
         max: 4,
         integer: true
-      })
+      }),
+      compareModels: byId("persona-chat-compare-enabled").checked ? getPersonaChatSelectedCompareModels() : []
     }
   };
 
@@ -1940,6 +2104,9 @@ function startNewPersonaChatDraft() {
   byId("persona-chat-max-words").value = "140";
   byId("persona-chat-panel-rounds").value = "2";
   byId("persona-chat-mode").value = "chat";
+  byId("persona-chat-compare-enabled").checked = false;
+  togglePersonaChatCompareUi();
+  renderModelSelectionMeta("persona-chat-model", "persona-chat-model-meta", "persona-chat-temperature");
   updatePersonaChatModeHelp();
   byId("persona-chat-persona-filter").value = "";
   byId("persona-chat-status").textContent = "Draft reset. Select personas/settings and click Create Chat Session.";
@@ -2008,9 +2175,13 @@ async function sendPersonaChatMessage({ forceImage = false } = {}) {
     const selectedNames = selected.map((r) => r.displayName).join(", ");
     const toolRuns = responses.filter((r) => r && r.toolExecution && r.toolExecution.status === "ok").length;
     const toolFailures = responses.filter((r) => r && r.toolExecution && r.toolExecution.status !== "ok").length;
+    const compareCount = responses.reduce((total, entry) => {
+      const rowCount = Array.isArray(entry?.comparisons) ? entry.comparisons.length : 0;
+      return total + rowCount;
+    }, 0);
     status.textContent = selectedNames
-      ? `Received ${responses.length} persona response(s). Selected: ${selectedNames}. Tool runs: ${toolRuns}, failures: ${toolFailures}.`
-      : `Received ${responses.length} persona response(s). Tool runs: ${toolRuns}, failures: ${toolFailures}.`;
+      ? `Received ${responses.length} persona response(s). Selected: ${selectedNames}. Tool runs: ${toolRuns}, failures: ${toolFailures}${compareCount ? `, comparisons: ${compareCount}` : ""}.`
+      : `Received ${responses.length} persona response(s). Tool runs: ${toolRuns}, failures: ${toolFailures}${compareCount ? `, comparisons: ${compareCount}` : ""}.`;
     await loadPersonaChatSessions();
   } catch (error) {
     state.personaChat.historyByChat[chatId] = (state.personaChat.historyByChat[chatId] || []).filter(
@@ -2058,14 +2229,7 @@ function renderSimpleChatKnowledgeList() {
 }
 
 function simpleChatModelOptions() {
-  return [
-    "gpt-5-mini",
-    "llama-3.3-70b-instruct",
-    "gpt-5.2",
-    "gpt-4.1",
-    "gpt-4o-mini",
-    "gpt-4o"
-  ];
+  return getTextModels({ compareOnly: true }).map((model) => model.id);
 }
 
 function getSimpleChatSelectedCompareModels() {
@@ -2101,7 +2265,8 @@ function renderSimpleChatCompareModelList() {
         }
         updateSimpleChatCompareSummary();
       });
-      label.append(checkbox, document.createTextNode(` ${model}`));
+      const info = getModelInfo(model);
+      label.append(checkbox, document.createTextNode(` ${info?.label || model}`));
       container.appendChild(label);
     });
   if (summary) {
@@ -2109,6 +2274,85 @@ function renderSimpleChatCompareModelList() {
       ? `Comparing ${selectedAfter.length} model${selectedAfter.length === 1 ? "" : "s"} against primary model ${primary}.`
       : `No comparison models selected. Primary model: ${primary}.`;
   }
+}
+
+function getPersonaChatSelectedCompareModels() {
+  const wrap = byId("persona-chat-compare-models");
+  if (!wrap) return [];
+  return [...wrap.querySelectorAll("input[type='checkbox']:checked")]
+    .map((el) => String(el.value || "").trim())
+    .filter(Boolean);
+}
+
+function renderPersonaChatCompareModelList() {
+  const container = byId("persona-chat-compare-models");
+  const summary = byId("persona-chat-compare-summary");
+  const primary = byId("persona-chat-model")?.value?.trim() || "gpt-5-mini";
+  if (!container) return;
+  const selectedBefore = new Set(getPersonaChatSelectedCompareModels());
+  container.innerHTML = "";
+  const selectedAfter = [];
+  simpleChatModelOptions()
+    .filter((model) => model !== primary)
+    .forEach((model) => {
+      const label = document.createElement("label");
+      label.className = "inline";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = model;
+      checkbox.checked = selectedBefore.has(model);
+      if (checkbox.checked) selectedAfter.push(model);
+      checkbox.addEventListener("change", () => {
+        const checked = getPersonaChatSelectedCompareModels();
+        if (checked.length > 4) {
+          checkbox.checked = false;
+        }
+        updatePersonaChatCompareSummary();
+        if (state.personaChat.activeChatId) {
+          state.personaChat.dirtyConfig = true;
+          byId("persona-chat-status").textContent =
+            "Settings changed. Click Create Chat Session to start a new conversation.";
+        }
+      });
+      const info = getModelInfo(model);
+      label.append(checkbox, document.createTextNode(` ${info?.label || model}`));
+      container.appendChild(label);
+    });
+  if (summary) {
+    summary.textContent = selectedAfter.length
+      ? `Comparing ${selectedAfter.length} model${selectedAfter.length === 1 ? "" : "s"} against primary model ${primary}.`
+      : `No comparison models selected. Primary model: ${primary}.`;
+  }
+}
+
+function togglePersonaChatCompareUi() {
+  const enabled = Boolean(byId("persona-chat-compare-enabled")?.checked);
+  byId("persona-chat-compare-wrap")?.classList.toggle("hidden", !enabled);
+  if (enabled) {
+    renderPersonaChatCompareModelList();
+  } else {
+    updatePersonaChatCompareSummary();
+  }
+  if (state.personaChat.activeChatId) {
+    state.personaChat.dirtyConfig = true;
+    byId("persona-chat-status").textContent =
+      "Settings changed. Click Create Chat Session to start a new conversation.";
+  }
+}
+
+function updatePersonaChatCompareSummary() {
+  const summary = byId("persona-chat-compare-summary");
+  if (!summary) return;
+  const enabled = Boolean(byId("persona-chat-compare-enabled")?.checked);
+  const primary = byId("persona-chat-model")?.value?.trim() || "gpt-5-mini";
+  if (!enabled) {
+    summary.textContent = "Comparison disabled.";
+    return;
+  }
+  const selected = getPersonaChatSelectedCompareModels();
+  summary.textContent = selected.length
+    ? `Comparing ${selected.length} model${selected.length === 1 ? "" : "s"} against primary model ${primary}.`
+    : `No comparison models selected. Primary model: ${primary}.`;
 }
 
 function toggleSimpleChatCompareUi() {
@@ -2216,17 +2460,24 @@ function renderSimpleChatHistory() {
       title,
       content: `${msg.content || ""}${citations}`,
       image: msg.image || null,
-      metaChips: msg.role === "assistant" ? [`Model: ${primaryModel}`] : []
+      metaChips: msg.role === "assistant"
+        ? [
+            `Model: ${primaryModel}`,
+            msg.providerLabel ? `Provider: ${msg.providerLabel}` : "",
+            msg.deployment ? `Deployment: ${msg.deployment}` : "",
+            msg.temperatureApplied === false ? "Temp: auto" : ""
+          ].filter(Boolean)
+        : []
     });
     if (msg.role === "assistant" && Array.isArray(msg.comparisons) && msg.comparisons.length) {
-      renderSimpleChatComparisonPanel(container, msg.comparisons, primaryModel);
+      renderModelComparisonPanel(container, msg.comparisons, primaryModel);
     }
   });
 
   container.scrollTop = container.scrollHeight;
 }
 
-function renderSimpleChatComparisonPanel(container, comparisons, primaryModel = "") {
+function renderModelComparisonPanel(container, comparisons, primaryModel = "") {
   const panel = document.createElement("details");
   panel.className = "simple-chat-comparison-panel";
 
@@ -2249,7 +2500,12 @@ function renderSimpleChatComparisonPanel(container, comparisons, primaryModel = 
 
     const title = document.createElement("div");
     title.className = "simple-chat-comparison-title";
-    title.textContent = String(row.model || "model");
+    const providerBits = [
+      String(row.model || "model"),
+      row.providerLabel || "",
+      row.deployment ? `deployment=${row.deployment}` : ""
+    ].filter(Boolean);
+    title.textContent = providerBits.join(" | ");
 
     const body = document.createElement("div");
     body.className = "simple-chat-comparison-body";
@@ -2307,6 +2563,7 @@ async function loadSimpleChatSession(chatId) {
         el.checked = compareSet.has(el.value);
       });
     toggleSimpleChatCompareUi();
+    renderModelSelectionMeta("simple-chat-model", "simple-chat-model-meta", "simple-chat-temperature");
     renderSimpleChatHistory();
     const configDetails = byId("simple-chat-config-details");
     if (configDetails) configDetails.open = false;
@@ -2358,6 +2615,7 @@ function startNewSimpleChatDraft() {
   byId("simple-chat-max-words").value = "220";
   byId("simple-chat-compare-enabled").checked = false;
   toggleSimpleChatCompareUi();
+  renderModelSelectionMeta("simple-chat-model", "simple-chat-model-meta", "simple-chat-temperature");
   byId("simple-chat-status").textContent =
     "Draft reset. Configure settings and click New Chat to create a fresh session.";
   const configDetails = byId("simple-chat-config-details");
@@ -4126,7 +4384,11 @@ function applyChatFilter(chats) {
   const filter = state.adminFilter;
   if (!filter) return chats;
   if (filter.dimension === "model") {
-    return chats.filter((c) => String(c.model || "") === filter.key);
+    return chats.filter((c) => {
+      if (String(c.model || "") === filter.key) return true;
+      const modelBreakdown = c.modelBreakdown && typeof c.modelBreakdown === "object" ? c.modelBreakdown : {};
+      return Object.prototype.hasOwnProperty.call(modelBreakdown, filter.key);
+    });
   }
   if (filter.dimension === "persona") {
     return chats.filter((c) => (c.participants || []).some((name) => String(name) === String(filter.label)));
@@ -4277,6 +4539,7 @@ function renderAdminChatsList() {
     const modelsUsed = Array.isArray(chat.modelsInSession) && chat.modelsInSession.length
       ? chat.modelsInSession.join(", ")
       : chat.model || "unknown";
+    const primaryModelInfo = getModelInfo(chat.model || "");
     item.innerHTML = `
       <div class="admin-item-head">
         <strong>${chat.title || chat.chatId}</strong>
@@ -4284,6 +4547,7 @@ function renderAdminChatsList() {
       </div>
       <div class="admin-item-sub">Mode: ${chat.engagementMode || (chat.kind === "simple" ? "simple-chat" : chat.kind === "support" ? "support-chat" : "chat")}</div>
       <div class="admin-item-sub">Models: ${modelsUsed}</div>
+      <div class="admin-item-sub">Primary Provider: ${primaryModelInfo?.providerLabel || "n/a"}${primaryModelInfo?.deployment ? ` | Deployment: ${primaryModelInfo.deployment}` : ""}</div>
       <div class="admin-item-sub">Participants: ${(chat.participants || []).join(", ") || "n/a"}</div>
       <div class="admin-item-sub">Created by: ${chat.createdByUsername || "unknown"}</div>
       <div class="admin-item-sub">Turns: ${chat.turns || 0} | Messages: ${chat.messageCount || 0}${
@@ -7447,6 +7711,11 @@ function wireEvents() {
       if (id === "persona-chat-title" || id === "persona-chat-context") {
         syncDebateModeTopicContextFromGroup();
       }
+      if (id === "persona-chat-model") {
+        renderModelSelectionMeta("persona-chat-model", "persona-chat-model-meta", "persona-chat-temperature");
+        renderPersonaChatCompareModelList();
+        updatePersonaChatCompareSummary();
+      }
       if (!state.personaChat.activeChatId) return;
       state.personaChat.dirtyConfig = true;
       byId("persona-chat-status").textContent =
@@ -7465,9 +7734,17 @@ function wireEvents() {
   byId("simple-chat-send").addEventListener("click", sendSimpleChatMessage);
   byId("simple-chat-image").addEventListener("click", sendSimpleChatImageMessage);
   byId("simple-chat-compare-enabled").addEventListener("change", toggleSimpleChatCompareUi);
+  byId("persona-chat-compare-enabled").addEventListener("change", togglePersonaChatCompareUi);
   byId("simple-chat-model").addEventListener("change", () => {
+    renderModelSelectionMeta("simple-chat-model", "simple-chat-model-meta", "simple-chat-temperature");
     renderSimpleChatCompareModelList();
     updateSimpleChatCompareSummary();
+  });
+  byId("debate-model").addEventListener("change", () => {
+    renderModelSelectionMeta("debate-model", "debate-model-meta", "debate-temperature");
+  });
+  byId("agentic-task-model").addEventListener("change", () => {
+    renderModelSelectionMeta("agentic-task-model", "agentic-task-model-meta", "agentic-task-temperature");
   });
   byId("simple-chat-message").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -7576,6 +7853,7 @@ function wireEvents() {
 
 async function init() {
   await loadThemeSettings();
+  refreshModelSelectors();
   wireEvents();
   initAgenticStepDrafts(getDefaultAgenticSteps());
   renderAgenticStepBuilder();
@@ -7599,6 +7877,8 @@ async function init() {
   renderPersonaChatHistory();
   renderSimpleChatKnowledgeList();
   renderSimpleChatHistory();
+  toggleSimpleChatCompareUi();
+  togglePersonaChatCompareUi();
   renderSelectedTopicSummary();
   renderTopicDiscoveryResults();
   renderGeneratedTopicDrafts();

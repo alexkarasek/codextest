@@ -91,6 +91,15 @@ Fix:
 - Prefer `azureInference.apiKey`, `azureInference.endpoint`, and `azureInference.deployments` for Azure-hosted model routing.
 - If only some models should use Azure, keep `llmProvider: "openai"` and use `modelRouting` to map specific model labels (for example `gpt-5-mini`) to `azure`.
 - Legacy top-level `azureOpenAI*` fields still work if you have an older settings file.
+- `GET /api/settings/models` shows the resolved effective provider/deployment for each model label the UI can select.
+
+### Image generation fails after switching chat models to Azure
+Cause:
+- Chat completions can route to Azure, but image generation still uses the OpenAI Images API.
+
+Fix:
+- Keep `openaiApiKey` configured if you want image generation to remain available.
+- Use the `Force Image` button only when you intentionally want to bypass image-intent detection.
 
 ## Docker port conflicts
 

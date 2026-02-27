@@ -210,6 +210,10 @@ export async function executePersonaChatTurn({
 
   async function runPersonaBatch(batchPromptText) {
     const cycleMessages = [];
+    const primaryModel = session.settings?.model || "gpt-5-mini";
+    const compareModels = [...new Set((session.settings?.compareModels || []).map((id) => String(id || "").trim()).filter(Boolean))]
+      .filter((id) => id && id !== primaryModel)
+      .slice(0, 4);
     for (const persona of orchestration.selectedPersonas) {
       const personaPacks = personaPacksFor(persona, session.knowledgeByPersona, globalKnowledgePacks);
       if (appearsOutOfScope({ userMessage: batchPromptText, persona, personaPacks })) {
@@ -248,7 +252,7 @@ export async function executePersonaChatTurn({
 
       const firstCompletion = await withTimeout(
         chatCompletion({
-          model: session.settings?.model || "gpt-5-mini",
+          model: primaryModel,
           temperature: Number(session.settings?.temperature ?? 0.6),
           messages
         }),
@@ -262,6 +266,7 @@ export async function executePersonaChatTurn({
       let toolCall = extractToolCall(firstCompletion.text);
       let content = stripToolCallMarkup(firstCompletion.text);
       let toolExecution = null;
+      let comparisons = [];
 
       const canFetchLive = allowedToolIds.some((id) => id === "web.fetch" || id === "http.request");
       if (!toolCall && promisesFutureFetch(content)) {
@@ -451,7 +456,7 @@ export async function executePersonaChatTurn({
             };
             const followUpFinal = await withTimeout(
               chatCompletion({
-                model: session.settings?.model || "gpt-5-mini",
+                model: primaryModel,
                 temperature: Number(session.settings?.temperature ?? 0.6),
                 messages: [
                   {
@@ -520,6 +525,38 @@ export async function executePersonaChatTurn({
         const fallbackText = stripToolCallMarkup(firstCompletion.text);
         content = fallbackText || "I don't have enough grounded info yet. Please provide a specific source URL.";
       }
+
+      if (!toolCall && !toolExecution && compareModels.length) {
+        for (const compareModel of compareModels) {
+          try {
+            const compareResult = await withTimeout(
+              chatCompletion({
+                model: compareModel,
+                temperature: Number(session.settings?.temperature ?? 0.6),
+                messages
+              }),
+              30000,
+              "Persona comparison generation"
+            );
+            comparisons.push({
+              model: compareModel,
+              content: stripToolCallMarkup(String(compareResult.text || "").trim()),
+              usage: compareResult.raw?.usage || null,
+              provider: compareResult.meta?.effectiveProvider || null,
+              providerLabel: compareResult.meta?.providerLabel || null,
+              deployment: compareResult.meta?.deployment || null,
+              temperatureApplied:
+                typeof compareResult.meta?.temperatureApplied === "boolean" ? compareResult.meta.temperatureApplied : null
+            });
+          } catch (compareError) {
+            comparisons.push({
+              model: compareModel,
+              error: compareError?.message || "Comparison failed."
+            });
+          }
+        }
+      }
+
       const personaEntry = {
         ts: new Date().toISOString(),
         role: "persona",
@@ -527,6 +564,13 @@ export async function executePersonaChatTurn({
         displayName: persona.displayName,
         content,
         toolExecution,
+        model: primaryModel,
+        provider: firstCompletion.meta?.effectiveProvider || null,
+        providerLabel: firstCompletion.meta?.providerLabel || null,
+        deployment: firstCompletion.meta?.deployment || null,
+        temperatureApplied:
+          typeof firstCompletion.meta?.temperatureApplied === "boolean" ? firstCompletion.meta.temperatureApplied : null,
+        comparisons,
         turnId: userEntry.turnId
       };
       await appendPersonaChatMessage(chatId, personaEntry);
