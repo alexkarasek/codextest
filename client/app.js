@@ -112,6 +112,10 @@ const state = {
   modelCatalog: {
     models: [],
     imageGeneration: null
+  },
+  agentProviders: {
+    providers: [],
+    agents: []
   }
 };
 
@@ -631,6 +635,9 @@ function renderModelSelectionMeta(selectId, targetId, temperatureId) {
       tempInput.disabled = false;
       tempInput.title = "Temperature is applied after the router selects the actual model for the turn.";
     }
+    if (selectId === "simple-chat-model") {
+      renderSimpleChatRouterStatus();
+    }
     return;
   }
   const info = getModelInfo(select.value) || {
@@ -655,6 +662,9 @@ function renderModelSelectionMeta(selectId, targetId, temperatureId) {
     tempInput.title = info.supportsTemperature === false
       ? "This model ignores temperature in the current endpoint path. The app sends no temperature parameter."
       : "";
+  }
+  if (selectId === "simple-chat-model") {
+    renderSimpleChatRouterStatus();
   }
 }
 
@@ -701,6 +711,58 @@ async function loadModelCatalog() {
     state.modelCatalog.imageGeneration = null;
   }
   refreshModelSelectors();
+}
+
+function renderSimpleChatRouterStatus() {
+  const target = byId("simple-chat-router-status");
+  const modelSelect = byId("simple-chat-model");
+  if (!target || !modelSelect) return;
+
+  const selected = String(modelSelect.value || "").trim();
+  if (selected !== "auto-router") {
+    target.classList.add("hidden");
+    target.textContent = "";
+    return;
+  }
+
+  const providers = Array.isArray(state.agentProviders.providers) ? state.agentProviders.providers : [];
+  const agents = Array.isArray(state.agentProviders.agents) ? state.agentProviders.agents : [];
+  const foundryProvider = providers.find((row) => row.id === "foundry");
+  const routerAgent = agents.find(
+    (row) => row.provider === "foundry" && row.capabilities?.routes_models === true
+  );
+
+  let tone = "info";
+  let text = "Router status unavailable. If Foundry cannot be reached, Simple Chat falls back to gpt-5-mini.";
+
+  if (!foundryProvider) {
+    tone = "warn";
+    text = "Foundry provider is disabled. Auto Router will fall back to gpt-5-mini on each turn.";
+  } else if (foundryProvider.health?.status !== "available") {
+    tone = "warn";
+    text = `Foundry is registered but unavailable${foundryProvider.health?.reason ? `: ${foundryProvider.health.reason}` : ""}. Auto Router will fall back to gpt-5-mini.`;
+  } else if (!routerAgent) {
+    tone = "warn";
+    text = "Foundry is reachable, but no router-capable agent was discovered. Auto Router will fall back to gpt-5-mini.";
+  } else {
+    tone = "ok";
+    text = `Foundry router ready: ${routerAgent.displayName || routerAgent.id}. The app will choose a model each turn and show the rationale in the thread.`;
+  }
+
+  target.className = `provider-status-card tone-${tone}`;
+  target.textContent = text;
+}
+
+async function loadAgentProviderStatus() {
+  try {
+    const data = await apiGet("/api/settings/agent-providers");
+    state.agentProviders.providers = Array.isArray(data.providers) ? data.providers : [];
+    state.agentProviders.agents = Array.isArray(data.agents) ? data.agents : [];
+  } catch (_error) {
+    state.agentProviders.providers = [];
+    state.agentProviders.agents = [];
+  }
+  renderSimpleChatRouterStatus();
 }
 
 function showAuthGate(statusMessage = "") {
@@ -899,6 +961,7 @@ async function refreshAfterAuth() {
   renderSessionSummary();
   await loadThemeSettings();
   await loadModelCatalog();
+  await loadAgentProviderStatus();
   await loadPersonas();
   await loadKnowledgePacks();
   await loadResponsibleAiPolicy();
@@ -7916,6 +7979,7 @@ function wireEvents() {
 async function init() {
   await loadThemeSettings();
   refreshModelSelectors();
+  renderSimpleChatRouterStatus();
   wireEvents();
   initAgenticStepDrafts(getDefaultAgenticSteps());
   renderAgenticStepBuilder();

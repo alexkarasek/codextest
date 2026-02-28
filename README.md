@@ -76,6 +76,7 @@ A local-first web application to create/edit personas and run conversation modes
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding
   - Optional `Auto (Router Agent)` selection attempts to use a Foundry-hosted model router and falls back safely if unavailable
+  - Simple Chat setup shows live router availability/fallback status when `Auto (Router Agent)` is selected
   - Optional side-by-side model comparison in the same session (primary response remains unchanged; alternate model outputs appear in a separate comparison panel)
   - Supports inline image generation (automatic intent detection, `Force Image`, or `/image ...`)
   - Persists chat sessions to `data/simple-chats/<chatId>/`

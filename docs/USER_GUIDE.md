@@ -77,6 +77,7 @@ Tips:
 - Start a new session from the create controls to avoid continuing old context.
 - The main assistant bubble shows the primary model used for that reply.
 - If `Auto (Router Agent)` is selected, the thread shows the routed model and the router rationale for that turn.
+- The session setup panel also shows a live router status card so you can tell in advance whether Foundry routing is available or if the app will fall back.
 - Comparison results open in a separate collapsible panel below the main answer.
 - Use `Force Image` only when you want to bypass image-intent detection and force the image path for the current prompt.
 
