@@ -19,6 +19,8 @@ import { sendError, sendOk } from "../response.js";
 import { chatCompletion } from "../../lib/llm.js";
 import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
+import { getTextModelDefinitions } from "../../lib/modelCatalog.js";
+import { AUTO_ROUTER_MODEL_ID, routeModelSelection } from "../../src/agents/modelRouter.js";
 
 const router = express.Router();
 
@@ -361,9 +363,19 @@ router.post("/:chatId/messages", async (req, res) => {
   }
 
   try {
-    const primaryModel = session.settings?.model || "gpt-5-mini";
+    const requestedModel = session.settings?.model || "gpt-5-mini";
+    const availableModelIds = getTextModelDefinitions().map((row) => row.id);
+    const routedDecision =
+      requestedModel === AUTO_ROUTER_MODEL_ID
+        ? await routeModelSelection({
+            userPrompt: userEntry.content,
+            defaultModel: "gpt-5-mini",
+            candidateModels: availableModelIds
+          })
+        : null;
+    const primaryModel = routedDecision?.selectedModelId || requestedModel;
     const compareModels = [...new Set((session.settings?.compareModels || []).map((m) => String(m || "").trim()).filter(Boolean))]
-      .filter((m) => m !== primaryModel)
+      .filter((m) => m !== primaryModel && m !== AUTO_ROUTER_MODEL_ID)
       .slice(0, 4);
     const promptMessages = buildSimpleChatMessages({
       session,
@@ -406,12 +418,25 @@ router.post("/:chatId/messages", async (req, res) => {
       role: "assistant",
       content: String(completion.text || "").trim(),
       model: primaryModel,
+      requestedModel,
       provider: completion.meta?.effectiveProvider || null,
       providerLabel: completion.meta?.providerLabel || null,
       deployment: completion.meta?.deployment || null,
       temperatureApplied: typeof completion.meta?.temperatureApplied === "boolean" ? completion.meta.temperatureApplied : null,
       usage: completion.raw?.usage || null,
       citations: citations.map((c) => ({ id: c.id, title: c.title })),
+      routing:
+        routedDecision
+          ? {
+              mode: AUTO_ROUTER_MODEL_ID,
+              selectedModelId: routedDecision.selectedModelId,
+              fallbackModelId: routedDecision.fallbackModelId || null,
+              rationale: routedDecision.rationale || "",
+              scores: routedDecision.scores || null,
+              source: routedDecision.source || "foundry",
+              warning: routedDecision.warning || ""
+            }
+          : null,
       comparisons
     };
     await appendSimpleChatMessage(req.params.chatId, assistantEntry);
@@ -425,7 +450,8 @@ router.post("/:chatId/messages", async (req, res) => {
       user: userEntry,
       assistant: assistantEntry,
       citations,
-      comparisons
+      comparisons,
+      routing: assistantEntry.routing
     });
   } catch (error) {
     if (error.code === "MISSING_API_KEY") {

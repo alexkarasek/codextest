@@ -129,6 +129,22 @@ function candidateListUrls(endpoint) {
   return [...new Set(candidates)];
 }
 
+function candidateInvokeUrls(endpoint, agentId) {
+  const base = trimEndpoint(endpoint);
+  const safeId = encodeURIComponent(String(agentId || "").trim());
+  const candidates = [
+    `${base}/agents/${safeId}:invoke`,
+    `${base}/api/agents/${safeId}:invoke`,
+    `${base}/agents/${safeId}/invoke`,
+    `${base}/api/agents/${safeId}/invoke`,
+    `${base}/agents/${safeId}:invoke?api-version=2024-05-01-preview`,
+    `${base}/api/agents/${safeId}:invoke?api-version=2024-05-01-preview`,
+    `${base}/agents/${safeId}/invoke?api-version=2024-05-01-preview`,
+    `${base}/api/agents/${safeId}/invoke?api-version=2024-05-01-preview`
+  ];
+  return [...new Set(candidates)];
+}
+
 function createFallbackModelRouterManifest(health) {
   return manifestWithAvailability(
     {
@@ -261,10 +277,98 @@ export class FoundryAgentProvider extends AgentProvider {
   }
 
   async invoke(agentId, _messages, _context = {}) {
-    const err = new Error(
-      `Foundry agent '${String(agentId || "").trim() || "unknown"}' invocation is not implemented in Phase 3.`
-    );
-    err.code = "NOT_IMPLEMENTED";
-    throw err;
+    const id = String(agentId || "").trim();
+    const health = await this.healthCheck();
+    if (health.status !== "available") {
+      return {
+        ok: false,
+        agentId: id || "unknown",
+        provider: "foundry",
+        error: {
+          code: "FOUNDRY_UNAVAILABLE",
+          message: health.reason || "Foundry is unavailable."
+        }
+      };
+    }
+
+    const endpoint = trimEndpoint(getFoundryProjectEndpoint());
+    const apiKey = String(getFoundryApiKey() || "").trim();
+    const urls = candidateInvokeUrls(endpoint, id);
+    const requestBody = {
+      agent_id: id,
+      messages: Array.isArray(_messages) ? _messages : [],
+      context: _context && typeof _context === "object" ? _context : {}
+    };
+    let lastError = null;
+
+    for (const url of urls) {
+      try {
+        const response = await this.fetchImpl(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": apiKey
+          },
+          body: JSON.stringify(requestBody)
+        });
+        const payload = await parseMaybeJson(response);
+        if (!response.ok) {
+          if (response.status === 404) {
+            lastError = new Error(`Invoke endpoint not found at ${url}`);
+            continue;
+          }
+          return {
+            ok: false,
+            agentId: id,
+            provider: "foundry",
+            error: {
+              code: "FOUNDRY_INVOKE_FAILED",
+              message: String(
+                payload?.error?.message ||
+                  payload?.message ||
+                  `Foundry invoke failed with HTTP ${response.status}`
+              )
+            },
+            raw: payload
+          };
+        }
+
+        return {
+          ok: true,
+          agentId: id,
+          provider: "foundry",
+          raw: payload,
+          content:
+            String(
+              payload?.content ||
+                payload?.text ||
+                payload?.output_text ||
+                payload?.message ||
+                ""
+            ) || ""
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    logEvent("error", {
+      component: "agents.foundry",
+      eventType: "foundry.invoke.failed",
+      error: {
+        code: "FOUNDRY_INVOKE_FAILED",
+        message: lastError?.message || "Foundry agent invoke failed."
+      }
+    });
+
+    return {
+      ok: false,
+      agentId: id || "unknown",
+      provider: "foundry",
+      error: {
+        code: "FOUNDRY_INVOKE_FAILED",
+        message: lastError?.message || "Foundry agent invoke failed."
+      }
+    };
   }
 }

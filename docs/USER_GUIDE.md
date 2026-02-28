@@ -66,15 +66,17 @@ Configuration workspace with subtabs:
 1. Go to `Chats` -> `Simple Chat`.
 2. Enter title/context (optional).
 3. Choose model/settings.
-4. Optional: enable **Compare with additional models** to run the same prompt across multiple models side-by-side.
-5. Optionally select knowledge packs.
-6. Click create/start.
-7. Send messages in chat.
+4. Optional: choose **Auto (Router Agent)** as the model if you want Foundry to select the best model per turn.
+5. Optional: enable **Compare with additional models** to run the same prompt across multiple models side-by-side.
+6. Optionally select knowledge packs.
+7. Click create/start.
+8. Send messages in chat.
 
 Tips:
 - Use history panel on the left to load previous sessions.
 - Start a new session from the create controls to avoid continuing old context.
 - The main assistant bubble shows the primary model used for that reply.
+- If `Auto (Router Agent)` is selected, the thread shows the routed model and the router rationale for that turn.
 - Comparison results open in a separate collapsible panel below the main answer.
 - Use `Force Image` only when you want to bypass image-intent detection and force the image path for the current prompt.
 

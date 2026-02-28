@@ -572,7 +572,7 @@ function getModelInfo(modelId = "") {
   return getTextModels().find((entry) => String(entry.id || "").trim().toLowerCase() === safeId) || null;
 }
 
-function populateModelSelect(selectId, { includeBlank = false } = {}) {
+function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter = false } = {}) {
   const select = byId(selectId);
   if (!select) return;
   const currentValue = String(select.value || "").trim();
@@ -583,6 +583,12 @@ function populateModelSelect(selectId, { includeBlank = false } = {}) {
     blank.value = "";
     blank.textContent = "";
     fragment.appendChild(blank);
+  }
+  if (includeAutoRouter) {
+    const auto = document.createElement("option");
+    auto.value = "auto-router";
+    auto.textContent = "Auto (Router Agent)";
+    fragment.appendChild(auto);
   }
   models.forEach((model) => {
     const option = document.createElement("option");
@@ -617,6 +623,16 @@ function renderModelSelectionMeta(selectId, targetId, temperatureId) {
   const target = byId(targetId);
   const select = byId(selectId);
   if (!target || !select) return;
+  if (String(select.value || "").trim() === "auto-router") {
+    target.textContent =
+      "Provider: Foundry Router (optional) | Each turn selects a model dynamically. If unavailable, the app falls back to the default model.";
+    const tempInput = byId(temperatureId);
+    if (tempInput) {
+      tempInput.disabled = false;
+      tempInput.title = "Temperature is applied after the router selects the actual model for the turn.";
+    }
+    return;
+  }
   const info = getModelInfo(select.value) || {
     id: String(select.value || "").trim() || "unknown",
     providerLabel: "OpenAI",
@@ -650,7 +666,8 @@ function renderAllModelSelectionMeta() {
 }
 
 function refreshModelSelectors() {
-  ["simple-chat-model", "persona-chat-model", "debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
+  populateModelSelect("simple-chat-model", { includeAutoRouter: true });
+  ["persona-chat-model", "debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
   populateModelDatalist("llm-model-options");
   renderAllModelSelectionMeta();
   if (byId("simple-chat-compare-enabled")?.checked) {
@@ -2462,6 +2479,7 @@ function renderSimpleChatHistory() {
       image: msg.image || null,
       metaChips: msg.role === "assistant"
         ? [
+            msg.requestedModel === "auto-router" ? "Requested: Auto Router" : "",
             `Model: ${primaryModel}`,
             msg.providerLabel ? `Provider: ${msg.providerLabel}` : "",
             msg.deployment ? `Deployment: ${msg.deployment}` : "",
@@ -2469,12 +2487,53 @@ function renderSimpleChatHistory() {
           ].filter(Boolean)
         : []
     });
+    if (msg.role === "assistant" && msg.routing) {
+      renderRoutingDecisionPanel(container, msg.routing);
+    }
     if (msg.role === "assistant" && Array.isArray(msg.comparisons) && msg.comparisons.length) {
       renderModelComparisonPanel(container, msg.comparisons, primaryModel);
     }
   });
 
   container.scrollTop = container.scrollHeight;
+}
+
+function renderRoutingDecisionPanel(container, routing) {
+  const panel = document.createElement("details");
+  panel.className = "simple-chat-comparison-panel";
+
+  const heading = document.createElement("summary");
+  heading.className = "simple-chat-comparison-heading";
+  heading.textContent = `Router selected ${routing.selectedModelId || "default model"}`;
+  panel.appendChild(heading);
+
+  const context = document.createElement("div");
+  context.className = "simple-chat-comparison-context";
+  const warning = routing.warning ? ` Warning: ${routing.warning}` : "";
+  context.textContent = `Source: ${routing.source || "foundry"}${warning}`;
+  panel.appendChild(context);
+
+  const body = document.createElement("div");
+  body.className = "simple-chat-comparison-body";
+  body.textContent = String(routing.rationale || "Router selected a model for this turn.");
+  panel.appendChild(body);
+
+  if (routing.scores && typeof routing.scores === "object") {
+    const scoreWrap = document.createElement("div");
+    scoreWrap.className = "chat-meta-chips";
+    Object.entries(routing.scores).forEach(([key, value]) => {
+      if (!Number.isFinite(Number(value))) return;
+      const chip = document.createElement("span");
+      chip.className = "chat-meta-chip";
+      chip.textContent = `${key}: ${Number(value)}`;
+      scoreWrap.appendChild(chip);
+    });
+    if (scoreWrap.childNodes.length) {
+      panel.appendChild(scoreWrap);
+    }
+  }
+
+  container.appendChild(panel);
 }
 
 function renderModelComparisonPanel(container, comparisons, primaryModel = "") {
@@ -2658,7 +2717,10 @@ async function sendSimpleChatMessage({ forceImage = false } = {}) {
     }
     renderSimpleChatHistory();
     const compareCount = Array.isArray(data.comparisons) ? data.comparisons.length : 0;
-    status.textContent = `Response ready${Array.isArray(data.citations) && data.citations.length ? ` with ${data.citations.length} citations` : ""}${compareCount ? ` and ${compareCount} model comparison${compareCount === 1 ? "" : "s"}` : ""}.`;
+    const routingLine = data.routing?.selectedModelId
+      ? ` Routed to ${data.routing.selectedModelId}.${data.routing.warning ? ` ${data.routing.warning}` : ""}`
+      : "";
+    status.textContent = `Response ready${Array.isArray(data.citations) && data.citations.length ? ` with ${data.citations.length} citations` : ""}${compareCount ? ` and ${compareCount} model comparison${compareCount === 1 ? "" : "s"}` : ""}.${routingLine}`;
     await loadSimpleChatSessions();
   } catch (error) {
     status.textContent = `Simple chat failed: ${error.message}`;

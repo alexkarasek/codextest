@@ -193,6 +193,7 @@ Notes:
 - The UI resolves available model labels and effective provider/deployment details from `GET /api/settings/models`.
 - Optional provider discovery for Azure AI Foundry Phase 1 is available from `GET /api/settings/agent-providers`.
 - When Foundry is enabled and reachable, `GET /api/settings/agent-providers` attempts remote agent discovery and returns normalized Foundry agent manifests.
+- For Simple Chat, `settings.model` may also be `auto-router`. In that mode, the app attempts to use a discovered Foundry Model Router agent and falls back to `gpt-5-mini` if unavailable.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash

@@ -831,11 +831,15 @@ paths:
                   title: Simple Chat
                   context: General help
                   knowledgePackIds: []
-                  settings:
-                    model: gpt-5-mini
-                    compareModels: [llama-3.3-70b-instruct, gpt-4o]
-                    temperature: 0.4
-                    maxResponseWords: 220
+                settings:
+                  model: gpt-5-mini
+                  compareModels: [llama-3.3-70b-instruct, gpt-4o]
+                  temperature: 0.4
+                  maxResponseWords: 220
+                settingsAutoRouter:
+                  model: auto-router
+                  temperature: 0.4
+                  maxResponseWords: 220
       responses:
         '201':
           description: Created
