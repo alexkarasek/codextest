@@ -1017,6 +1017,17 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OkResponse' }
 
+  /api/settings/agent-providers:
+    get:
+      tags: [Settings]
+      summary: Get optional agent provider registration and health state
+      responses:
+        '200':
+          description: Agent provider statuses and normalized agent manifests
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
   /api/settings/logo:
     post:
       tags: [Settings]

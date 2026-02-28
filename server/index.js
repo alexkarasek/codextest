@@ -23,10 +23,12 @@ import { ensureRunMetadataSeeded } from "../lib/runMigration.js";
 import { sendError } from "./response.js";
 import { requestCorrelationMiddleware, requestLoggingMiddleware } from "../lib/observability.js";
 import docsRouter from "../src/docs/docsRouter.js";
+import { createAgentProviderRegistry } from "../src/agents/agentProviderRegistry.js";
 import {
   getLlmProvider,
   getAzureOpenAIDeployment,
   getAzureOpenAIEndpoint,
+  getFoundryProjectEndpoint,
   getOpenAIApiKey,
   isLlmConfigured,
   getServerPort,
@@ -126,24 +128,45 @@ app.use((error, _req, res, _next) => {
 
 export function startServer(port = PORT) {
   return app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-  if (!isLlmConfigured()) {
-    if (getLlmProvider() === "azure") {
-      console.warn(
-        `Azure OpenAI is selected but not fully configured. Set azureInference.apiKey, azureInference.endpoint, and azureInference.defaultDeployment or azureInference.deployments in ${getSettingsPath()} (legacy azureOpenAI* fields still work), or use env vars.`
-      );
-    } else if (!getOpenAIApiKey()) {
-      console.warn(
-        `OpenAI API key not configured. Set openaiApiKey in ${getSettingsPath()} to run debates.`
+    console.log(`Server running on http://localhost:${port}`);
+    if (!isLlmConfigured()) {
+      if (getLlmProvider() === "azure") {
+        console.warn(
+          `Azure OpenAI is selected but not fully configured. Set azureInference.apiKey, azureInference.endpoint, and azureInference.defaultDeployment or azureInference.deployments in ${getSettingsPath()} (legacy azureOpenAI* fields still work), or use env vars.`
+        );
+      } else if (!getOpenAIApiKey()) {
+        console.warn(
+          `OpenAI API key not configured. Set openaiApiKey in ${getSettingsPath()} to run debates.`
+        );
+      }
+    } else if (getLlmProvider() === "azure") {
+      const dep = getAzureOpenAIDeployment();
+      const endpoint = getAzureOpenAIEndpoint();
+      console.log(
+        `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "model-mapped/per-request"})`
       );
     }
-  } else if (getLlmProvider() === "azure") {
-    const dep = getAzureOpenAIDeployment();
-    const endpoint = getAzureOpenAIEndpoint();
-    console.log(
-      `LLM provider: azure (${endpoint || "endpoint not set"}, deployment=${dep || "model-mapped/per-request"})`
-    );
-  }
+
+    void (async () => {
+      try {
+        const registry = createAgentProviderRegistry();
+        const providerIds = registry.providers.map((provider) => provider.id).join(", ") || "none";
+        console.log(`Agent providers registered: ${providerIds}`);
+        const statuses = await registry.listProviderStatuses();
+        for (const row of statuses) {
+          const reason = row.health?.reason ? ` | ${row.health.reason}` : "";
+          const endpointNote =
+            row.id === "foundry" && getFoundryProjectEndpoint()
+              ? ` | endpoint=${String(getFoundryProjectEndpoint()).replace(/\/+$/, "")}`
+              : "";
+          console.log(
+            `Agent provider ${row.id}: ${row.health?.status || "unavailable"}${reason}${endpointNote}`
+          );
+        }
+      } catch (error) {
+        console.warn(`Agent provider initialization warning: ${error.message}`);
+      }
+    })();
   });
 }
 

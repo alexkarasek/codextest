@@ -12,6 +12,7 @@ import { formatZodError, responsibleAiPolicySchema, webPolicySchema } from "../.
 import { getThemeSettings, saveThemeSettings } from "../../lib/themeSettings.js";
 import { IMAGES_DIR } from "../../lib/storage.js";
 import { getImageGenerationStatus, listModelCatalog } from "../../lib/modelCatalog.js";
+import { createAgentProviderRegistry } from "../../src/agents/agentProviderRegistry.js";
 
 const router = express.Router();
 const upload = multer({
@@ -98,6 +99,19 @@ router.get("/models", async (_req, res) => {
     });
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to load model catalog: ${error.message}`);
+  }
+});
+
+router.get("/agent-providers", async (_req, res) => {
+  try {
+    const registry = createAgentProviderRegistry();
+    const [providers, agents] = await Promise.all([
+      registry.listProviderStatuses(),
+      registry.listAgents()
+    ]);
+    sendOk(res, { providers, agents });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load agent providers: ${error.message}`);
   }
 });
 

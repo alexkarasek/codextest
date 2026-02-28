@@ -72,6 +72,7 @@ test("/docs/openapi.yaml points to valid yaml file", async () => {
   assert.ok(parsed.paths["/api/support/messages"]);
   assert.ok(parsed.paths["/api/agentic/workflows"]);
   assert.ok(parsed.paths["/api/settings/models"]);
+  assert.ok(parsed.paths["/api/settings/agent-providers"]);
   assert.ok(parsed.paths["/runs/compare/{runA}/{runB}"]);
 });
 

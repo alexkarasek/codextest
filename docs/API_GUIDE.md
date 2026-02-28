@@ -191,6 +191,7 @@ Notes:
 - `compareModels` is optional. When present, the primary assistant response still uses `settings.model`, and comparison outputs are returned alongside it.
 - In hybrid routing setups, `modelRouting` can send selected comparison models to Azure while the rest remain on OpenAI.
 - The UI resolves available model labels and effective provider/deployment details from `GET /api/settings/models`.
+- Optional provider discovery for Azure AI Foundry Phase 1 is available from `GET /api/settings/agent-providers`.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash

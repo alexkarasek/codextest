@@ -40,3 +40,18 @@ test("/api/settings/models returns model catalog and image status", async () => 
   assert.ok(res.body.data.models.some((row) => row.id === "gpt-5-mini"));
   assert.equal(typeof res.body?.data?.imageGeneration?.available, "boolean");
 });
+
+test("/api/settings/agent-providers returns provider health and agent manifests", async () => {
+  const handler = getRouteHandler(settingsRouter, "/agent-providers", "get");
+  const req = { method: "GET", path: "/api/settings/agent-providers", headers: {} };
+  const res = createMockRes();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body?.ok, true);
+  assert.ok(Array.isArray(res.body?.data?.providers));
+  assert.ok(Array.isArray(res.body?.data?.agents));
+  assert.ok(res.body.data.providers.some((row) => row.id === "local"));
+  assert.ok(res.body.data.agents.some((row) => row.id === "support-concierge"));
+});

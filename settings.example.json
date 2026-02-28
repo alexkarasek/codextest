@@ -12,6 +12,11 @@
   "port": 3000,
   "newsProvider": "google",
   "newsApiKey": "",
+  "foundry": {
+    "enabled": false,
+    "projectEndpoint": "",
+    "apiKey": ""
+  },
   "toolPolicy": {
     "timeoutMs": 45000,
     "fileAllowlist": []
@@ -52,6 +57,13 @@
         "deployments": {
           "gpt-5-mini": "gpt-5-mini"
         }
+      }
+    },
+    "foundryPhase1Optional": {
+      "foundry": {
+        "enabled": true,
+        "projectEndpoint": "https://your-project.eastus2.projects.ai.azure.com",
+        "apiKey": "your-foundry-key"
       }
     }
   }
