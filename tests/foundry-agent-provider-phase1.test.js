@@ -72,7 +72,7 @@ test("foundry provider registers but is unavailable when config is incomplete", 
   });
 });
 
-test("foundry health check treats reachable endpoint as available and exposes router manifest", async () => {
+test("foundry health check treats reachable endpoint as available and list failure degrades to empty array", async () => {
   await withEnv(
     {
       FOUNDRY_ENABLED: "true",
@@ -90,11 +90,55 @@ test("foundry health check treats reachable endpoint as available and exposes ro
       assert.equal(health.status, "available");
 
       const agents = await provider.listAgents();
+      assert.deepEqual(agents, []);
+    }
+  );
+});
+
+test("foundry listAgents normalizes remote agent payloads", async () => {
+  await withEnv(
+    {
+      FOUNDRY_ENABLED: "true",
+      FOUNDRY_PROJECT_ENDPOINT: "https://example.foundry.azure.com",
+      FOUNDRY_API_KEY: "test-key"
+    },
+    async () => {
+      const provider = new FoundryAgentProvider({
+        fetchImpl: async (url) => {
+          if (String(url).includes("/agents")) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                agents: [
+                  {
+                    id: "router-1",
+                    displayName: "Model Router Agent",
+                    description: "Routes prompts to the best model.",
+                    tags: ["router", "models"],
+                    toolCalling: false,
+                    structuredOutput: true,
+                    status: "active"
+                  }
+                ]
+              })
+            };
+          }
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({})
+          };
+        }
+      });
+
+      const agents = await provider.listAgents();
       assert.equal(agents.length, 1);
-      assert.equal(agents[0].id, "foundry-model-router");
+      assert.equal(agents[0].id, "router-1");
       assert.equal(agents[0].provider, "foundry");
       assert.equal(agents[0].availability.status, "available");
       assert.equal(agents[0].capabilities.routes_models, true);
+      assert.equal(agents[0].capabilities.structured_output, true);
     }
   );
 });

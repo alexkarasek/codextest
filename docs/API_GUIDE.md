@@ -192,6 +192,7 @@ Notes:
 - In hybrid routing setups, `modelRouting` can send selected comparison models to Azure while the rest remain on OpenAI.
 - The UI resolves available model labels and effective provider/deployment details from `GET /api/settings/models`.
 - Optional provider discovery for Azure AI Foundry Phase 1 is available from `GET /api/settings/agent-providers`.
+- When Foundry is enabled and reachable, `GET /api/settings/agent-providers` attempts remote agent discovery and returns normalized Foundry agent manifests.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash

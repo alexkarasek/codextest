@@ -3,13 +3,133 @@ import {
   getFoundryProjectEndpoint,
   isFoundryEnabled
 } from "../../../lib/config.js";
+import { logEvent } from "../../../lib/observability.js";
 import { AgentProvider, availableHealth, manifestWithAvailability, unavailableHealth } from "./AgentProvider.js";
 
 function trimEndpoint(url = "") {
   return String(url || "").trim().replace(/\/+$/, "");
 }
 
-function createFoundryManifest(health) {
+function parseMaybeJson(response) {
+  if (typeof response?.json !== "function") return Promise.resolve({});
+  return response.json().catch(() => ({}));
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function guessRoutesModels(agent = {}) {
+  if (agent?.capabilities?.routes_models === true) return true;
+  if (agent?.routes_models === true) return true;
+  if (agent?.routeModels === true) return true;
+  const corpus = [
+    agent.id,
+    agent.displayName,
+    agent.name,
+    agent.description,
+    ...(Array.isArray(agent.tags) ? agent.tags : [])
+  ]
+    .join(" ")
+    .toLowerCase();
+  return corpus.includes("router") || corpus.includes("route model") || corpus.includes("model-router");
+}
+
+function normalizeCapability(agent = {}) {
+  const tools = Array.isArray(agent.tools) ? agent.tools : [];
+  const responseFormat = String(agent.responseFormat || agent.outputFormat || "").toLowerCase();
+  return {
+    routes_models: guessRoutesModels(agent),
+    tool_calling:
+      agent?.capabilities?.tool_calling === true ||
+      agent?.tool_calling === true ||
+      agent?.toolCalling === true ||
+      agent?.toolsEnabled === true ||
+      tools.length > 0,
+    structured_output:
+      agent?.capabilities?.structured_output === true ||
+      agent?.structured_output === true ||
+      agent?.structuredOutput === true ||
+      responseFormat.includes("json") ||
+      responseFormat.includes("schema")
+  };
+}
+
+function normalizeAvailability(agent = {}, fallbackHealth) {
+  const raw = String(
+    agent?.availability?.status ||
+      agent?.status ||
+      agent?.lifecycleState ||
+      agent?.state ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+  if (!raw) {
+    return {
+      status: fallbackHealth?.status === "available" ? "available" : "unavailable",
+      ...(fallbackHealth?.reason ? { reason: String(fallbackHealth.reason) } : {})
+    };
+  }
+
+  if (["available", "active", "ready", "enabled", "healthy"].includes(raw)) {
+    return { status: "available" };
+  }
+
+  return {
+    status: "unavailable",
+    reason: String(agent?.availability?.reason || `Foundry agent status is '${raw}'.`)
+  };
+}
+
+function normalizeAgentManifest(agent, fallbackHealth) {
+  const id = String(agent?.id || agent?.agentId || agent?.name || agent?.slug || "").trim();
+  if (!id) return null;
+  const tags = uniqueStrings(
+    Array.isArray(agent?.tags)
+      ? agent.tags
+      : Array.isArray(agent?.labels)
+        ? agent.labels
+        : []
+  );
+
+  return manifestWithAvailability(
+    {
+      id,
+      displayName: String(agent?.displayName || agent?.title || agent?.name || id),
+      provider: "foundry",
+      description: String(agent?.description || agent?.summary || agent?.purpose || ""),
+      tags,
+      capabilities: normalizeCapability(agent)
+    },
+    normalizeAvailability(agent, fallbackHealth)
+  );
+}
+
+function extractAgentRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  const candidates = [payload.agents, payload.items, payload.value, payload.data, payload.results];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
+function candidateListUrls(endpoint) {
+  const base = trimEndpoint(endpoint);
+  const candidates = [
+    `${base}/agents`,
+    `${base}/api/agents`,
+    `${base}/api/projects/agents`,
+    `${base}/agents?api-version=2024-05-01-preview`,
+    `${base}/api/agents?api-version=2024-05-01-preview`,
+    `${base}/api/projects/agents?api-version=2024-05-01-preview`
+  ];
+  return [...new Set(candidates)];
+}
+
+function createFallbackModelRouterManifest(health) {
   return manifestWithAvailability(
     {
       id: "foundry-model-router",
@@ -80,12 +200,69 @@ export class FoundryAgentProvider extends AgentProvider {
 
   async listAgents() {
     const health = await this.healthCheck();
-    return [createFoundryManifest(health)];
+    if (health.status !== "available") {
+      return [];
+    }
+
+    const endpoint = trimEndpoint(getFoundryProjectEndpoint());
+    const apiKey = String(getFoundryApiKey() || "").trim();
+    const urls = candidateListUrls(endpoint);
+    let lastError = null;
+
+    for (const url of urls) {
+      try {
+        const response = await this.fetchImpl(url, {
+          method: "GET",
+          headers: {
+            "api-key": apiKey
+          }
+        });
+        const payload = await parseMaybeJson(response);
+        if (!response.ok) {
+          if (response.status === 404) {
+            lastError = new Error(`List endpoint not found at ${url}`);
+            continue;
+          }
+          throw new Error(
+            String(payload?.error?.message || payload?.message || `Foundry list failed with HTTP ${response.status}`)
+          );
+        }
+
+        const rows = extractAgentRows(payload);
+        const normalized = rows
+          .map((row) => normalizeAgentManifest(row, health))
+          .filter(Boolean);
+
+        if (normalized.length) {
+          return normalized;
+        }
+
+        const hintedRouter = rows.length === 0
+          ? null
+          : createFallbackModelRouterManifest(health);
+        if (hintedRouter) {
+          return [hintedRouter];
+        }
+        return [];
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    logEvent("error", {
+      component: "agents.foundry",
+      eventType: "foundry.list_agents.failed",
+      error: {
+        code: "FOUNDRY_LIST_FAILED",
+        message: lastError?.message || "Foundry agent discovery failed."
+      }
+    });
+    return [];
   }
 
   async invoke(agentId, _messages, _context = {}) {
     const err = new Error(
-      `Foundry agent '${String(agentId || "").trim() || "unknown"}' invocation is not implemented in Phase 1.`
+      `Foundry agent '${String(agentId || "").trim() || "unknown"}' invocation is not implemented in Phase 3.`
     );
     err.code = "NOT_IMPLEMENTED";
     throw err;

@@ -200,6 +200,7 @@ Notes:
 - `openaiBaseUrl` is optional and reserved for future OpenAI-compatible endpoint routing; the current runtime still uses the standard OpenAI API base URL.
 - `azureInference.deployments` maps UI/runtime model labels to Azure deployment names. This is the recommended way to support Azure-hosted model comparisons.
 - Optional Foundry provider settings can be stored under `foundry.enabled`, `foundry.projectEndpoint`, and `foundry.apiKey`. If Foundry is disabled or misconfigured, the app continues running local-first with no hard dependency.
+- `GET /api/settings/agent-providers` returns registered providers plus normalized agent manifests. When Foundry is enabled and reachable, it now attempts remote agent discovery and normalizes the results.
 - Legacy top-level Azure fields (`azureOpenAIApiKey`, `azureOpenAIEndpoint`, `azureOpenAIDeployment`, `azureOpenAIApiVersion`) are still supported for backward compatibility.
 - Environment overrides still work:
   - `LLM_MODEL_ROUTING_JSON` (JSON object mapping model labels to `openai` or `azure`)
