@@ -56,9 +56,18 @@ const state = {
     sessions: [],
     activeChatId: null,
     historyByChat: {},
+    routingByChat: {},
     activeSessionPersonaIds: [],
     dirtyConfig: false,
-    sidebarCollapsed: false
+    sidebarCollapsed: false,
+    mentionMenu: {
+      open: false,
+      items: [],
+      activeIndex: 0,
+      query: "",
+      start: -1,
+      end: -1
+    }
   },
   simpleChat: {
     selectedKnowledgePackIds: [],
@@ -409,7 +418,50 @@ function assessExchange(content) {
   return { stoplight, sentiment };
 }
 
-function renderExchangeMessage(container, { roleClass, title, content, image = null, citation = null, metaChips = [] }) {
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderContentWithMentions(target, content, mentionMap = null, onMentionClick = null) {
+  const bodyText = String(content || "");
+  const lookup = mentionMap instanceof Map ? mentionMap : new Map();
+  const pattern = /(^|[\s(,])@([A-Za-z0-9][A-Za-z0-9 .'-]{1,62})/g;
+  let html = "";
+  let lastIndex = 0;
+  let match;
+  while ((match = pattern.exec(bodyText))) {
+    const prefix = match[1] || "";
+    const label = String(match[2] || "").trim();
+    const key = label.toLowerCase();
+    const targetMatch = lookup.get(key);
+    if (!targetMatch) continue;
+    const mentionStart = match.index + prefix.length;
+    html += escapeHtml(bodyText.slice(lastIndex, mentionStart));
+    if (typeof onMentionClick === "function") {
+      html += `<button type="button" class="inline-mention" data-mention-label="${escapeHtml(targetMatch.displayName)}">@${escapeHtml(label)}</button>`;
+    } else {
+      html += `<span class="inline-mention">@${escapeHtml(label)}</span>`;
+    }
+    lastIndex = mentionStart + match[0].slice(prefix.length).length;
+  }
+  html += escapeHtml(bodyText.slice(lastIndex));
+  target.innerHTML = html;
+  if (typeof onMentionClick === "function") {
+    target.querySelectorAll(".inline-mention[data-mention-label]").forEach((btn) => {
+      btn.addEventListener("click", () => onMentionClick(btn.dataset.mentionLabel || ""));
+    });
+  }
+}
+
+function renderExchangeMessage(
+  container,
+  { roleClass, title, content, image = null, citation = null, metaChips = [], mentionMap = null, onMentionClick = null }
+) {
   const signal = assessExchange(content);
   const el = document.createElement("div");
   el.className = `chat-msg ${roleClass}`;
@@ -442,7 +494,8 @@ function renderExchangeMessage(container, { roleClass, title, content, image = n
   badges.append(riskChip, sentimentChip);
   head.append(titleWrap, badges);
   const body = document.createElement("div");
-  body.textContent = String(content || "");
+  body.className = "chat-msg-body";
+  renderContentWithMentions(body, content, mentionMap, onMentionClick);
   if (image?.url) {
     const media = document.createElement("img");
     media.className = "chat-image";
@@ -1073,6 +1126,7 @@ async function refreshAfterAuth() {
   await loadThemeSettings();
   await loadModelCatalog();
   await loadAgentProviderStatus();
+  renderSimpleChatQuickStrip();
   await loadPersonas();
   await loadKnowledgePacks();
   await loadResponsibleAiPolicy();
@@ -1854,7 +1908,7 @@ function personaMentionCandidates() {
       ? state.personaChat.activeSessionPersonaIds
       : state.personaChat.selectedPersonaIds;
   const byIdMap = new Map(state.personas.map((p) => [p.id, p]));
-  return ids
+  const candidates = ids
     .map((id) => {
       const saved = byIdMap.get(id);
       if (saved) return saved;
@@ -1866,16 +1920,200 @@ function personaMentionCandidates() {
       };
     })
     .filter(Boolean);
+  candidates.push({
+    id: "image-concierge",
+    displayName: "Image Concierge"
+  });
+  return candidates;
+}
+
+function personaMentionMap() {
+  const map = new Map();
+  personaMentionCandidates().forEach((persona) => {
+    const displayName = String(persona.displayName || "").trim();
+    const id = String(persona.id || "").trim();
+    if (displayName) {
+      map.set(displayName.toLowerCase(), { id, displayName });
+      const first = displayName.split(/\s+/).filter(Boolean)[0] || "";
+      if (first.length >= 3 && !map.has(first.toLowerCase())) {
+        map.set(first.toLowerCase(), { id, displayName });
+      }
+    }
+    if (id && !map.has(id.toLowerCase())) {
+      map.set(id.toLowerCase(), { id, displayName: displayName || id });
+    }
+  });
+  return map;
+}
+
+function isRoutingOrchestrationMessage(msg) {
+  if (!msg || msg.role !== "orchestrator") return false;
+  if (String(msg.content || "").startsWith("Moderator:")) return false;
+  return Array.isArray(msg.rationale) && msg.rationale.length > 0;
+}
+
+function renderPersonaChatRoutingNote() {
+  const note = byId("persona-chat-routing-note");
+  if (!note) return;
+  const chatId = state.personaChat.activeChatId;
+  const routing = chatId ? state.personaChat.routingByChat[chatId] : null;
+  if (!routing?.content) {
+    note.textContent = "";
+    note.classList.add("hidden");
+    return;
+  }
+  note.textContent = routing.content;
+  note.classList.remove("hidden");
 }
 
 function insertPersonaMention(displayName) {
   const input = byId("persona-chat-message");
   if (!input) return;
-  const mention = `@${String(displayName || "").trim()}`;
+  const mentionLabel = String(displayName || "").trim();
+  const mention = `@${mentionLabel}`;
   if (!mention || mention === "@") return;
   const current = String(input.value || "");
-  input.value = current.trim() ? `${current.trim()} ${mention} ` : `${mention} `;
+  const menu = state.personaChat.mentionMenu;
+  if (menu.open && menu.start >= 0 && menu.end >= menu.start) {
+    const nextValue = `${current.slice(0, menu.start)}${mention} ${current.slice(menu.end)}`;
+    input.value = nextValue;
+    const caret = menu.start + mention.length + 1;
+    input.setSelectionRange(caret, caret);
+  } else {
+    input.value = current.trim() ? `${current.trim()} ${mention} ` : `${mention} `;
+  }
+  closePersonaMentionMenu();
   input.focus();
+}
+
+function findActiveMentionToken(value, caretIndex) {
+  const before = String(value || "").slice(0, Number(caretIndex || 0));
+  const match = before.match(/(^|[\s(,])@([^\s@]*)$/);
+  if (!match) return null;
+  const query = String(match[2] || "");
+  return {
+    query,
+    start: before.length - query.length - 1,
+    end: before.length
+  };
+}
+
+function getFilteredMentionCandidates(query = "") {
+  const q = String(query || "").trim().toLowerCase();
+  const rows = personaMentionCandidates();
+  if (!q) return rows.slice(0, 6);
+  return rows
+    .filter((row) => {
+      const displayName = String(row.displayName || "").toLowerCase();
+      const id = String(row.id || "").toLowerCase();
+      return displayName.includes(q) || id.includes(q);
+    })
+    .slice(0, 6);
+}
+
+function closePersonaMentionMenu() {
+  const menu = byId("persona-chat-mention-menu");
+  state.personaChat.mentionMenu = {
+    open: false,
+    items: [],
+    activeIndex: 0,
+    query: "",
+    start: -1,
+    end: -1
+  };
+  if (menu) {
+    menu.innerHTML = "";
+    menu.classList.add("hidden");
+  }
+}
+
+function openPersonaMentionMenu(items, token) {
+  const menu = byId("persona-chat-mention-menu");
+  if (!menu || !items.length || !token) {
+    closePersonaMentionMenu();
+    return;
+  }
+  state.personaChat.mentionMenu = {
+    open: true,
+    items,
+    activeIndex: 0,
+    query: token.query,
+    start: token.start,
+    end: token.end
+  };
+  renderPersonaMentionMenu();
+}
+
+function renderPersonaMentionMenu() {
+  const menu = byId("persona-chat-mention-menu");
+  if (!menu) return;
+  const stateMenu = state.personaChat.mentionMenu;
+  if (!stateMenu.open || !stateMenu.items.length) {
+    menu.innerHTML = "";
+    menu.classList.add("hidden");
+    return;
+  }
+  menu.innerHTML = "";
+  stateMenu.items.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `mention-menu-item${index === stateMenu.activeIndex ? " active" : ""}`;
+    button.innerHTML = `
+      <div class="mention-menu-title">@${escapeHtml(item.displayName)}</div>
+      <div class="mention-menu-meta">${escapeHtml(item.id)}</div>
+    `;
+    button.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      insertPersonaMention(item.displayName);
+    });
+    menu.appendChild(button);
+  });
+  menu.classList.remove("hidden");
+}
+
+function updatePersonaMentionMenuFromInput() {
+  const input = byId("persona-chat-message");
+  if (!input) return;
+  const token = findActiveMentionToken(input.value, input.selectionStart);
+  if (!token) {
+    closePersonaMentionMenu();
+    return;
+  }
+  const items = getFilteredMentionCandidates(token.query);
+  if (!items.length) {
+    closePersonaMentionMenu();
+    return;
+  }
+  openPersonaMentionMenu(items, token);
+}
+
+function handlePersonaMentionMenuKeydown(event) {
+  const menu = state.personaChat.mentionMenu;
+  if (!menu.open || !menu.items.length) return false;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    menu.activeIndex = (menu.activeIndex + 1) % menu.items.length;
+    renderPersonaMentionMenu();
+    return true;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    menu.activeIndex = (menu.activeIndex - 1 + menu.items.length) % menu.items.length;
+    renderPersonaMentionMenu();
+    return true;
+  }
+  if (event.key === "Enter" || event.key === "Tab") {
+    event.preventDefault();
+    const active = menu.items[menu.activeIndex];
+    if (active) insertPersonaMention(active.displayName);
+    return true;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closePersonaMentionMenu();
+    return true;
+  }
+  return false;
 }
 
 function renderPersonaMentionStrip() {
@@ -1899,6 +2137,32 @@ function renderPersonaMentionStrip() {
     chip.addEventListener("click", () => insertPersonaMention(persona.displayName));
     container.appendChild(chip);
   });
+}
+
+function insertSimpleChatImageMention() {
+  const input = byId("simple-chat-message");
+  if (!input) return;
+  const mention = "@image ";
+  const current = String(input.value || "");
+  input.value = current.trim() ? `${current.trim()} ${mention}` : mention;
+  input.focus();
+}
+
+function renderSimpleChatQuickStrip() {
+  const container = byId("simple-chat-quick-strip");
+  if (!container) return;
+  container.innerHTML = "";
+  const lead = document.createElement("span");
+  lead.className = "muted";
+  lead.textContent = "Quick actions:";
+  container.appendChild(lead);
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "mention-chip";
+  chip.textContent = "@Image Concierge";
+  chip.title = "Route the next request to the hidden image specialist";
+  chip.addEventListener("click", insertSimpleChatImageMention);
+  container.appendChild(chip);
 }
 
 function renderPersonaChatKnowledgeList() {
@@ -2142,16 +2406,25 @@ function renderPersonaChatHistory() {
   const chatId = state.personaChat.activeChatId;
   if (!chatId) {
     container.textContent = "No chat loaded.";
+    renderPersonaChatRoutingNote();
     return;
   }
 
   const history = state.personaChat.historyByChat[chatId] || [];
+  const mentionMap = personaMentionMap();
   if (!history.length) {
     container.textContent = "No messages yet.";
+    renderPersonaChatRoutingNote();
     return;
   }
 
+  const latestRouting = [...history].reverse().find((msg) => isRoutingOrchestrationMessage(msg)) || null;
+  state.personaChat.routingByChat[chatId] = latestRouting
+    ? { content: String(latestRouting.content || ""), rationale: latestRouting.rationale || [] }
+    : null;
+
   history.forEach((msg) => {
+    if (isRoutingOrchestrationMessage(msg)) return;
     const role = msg.role === "user" ? "user" : (msg.role === "orchestrator" ? "system" : "assistant");
     const title = msg.role === "user" ? "You" : (msg.role === "orchestrator" ? "Orchestrator" : (msg.displayName || "Persona"));
     let content = msg.content;
@@ -2185,6 +2458,8 @@ function renderPersonaChatHistory() {
       content,
       image: msg.image || null,
       citation,
+      mentionMap,
+      onMentionClick: msg.role !== "user" ? insertPersonaMention : null,
       metaChips: msg.role === "persona"
         ? [
             msg.model ? `Model: ${msg.model}` : "",
@@ -2199,6 +2474,7 @@ function renderPersonaChatHistory() {
     }
   });
 
+  renderPersonaChatRoutingNote();
   container.scrollTop = container.scrollHeight;
 }
 
@@ -2385,13 +2661,12 @@ async function sendPersonaChatMessage({ forceImage = false } = {}) {
       message,
       forceImage
     });
-    if (data.orchestration?.content) {
-      state.personaChat.historyByChat[chatId].push({
-        role: "orchestrator",
-        content: data.orchestration.content,
-        rationale: data.orchestration.rationale || []
-      });
-    }
+    state.personaChat.routingByChat[chatId] = data.orchestration?.content
+      ? {
+          content: data.orchestration.content,
+          rationale: data.orchestration.rationale || []
+        }
+      : null;
     const responses = Array.isArray(data.responses) ? data.responses : [];
     state.personaChat.historyByChat[chatId] = (state.personaChat.historyByChat[chatId] || []).filter(
       (msg) => msg.pendingId !== pendingId
@@ -2674,7 +2949,9 @@ function renderSimpleChatHistory() {
 
   history.forEach((msg) => {
     const role = msg.role === "user" ? "user" : "assistant";
-    const title = msg.role === "user" ? "You" : String(msg.agentTarget?.displayName || "Assistant");
+    const title = msg.role === "user"
+      ? "You"
+      : String(msg.speakerName || msg.agentTarget?.displayName || "Assistant");
     const primaryModel =
       msg.role === "assistant"
         ? String(msg.model || state.simpleChat.currentSession?.settings?.model || "unknown")
@@ -2890,6 +3167,7 @@ function startNewSimpleChatDraft() {
   const configDetails = byId("simple-chat-config-details");
   if (configDetails) configDetails.open = true;
   renderSimpleChatKnowledgeList();
+  renderSimpleChatQuickStrip();
   renderSimpleChatHistory();
 }
 
@@ -7708,6 +7986,14 @@ function wireEvents() {
     if (shell.contains(target) || toggle.contains(target)) return;
     closeSystemMenu();
   });
+  document.addEventListener("click", (event) => {
+    const menu = byId("persona-chat-mention-menu");
+    const input = byId("persona-chat-message");
+    if (!menu || !input || menu.classList.contains("hidden")) return;
+    const target = event.target;
+    if (menu.contains(target) || input === target) return;
+    closePersonaMentionMenu();
+  });
   byId("auth-password").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -8006,10 +8292,18 @@ function wireEvents() {
   });
   byId("persona-chat-send").addEventListener("click", sendPersonaChatMessage);
   byId("persona-chat-message").addEventListener("keydown", (event) => {
+    if (handlePersonaMentionMenuKeydown(event)) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       sendPersonaChatMessage();
     }
+  });
+  byId("persona-chat-message").addEventListener("input", updatePersonaMentionMenuFromInput);
+  byId("persona-chat-message").addEventListener("click", updatePersonaMentionMenuFromInput);
+  byId("persona-chat-message").addEventListener("blur", () => {
+    setTimeout(() => closePersonaMentionMenu(), 120);
   });
   ["persona-chat-title", "persona-chat-context", "persona-chat-model", "persona-chat-temperature", "persona-chat-max-words", "persona-chat-panel-rounds", "persona-chat-mode"].forEach((id) => {
     const el = byId(id);

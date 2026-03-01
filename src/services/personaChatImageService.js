@@ -1,6 +1,10 @@
 import { appendPersonaChatMessage, updatePersonaChatSession } from "../../lib/storage.js";
 import { generateAndStoreImage } from "../../lib/images.js";
-import { chooseResponders } from "../domain/personaChatResponderPolicy.js";
+
+const IMAGE_AGENT = {
+  id: "image-concierge",
+  displayName: "Image Concierge"
+};
 
 function buildSingleSpeakerOrchestrationEntry({ session, userEntry, leadPersona, reason, content }) {
   return {
@@ -58,24 +62,9 @@ async function appendAndUpdateForSinglePersona({
   }));
 }
 
-function chooseLeadPersona(session, history, userEntry) {
-  const globalKnowledgePacks = Array.isArray(session.knowledgePacks) ? session.knowledgePacks : [];
-  const orchestration = chooseResponders({
-    personas: session.personas || [],
-    knowledgeByPersona: session.knowledgeByPersona || {},
-    globalKnowledgePacks,
-    userMessage: userEntry.content,
-    history,
-    engagementMode: session.settings?.engagementMode || "chat"
-  });
-  const leadPersona = orchestration.selectedPersonas?.[0] || (session.personas || [])[0];
-  return { orchestration, leadPersona };
-}
-
 export async function handlePersonaChatImageIntent({
   chatId,
   session,
-  history,
   userEntry,
   imageIntent,
   shouldEmitOrchestration,
@@ -85,30 +74,19 @@ export async function handlePersonaChatImageIntent({
     return { handled: false };
   }
 
-  const { leadPersona } = chooseLeadPersona(session, history, userEntry);
-  if (!leadPersona) {
-    const err = new Error(
-      imageIntent.mode === "clear"
-        ? "No persona available to generate image."
-        : "No persona available for clarification."
-    );
-    err.code = "VALIDATION_ERROR";
-    throw err;
-  }
-
   if (imageIntent.mode === "ambiguous") {
     const orchestrationEntry = buildSingleSpeakerOrchestrationEntry({
       session,
       userEntry,
-      leadPersona,
-      reason: "Ambiguous image intent: route to a clarifying response.",
-      content: `Orchestrator selected ${leadPersona.displayName} to clarify image request.`
+      leadPersona: IMAGE_AGENT,
+      reason: "Image request routed to hidden image specialist for clarification.",
+      content: "Image Concierge is asking for one clarification before generating the visual."
     });
     const personaEntry = {
       ts: new Date().toISOString(),
       role: "persona",
-      speakerId: leadPersona.id,
-      displayName: leadPersona.displayName,
+      speakerId: IMAGE_AGENT.id,
+      displayName: IMAGE_AGENT.displayName,
       content:
         "I can generate that visual. Please clarify what should be shown, desired style, and optional size (for example: 'diagram of microservice architecture, clean blueprint style, 1024x1024').",
       turnId: userEntry.turnId
@@ -118,7 +96,7 @@ export async function handlePersonaChatImageIntent({
       shouldEmitOrchestration,
       orchestrationEntry,
       personaEntry,
-      leadPersona
+      leadPersona: IMAGE_AGENT
     });
     return {
       handled: true,
@@ -130,13 +108,14 @@ export async function handlePersonaChatImageIntent({
     const orchestrationEntry = buildSingleSpeakerOrchestrationEntry({
       session,
       userEntry,
-      leadPersona,
-      reason: "Image request routed to lead persona for visual output.",
-      content: `Orchestrator selected ${leadPersona.displayName} for image generation.`
+      leadPersona: IMAGE_AGENT,
+      reason: "Image request routed to hidden image specialist for visual output.",
+      content: "Image Concierge handled this image request in the background."
     });
     const styledPrompt = [
-      `Visual style from persona ${leadPersona.displayName}${leadPersona.role ? ` (${leadPersona.role})` : ""}.`,
-      `Persona traits: ${(leadPersona.expertiseTags || []).join(", ") || "general"}.`,
+      "Visual style from the hidden Image Concierge capability agent.",
+      `Conversation title: ${session?.title || "Persona Chat"}.`,
+      `Shared context: ${session?.context || "(none)"}.`,
       `User request: ${imageIntent.prompt}`
     ].join("\n");
     const image = await generateAndStoreImage({
@@ -148,8 +127,8 @@ export async function handlePersonaChatImageIntent({
     const personaEntry = {
       ts: new Date().toISOString(),
       role: "persona",
-      speakerId: leadPersona.id,
-      displayName: leadPersona.displayName,
+      speakerId: IMAGE_AGENT.id,
+      displayName: IMAGE_AGENT.displayName,
       content: `Generated image based on your request: ${imageIntent.prompt}`,
       image,
       turnId: userEntry.turnId
@@ -159,7 +138,7 @@ export async function handlePersonaChatImageIntent({
       shouldEmitOrchestration,
       orchestrationEntry,
       personaEntry,
-      leadPersona
+      leadPersona: IMAGE_AGENT
     });
     return {
       handled: true,
@@ -169,4 +148,3 @@ export async function handlePersonaChatImageIntent({
 
   return { handled: false };
 }
-

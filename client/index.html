@@ -565,6 +565,7 @@
           </div>
           <div id="simple-chat-status" class="status">Create or select a session from history to begin.</div>
           <div id="simple-chat-history" class="chat-history"></div>
+          <div id="simple-chat-quick-strip" class="mention-strip"></div>
           <div class="row">
             <input id="simple-chat-message" type="text" placeholder="Ask anything, optionally grounded in selected knowledge packs">
             <button id="simple-chat-send" type="button">Send</button>
@@ -769,9 +770,13 @@
           </div>
           <div id="persona-chat-status" class="status">Create or select a session from history to begin.</div>
           <div id="persona-chat-history" class="chat-history"></div>
+          <div id="persona-chat-routing-note" class="chat-routing-note hidden"></div>
           <div id="persona-chat-mention-strip" class="mention-strip"></div>
-          <div class="row">
-            <input id="persona-chat-message" type="text" placeholder="Ask your selected personas anything">
+          <div class="row persona-chat-input-row">
+            <div class="input-with-menu">
+              <input id="persona-chat-message" type="text" placeholder="Ask your selected personas anything" autocomplete="off">
+              <div id="persona-chat-mention-menu" class="mention-menu hidden"></div>
+            </div>
             <button id="persona-chat-send" type="button">Send</button>
           </div>
           <div class="hint">Image intent is auto-detected. Use <code>/image</code> or a clear subject like "generate an image of alpine lake at sunrise." Vague mentions won't trigger image mode.</div>

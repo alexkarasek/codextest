@@ -1104,6 +1104,70 @@ button[type="submit"]:hover {
   align-items: center;
 }
 
+.chat-routing-note {
+  border: 1px solid color-mix(in srgb, var(--line) 75%, var(--accent) 25%);
+  background: color-mix(in srgb, var(--accent-soft) 68%, white 32%);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+}
+
+.persona-chat-input-row {
+  align-items: flex-start;
+}
+
+.input-with-menu {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.mention-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.mention-menu-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.mention-menu-item:hover,
+.mention-menu-item.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.mention-menu-title {
+  font-weight: 600;
+  color: var(--info);
+}
+
+.mention-menu-meta {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
 .mention-chip {
   border-radius: 999px;
   padding: 4px 10px;
@@ -1124,6 +1188,27 @@ button[type="submit"]:hover {
   border-radius: 10px;
   border: 1px solid var(--line);
   white-space: pre-wrap;
+}
+
+.chat-msg-body {
+  white-space: pre-wrap;
+}
+
+.inline-mention {
+  border: none;
+  background: none;
+  color: var(--info);
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.inline-mention:hover {
+  color: var(--accent-strong);
 }
 
 .chat-image {

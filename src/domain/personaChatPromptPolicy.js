@@ -147,6 +147,17 @@ export function detectImageIntent(message, { force = false } = {}) {
     }
     return { mode: "clear", prompt };
   }
+  if (/^@image(?:\s+|$)/i.test(text) || /^@image[- ]?concierge(?:\s+|$)/i.test(text)) {
+    const prompt = text.replace(/^@image(?:[- ]?concierge)?\s*/i, "").trim();
+    if (!prompt) {
+      return {
+        mode: "ambiguous",
+        prompt: "",
+        reason: "missing_prompt"
+      };
+    }
+    return { mode: "clear", prompt };
+  }
   const discussionCue = /\b(how to|what is|explain|describe|discuss|talk about|meaning of)\b/i.test(text);
   if (discussionCue && /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text)) {
     return { mode: "none", prompt: "" };

@@ -119,6 +119,17 @@ function detectImageIntent(message, { force = false } = {}) {
     }
     return { mode: "clear", prompt };
   }
+  if (/^@image(?:\s+|$)/i.test(text) || /^@image[- ]?concierge(?:\s+|$)/i.test(text)) {
+    const prompt = text.replace(/^@image(?:[- ]?concierge)?\s*/i, "").trim();
+    if (!prompt) {
+      return {
+        mode: "ambiguous",
+        prompt: "",
+        reason: "missing_prompt"
+      };
+    }
+    return { mode: "clear", prompt };
+  }
   const discussionCue = /\b(how to|what is|explain|describe|discuss|talk about|meaning of)\b/i.test(text);
   if (discussionCue && /\b(image|diagram|schematic|visual|picture|illustration|render)\b/i.test(text)) {
     return { mode: "none", prompt: "" };
@@ -311,6 +322,7 @@ router.post("/:chatId/messages", async (req, res) => {
     const assistantEntry = {
       ts: new Date().toISOString(),
       role: "assistant",
+      speakerName: "Image Concierge",
       content:
         "I can generate an image. Please clarify what you want shown, style, and optional size (e.g., 'generate image of a sunrise in watercolor, 1024x1024').",
       usage: null,
@@ -341,6 +353,7 @@ router.post("/:chatId/messages", async (req, res) => {
       const assistantEntry = {
         ts: new Date().toISOString(),
         role: "assistant",
+        speakerName: "Image Concierge",
         content: `Generated image for: ${imageIntent.prompt}`,
         usage: null,
         citations: [],
