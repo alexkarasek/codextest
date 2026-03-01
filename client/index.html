@@ -487,22 +487,58 @@
           <div id="agentic-jobs-list" class="list"></div>
         </div>
         <div class="panel stack">
-          <h2>Events + MCP Readiness</h2>
+          <h2>MCP Governance</h2>
           <div id="agentic-mcp-status" class="status">MCP status not loaded.</div>
-          <h3>MCP Registry</h3>
-          <div id="agentic-mcp-servers" class="list"></div>
-          <h3>MCP Tool Runner</h3>
-          <div class="row">
-            <label>MCP Tool
-              <select id="agentic-mcp-tool-select"></select>
-            </label>
-            <button id="agentic-mcp-tool-run" type="button">Run MCP Tool</button>
+          <div class="subtabs">
+            <button id="agentic-mcp-view-servers" class="subtab-btn active" type="button">Servers</button>
+            <button id="agentic-mcp-view-approvals" class="subtab-btn" type="button">Approvals</button>
+            <button id="agentic-mcp-view-audit" class="subtab-btn" type="button">Audit</button>
           </div>
-          <label>Tool Input (JSON)
-            <textarea id="agentic-mcp-tool-input" rows="4" placeholder='{"limit": 25}'></textarea>
-          </label>
-          <div id="agentic-mcp-tool-status" class="status"></div>
-          <pre id="agentic-mcp-tool-output" class="preview"></pre>
+          <section id="agentic-mcp-section-servers" class="stack">
+            <div id="agentic-mcp-servers" class="list"></div>
+            <div id="agentic-mcp-server-detail" class="card">
+              Select an MCP server to view details.
+            </div>
+            <div id="agentic-mcp-server-status" class="status"></div>
+          </section>
+          <section id="agentic-mcp-section-approvals" class="stack hidden">
+            <div class="hint">Use an approval id from a pending MCP tool call. Recent pending approvals from this browser session appear below.</div>
+            <div id="agentic-mcp-pending-approvals" class="list"></div>
+            <label>Approval Id
+              <input id="agentic-mcp-approval-id" type="text" placeholder="approval UUID">
+            </label>
+            <div class="row">
+              <button id="agentic-mcp-approve-run" type="button">Approve & Execute</button>
+            </div>
+            <div id="agentic-mcp-approval-status" class="status"></div>
+            <pre id="agentic-mcp-approval-output" class="preview"></pre>
+          </section>
+          <section id="agentic-mcp-section-audit" class="stack hidden">
+            <div class="row">
+              <label>Server Id
+                <input id="agentic-mcp-audit-server" type="text" placeholder="platform">
+              </label>
+              <label>Decision
+                <select id="agentic-mcp-audit-decision">
+                  <option value="">All</option>
+                  <option value="allowed">allowed</option>
+                  <option value="denied">denied</option>
+                  <option value="approval_required">approval_required</option>
+                </select>
+              </label>
+              <label>Limit
+                <select id="agentic-mcp-audit-limit">
+                  <option value="25">25</option>
+                  <option value="100" selected>100</option>
+                  <option value="250">250</option>
+                  <option value="1000">1000</option>
+                </select>
+              </label>
+              <button id="agentic-mcp-audit-refresh" type="button">Refresh Audit</button>
+            </div>
+            <div id="agentic-mcp-audit-status" class="status"></div>
+            <div id="agentic-mcp-audit-list" class="list"></div>
+          </section>
           <h3>Recent Task Events</h3>
           <pre id="agentic-task-events" class="preview"></pre>
           <h3>Recent Tool Usage</h3>

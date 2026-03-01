@@ -99,6 +99,20 @@ const state = {
       task: [],
       tool: []
     },
+    mcpGovernance: {
+      view: "servers",
+      selectedServerId: "",
+      selectedServerDetails: null,
+      pendingApprovals: [],
+      activeApprovalId: "",
+      lastToolCallResult: null,
+      auditRecords: [],
+      auditFilters: {
+        serverId: "",
+        decision: "",
+        limit: 100
+      }
+    },
     activeTaskId: "",
     stepDrafts: []
   },
@@ -392,6 +406,31 @@ function toPrettyJson(value) {
   } catch {
     return String(value);
   }
+}
+
+function maskSensitiveString(value) {
+  const raw = String(value || "");
+  if (/^Bearer\s+/i.test(raw)) return "Bearer [REDACTED]";
+  if (/sk-[a-z0-9]/i.test(raw)) return "[REDACTED]";
+  return raw;
+}
+
+function maskSensitiveUi(value, depth = 0) {
+  if (depth > 6) return "[TRUNCATED]";
+  if (value === null || value === undefined) return value ?? null;
+  if (typeof value === "string") return maskSensitiveString(value);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map((item) => maskSensitiveUi(item, depth + 1));
+  if (typeof value === "object") {
+    const out = {};
+    Object.entries(value).forEach(([key, child]) => {
+      out[key] = /(key|token|secret|password|authorization)/i.test(key)
+        ? "[REDACTED]"
+        : maskSensitiveUi(child, depth + 1);
+    });
+    return out;
+  }
+  return String(value);
 }
 
 function assessExchange(content) {
@@ -6991,64 +7030,349 @@ function renderAgenticMetrics() {
 
   const mcp = state.agentic.mcp || {};
   mcpStatus.textContent = `MCP: ${mcp.phase || "unknown"} | enabled=${Boolean(mcp.enabled)} | transport=${mcp.transport || "n/a"} | servers=${mcp.serverCount || 0}`;
-  renderMcpRegistry();
+  renderMcpGovernance();
 }
 
-function renderMcpRegistry() {
+function setMcpGovernanceView(view) {
+  const next = ["servers", "approvals", "audit"].includes(view) ? view : "servers";
+  state.agentic.mcpGovernance.view = next;
+  byId("agentic-mcp-view-servers")?.classList.toggle("active", next === "servers");
+  byId("agentic-mcp-view-approvals")?.classList.toggle("active", next === "approvals");
+  byId("agentic-mcp-view-audit")?.classList.toggle("active", next === "audit");
+  byId("agentic-mcp-section-servers")?.classList.toggle("hidden", next !== "servers");
+  byId("agentic-mcp-section-approvals")?.classList.toggle("hidden", next !== "approvals");
+  byId("agentic-mcp-section-audit")?.classList.toggle("hidden", next !== "audit");
+}
+
+function formatMcpListCount(values) {
+  return Array.isArray(values) ? values.length : 0;
+}
+
+function queueMcpPendingApproval(record) {
+  if (!record?.approval_id) return;
+  const approvals = Array.isArray(state.agentic.mcpGovernance.pendingApprovals)
+    ? state.agentic.mcpGovernance.pendingApprovals
+    : [];
+  const next = [record, ...approvals.filter((item) => item.approval_id !== record.approval_id)].slice(0, 10);
+  state.agentic.mcpGovernance.pendingApprovals = next;
+  state.agentic.mcpGovernance.activeApprovalId = record.approval_id;
+  const approvalInput = byId("agentic-mcp-approval-id");
+  if (approvalInput) approvalInput.value = record.approval_id;
+}
+
+function removeMcpPendingApproval(approvalId) {
+  const id = String(approvalId || "").trim();
+  state.agentic.mcpGovernance.pendingApprovals = (state.agentic.mcpGovernance.pendingApprovals || []).filter(
+    (item) => item.approval_id !== id
+  );
+  if (state.agentic.mcpGovernance.activeApprovalId === id) {
+    state.agentic.mcpGovernance.activeApprovalId = "";
+  }
+}
+
+function selectMcpServer(serverId) {
+  const id = String(serverId || "").trim();
+  state.agentic.mcpGovernance.selectedServerId = id;
+  loadMcpServerDetails(id);
+  renderMcpServersList();
+}
+
+async function loadMcpServerDetails(serverId) {
+  const detail = byId("agentic-mcp-server-detail");
+  const status = byId("agentic-mcp-server-status");
+  const id = String(serverId || "").trim();
+  if (!detail) return;
+  if (!id) {
+    state.agentic.mcpGovernance.selectedServerDetails = null;
+    detail.textContent = "Select an MCP server to view details.";
+    return;
+  }
+  status.textContent = `Loading ${id}...`;
+  try {
+    const data = await apiGet(`/api/agentic/mcp/servers/${encodeURIComponent(id)}/tools`);
+    state.agentic.mcpGovernance.selectedServerDetails = data;
+    status.textContent = `Loaded ${id}.`;
+  } catch (error) {
+    status.textContent = `Failed to load server details: ${error.message}`;
+    state.agentic.mcpGovernance.selectedServerDetails = null;
+  }
+  renderMcpServerDetails();
+}
+
+function getSelectedMcpServer() {
+  const serverId = state.agentic.mcpGovernance.selectedServerId;
+  return (state.agentic.mcpServers || []).find((item) => item.id === serverId) || null;
+}
+
+function renderMcpServersList() {
   const container = byId("agentic-mcp-servers");
   if (!container) return;
   const servers = state.agentic.mcpServers || [];
+  const selectedId = state.agentic.mcpGovernance.selectedServerId;
   container.innerHTML = "";
   if (!servers.length) {
     container.textContent = "No MCP servers registered.";
-    renderMcpToolSelect([]);
     return;
   }
   servers.forEach((server) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "card mcp-server-row";
+    if (server.id === selectedId) button.classList.add("active");
+    button.innerHTML = `
+      <div class="card-title">${server.name || server.id}</div>
+      <div class="row wrap">
+        <span><strong>id:</strong> ${server.id}</span>
+        <span><strong>source:</strong> ${server.source || "unknown"}</span>
+        <span><strong>trust:</strong> ${server.trust_state || "untrusted"}</span>
+        <span><strong>risk:</strong> ${server.risk_tier || "medium"}</span>
+        <span><strong>owner:</strong> ${server.owner || "local"}</span>
+      </div>
+      <div class="row wrap muted">
+        <span>allow: ${formatMcpListCount(server.allow_tools)}</span>
+        <span>deny: ${formatMcpListCount(server.deny_tools)}</span>
+        <span>tools: ${server.toolCount ?? (server.tools || []).length}</span>
+      </div>
+    `;
+    button.addEventListener("click", () => selectMcpServer(server.id));
+    container.appendChild(button);
+  });
+}
+
+function renderMcpServerDetails() {
+  const container = byId("agentic-mcp-server-detail");
+  if (!container) return;
+  const selected = state.agentic.mcpGovernance.selectedServerDetails;
+  if (!selected?.server) {
+    container.textContent = "Select an MCP server to view details.";
+    return;
+  }
+  const server = selected.server;
+  const tools = Array.isArray(selected.tools) ? selected.tools : [];
+  const allowTools = Array.isArray(server.allow_tools) ? server.allow_tools.join("\n") : "";
+  const denyTools = Array.isArray(server.deny_tools) ? server.deny_tools.join("\n") : "";
+  container.innerHTML = `
+    <div class="card-title">Server Details: ${server.name || server.id}</div>
+    <div class="row wrap">
+      <span><strong>id:</strong> ${server.id}</span>
+      <span><strong>owner:</strong> ${server.owner || "local"}</span>
+      <span><strong>created:</strong> ${server.created_at || "n/a"}</span>
+      <span><strong>updated:</strong> ${server.updated_at || "n/a"}</span>
+    </div>
+    <div class="grid two">
+      <label>Trust State
+        <select id="agentic-mcp-edit-trust">
+          <option value="untrusted"${server.trust_state === "untrusted" ? " selected" : ""}>untrusted</option>
+          <option value="trusted"${server.trust_state === "trusted" ? " selected" : ""}>trusted</option>
+          <option value="blocked"${server.trust_state === "blocked" ? " selected" : ""}>blocked</option>
+        </select>
+      </label>
+      <label>Risk Tier
+        <select id="agentic-mcp-edit-risk">
+          <option value="low"${server.risk_tier === "low" ? " selected" : ""}>low</option>
+          <option value="medium"${server.risk_tier === "medium" ? " selected" : ""}>medium</option>
+          <option value="high"${server.risk_tier === "high" ? " selected" : ""}>high</option>
+        </select>
+      </label>
+    </div>
+    <label>Allow Tools (one pattern per line)
+      <textarea id="agentic-mcp-edit-allow" rows="4">${allowTools}</textarea>
+    </label>
+    <label>Deny Tools (one pattern per line)
+      <textarea id="agentic-mcp-edit-deny" rows="4">${denyTools}</textarea>
+    </label>
+    <label>Notes
+      <textarea id="agentic-mcp-edit-notes" rows="3">${server.notes || ""}</textarea>
+    </label>
+    <div class="row">
+      <button id="agentic-mcp-save-server" type="button">Save Governance</button>
+    </div>
+    <details>
+      <summary>View Tools Endpoint</summary>
+      <div class="list">
+        ${
+          tools.length
+            ? tools
+                .map(
+                  (tool) => `
+          <div class="card">
+            <div class="card-title">${tool.name}</div>
+            <div class="muted">${tool.description || "No description."}</div>
+          </div>`
+                )
+                .join("")
+            : "No tools exposed."
+        }
+      </div>
+    </details>
+    <h3>Test Tool Call</h3>
+    <div class="row">
+      <label>MCP Tool
+        <select id="agentic-mcp-tool-select">
+          ${
+            tools.length
+              ? tools.map((tool) => `<option value="${tool.name}">${tool.name}</option>`).join("")
+              : `<option value="">No tools available</option>`
+          }
+        </select>
+      </label>
+      <button id="agentic-mcp-tool-run" type="button">Run MCP Tool</button>
+    </div>
+    <label>Tool Input (JSON)
+      <textarea id="agentic-mcp-tool-input" rows="4" placeholder='{}'>{}</textarea>
+    </label>
+    <div id="agentic-mcp-tool-status" class="status"></div>
+    <pre id="agentic-mcp-tool-output" class="preview"></pre>
+  `;
+  byId("agentic-mcp-save-server")?.addEventListener("click", saveSelectedMcpServerGovernance);
+  byId("agentic-mcp-tool-run")?.addEventListener("click", runSelectedMcpTool);
+}
+
+async function saveSelectedMcpServerGovernance() {
+  const selected = state.agentic.mcpGovernance.selectedServerDetails;
+  const status = byId("agentic-mcp-server-status");
+  if (!selected?.server) {
+    status.textContent = "Select an MCP server first.";
+    return;
+  }
+  const serverId = selected.server.id;
+  const payload = {
+    trust_state: byId("agentic-mcp-edit-trust")?.value || "untrusted",
+    risk_tier: byId("agentic-mcp-edit-risk")?.value || "medium",
+    allow_tools: parseLineList(byId("agentic-mcp-edit-allow")?.value || ""),
+    deny_tools: parseLineList(byId("agentic-mcp-edit-deny")?.value || ""),
+    notes: byId("agentic-mcp-edit-notes")?.value || ""
+  };
+  status.textContent = `Saving ${serverId}...`;
+  try {
+    await apiSend(`/api/agentic/mcp/servers/${encodeURIComponent(serverId)}`, "PATCH", payload);
+    await loadAgenticData();
+    await loadMcpServerDetails(serverId);
+    status.textContent = `Saved ${serverId}.`;
+  } catch (error) {
+    status.textContent = `Save failed: ${error.message}`;
+  }
+}
+
+async function approveMcpApprovalId(approvalId) {
+  const status = byId("agentic-mcp-approval-status");
+  const output = byId("agentic-mcp-approval-output");
+  const id = String(approvalId || byId("agentic-mcp-approval-id")?.value || "").trim();
+  if (!id) {
+    status.textContent = "approval_id is required.";
+    return;
+  }
+  status.textContent = `Approving ${id}...`;
+  output.textContent = "";
+  try {
+    const result = await apiSend("/api/agentic/mcp/approve", "POST", { approval_id: id });
+    removeMcpPendingApproval(id);
+    renderMcpPendingApprovals();
+    output.textContent = toPrettyJson(maskSensitiveUi(result.output || {}));
+    status.textContent = `Approved and executed ${id}.`;
+    await refreshMcpAudit();
+  } catch (error) {
+    status.textContent = `Approval failed: ${error.message}`;
+  }
+}
+
+function renderMcpPendingApprovals() {
+  const container = byId("agentic-mcp-pending-approvals");
+  if (!container) return;
+  const items = state.agentic.mcpGovernance.pendingApprovals || [];
+  container.innerHTML = "";
+  if (!items.length) {
+    container.textContent = "No pending approvals captured in this browser session.";
+    return;
+  }
+  items.forEach((item) => {
     const card = document.createElement("div");
     card.className = "card";
-    const tools = Array.isArray(server.tools) ? server.tools : [];
-    const toolNames = tools.map((tool) => tool.name).filter(Boolean);
     card.innerHTML = `
-      <div class="card-title">${server.name || server.id}</div>
-      <div>id: ${server.id}</div>
-      <div>transport: ${server.transport || "n/a"}</div>
-      <div>source: ${server.source || "unknown"}</div>
-      <div>tools: ${server.toolCount ?? toolNames.length}</div>
-      <div class="muted">${toolNames.length ? toolNames.join(", ") : "Tools not loaded."}</div>
+      <div class="card-title">${item.tool_name}</div>
+      <div><strong>approval_id:</strong> ${item.approval_id}</div>
+      <div><strong>server:</strong> ${item.server_id}</div>
+      <div><strong>reason:</strong> ${item.reason || "Approval required."}</div>
+      <div class="muted">expires: ${item.expires_at || "n/a"}</div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "row";
+    const fillBtn = document.createElement("button");
+    fillBtn.type = "button";
+    fillBtn.textContent = "Use Approval Id";
+    fillBtn.addEventListener("click", () => {
+      byId("agentic-mcp-approval-id").value = item.approval_id;
+      state.agentic.mcpGovernance.activeApprovalId = item.approval_id;
+      setMcpGovernanceView("approvals");
+    });
+    const approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.textContent = "Approve & Execute";
+    approveBtn.addEventListener("click", () => approveMcpApprovalId(item.approval_id));
+    actions.append(fillBtn, approveBtn);
+    card.appendChild(actions);
+    container.appendChild(card);
+  });
+}
+
+async function refreshMcpAudit() {
+  const status = byId("agentic-mcp-audit-status");
+  const filters = state.agentic.mcpGovernance.auditFilters;
+  const params = new URLSearchParams();
+  params.set("limit", String(filters.limit || 100));
+  if (filters.serverId) params.set("server_id", filters.serverId);
+  if (filters.decision) params.set("decision", filters.decision);
+  status.textContent = "Loading MCP audit...";
+  try {
+    const data = await apiGet(`/api/agentic/mcp/audit?${params.toString()}`);
+    state.agentic.mcpGovernance.auditRecords = data.records || [];
+    renderMcpAuditList();
+    status.textContent = `Loaded ${(data.records || []).length} audit records.`;
+  } catch (error) {
+    status.textContent = `Failed to load audit: ${error.message}`;
+  }
+}
+
+function renderMcpAuditList() {
+  const container = byId("agentic-mcp-audit-list");
+  if (!container) return;
+  const records = state.agentic.mcpGovernance.auditRecords || [];
+  container.innerHTML = "";
+  if (!records.length) {
+    container.textContent = "No MCP audit records.";
+    return;
+  }
+  records.forEach((record) => {
+    const card = document.createElement("details");
+    card.className = "card";
+    const ts = record.completed_at || record.not_executed_at || record.started_at || "n/a";
+    card.innerHTML = `
+      <summary>
+        ${ts} | ${record.correlation_id || "unknown"} | ${record.actor_id || "unknown"} | ${(record.server?.server_id || "unknown")} | ${record.tool_name || ""} | ${record.decision || ""} | ${record.status || ""} | ${record.latency_ms ?? 0}ms
+      </summary>
+      <div class="stack">
+        <div><strong>Note:</strong> ${record.note || record.error?.message || "n/a"}</div>
+        <label>Input<pre class="preview">${toPrettyJson(maskSensitiveUi(record.input || {}))}</pre></label>
+        <label>Output / Error<pre class="preview">${toPrettyJson(maskSensitiveUi(record.output ?? record.error ?? {}))}</pre></label>
+      </div>
     `;
     container.appendChild(card);
   });
-  renderMcpToolSelect(servers);
 }
 
-function renderMcpToolSelect(servers) {
-  const select = byId("agentic-mcp-tool-select");
-  if (!select) return;
-  const options = [];
-  servers.forEach((server) => {
-    (server.tools || []).forEach((tool) => {
-      options.push({
-        value: `${server.id}::${tool.name}`,
-        label: `${server.name || server.id} / ${tool.name}`
-      });
-    });
-  });
-  select.innerHTML = "";
-  if (!options.length) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "No MCP tools available";
-    select.appendChild(opt);
-    return;
+function renderMcpGovernance() {
+  const filters = state.agentic.mcpGovernance.auditFilters || {};
+  if (byId("agentic-mcp-audit-server")) byId("agentic-mcp-audit-server").value = filters.serverId || "";
+  if (byId("agentic-mcp-audit-decision")) byId("agentic-mcp-audit-decision").value = filters.decision || "";
+  if (byId("agentic-mcp-audit-limit")) byId("agentic-mcp-audit-limit").value = String(filters.limit || 100);
+  if (byId("agentic-mcp-approval-id") && state.agentic.mcpGovernance.activeApprovalId) {
+    byId("agentic-mcp-approval-id").value = state.agentic.mcpGovernance.activeApprovalId;
   }
-  options.forEach((item, idx) => {
-    const opt = document.createElement("option");
-    opt.value = item.value;
-    opt.textContent = item.label;
-    if (idx === 0) opt.selected = true;
-    select.appendChild(opt);
-  });
+  renderMcpServersList();
+  renderMcpServerDetails();
+  renderMcpPendingApprovals();
+  renderMcpAuditList();
+  setMcpGovernanceView(state.agentic.mcpGovernance.view || "servers");
 }
 
 async function runSelectedMcpTool() {
@@ -7056,14 +7380,13 @@ async function runSelectedMcpTool() {
   const output = byId("agentic-mcp-tool-output");
   const select = byId("agentic-mcp-tool-select");
   const inputEl = byId("agentic-mcp-tool-input");
-  if (!status || !output || !select || !inputEl) return;
-
-  const value = select.value || "";
-  if (!value || !value.includes("::")) {
+  const server = state.agentic.mcpGovernance.selectedServerDetails?.server;
+  if (!status || !output || !select || !inputEl || !server?.id) return;
+  const tool = String(select.value || "").trim();
+  if (!tool) {
     status.textContent = "Select an MCP tool first.";
     return;
   }
-  const [serverId, tool] = value.split("::");
   let input = {};
   const raw = inputEl.value.trim();
   if (raw) {
@@ -7074,17 +7397,40 @@ async function runSelectedMcpTool() {
       return;
     }
   }
-
-  status.textContent = `Running ${serverId}.${tool}...`;
+  status.textContent = `Running ${server.id}.${tool}...`;
   output.textContent = "";
   try {
-    const result = await apiSend(`/api/agentic/mcp/servers/${encodeURIComponent(serverId)}/call`, "POST", {
-      tool,
-      input
+    const res = await fetch(`/api/agentic/mcp/servers/${encodeURIComponent(server.id)}/call`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool, tool_name: tool, input })
     });
-    output.textContent = toPrettyJson(result.output || {});
-    status.textContent = `Completed ${serverId}.${tool}.`;
+    const payload = await res.json().catch(() => ({}));
+    if (res.status === 202 && payload?.ok) {
+      const pending = payload.data || {};
+      queueMcpPendingApproval(pending);
+      renderMcpPendingApprovals();
+      output.textContent = toPrettyJson(maskSensitiveUi(pending));
+      status.textContent = `Approval required for ${server.id}.${tool}.`;
+      byId("agentic-mcp-approval-status").textContent = `Pending approval ${pending.approval_id}.`;
+      setMcpGovernanceView("approvals");
+      await refreshMcpAudit();
+      return;
+    }
+    if (!res.ok || !payload?.ok) {
+      if (res.status === 403 && payload?.error?.code === "MCP_POLICY_DENIED") {
+        output.textContent = toPrettyJson(payload.error || {});
+        status.textContent = `Denied by policy: ${payload.error?.code || "MCP_POLICY_DENIED"}`;
+        await refreshMcpAudit();
+        return;
+      }
+      throw new Error(apiErrorMessage(payload));
+    }
+    output.textContent = toPrettyJson(maskSensitiveUi(payload.data?.output || {}));
+    state.agentic.mcpGovernance.lastToolCallResult = payload.data?.output || null;
+    status.textContent = `Completed ${server.id}.${tool}.`;
     await loadAgenticData();
+    await refreshMcpAudit();
   } catch (error) {
     status.textContent = `MCP tool failed: ${error.message}`;
   }
@@ -7094,7 +7440,7 @@ async function loadAgenticData() {
   if (!state.auth.authenticated) return;
   byId("agentic-task-status").textContent = "Loading agentic workspace...";
   try {
-    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, templates, watchers, workflows] = await Promise.all([
+    const [tools, tasks, approvals, jobs, metrics, taskEvents, toolEvents, mcp, mcpServers, mcpAudit, templates, watchers, workflows] = await Promise.all([
       apiGet("/api/agentic/tools"),
       apiGet("/api/agentic/tasks"),
       apiGet("/api/agentic/approvals"),
@@ -7104,6 +7450,7 @@ async function loadAgenticData() {
       apiGet("/api/agentic/events?type=tool&limit=200"),
       apiGet("/api/agentic/mcp/status"),
       apiGet("/api/agentic/mcp/servers?includeTools=true"),
+      apiGet(`/api/agentic/mcp/audit?limit=${encodeURIComponent(String(state.agentic.mcpGovernance.auditFilters.limit || 100))}`),
       apiGet("/api/agentic/templates"),
       apiGet("/api/agentic/watchers"),
       apiGet("/api/agentic/workflows")
@@ -7117,6 +7464,7 @@ async function loadAgenticData() {
     state.agentic.events.tool = toolEvents.events || [];
     state.agentic.mcp = mcp || null;
     state.agentic.mcpServers = mcpServers.servers || [];
+    state.agentic.mcpGovernance.auditRecords = mcpAudit.records || [];
     state.agentic.templates = templates.templates || [];
     state.agentic.watchers = watchers.watchers || [];
     state.agentic.workflows = workflows.workflows || [];
@@ -7128,6 +7476,16 @@ async function loadAgenticData() {
     if (!state.agentic.activeTaskId && state.agentic.tasks.length) {
       state.agentic.activeTaskId = state.agentic.tasks[0].id;
     }
+    if (
+      state.agentic.mcpGovernance.selectedServerId &&
+      !state.agentic.mcpServers.some((server) => server.id === state.agentic.mcpGovernance.selectedServerId)
+    ) {
+      state.agentic.mcpGovernance.selectedServerId = "";
+      state.agentic.mcpGovernance.selectedServerDetails = null;
+    }
+    if (!state.agentic.mcpGovernance.selectedServerId && state.agentic.mcpServers.length) {
+      state.agentic.mcpGovernance.selectedServerId = state.agentic.mcpServers[0].id;
+    }
 
     renderAgenticTaskSelect();
     renderAgenticTaskDetail();
@@ -7137,6 +7495,9 @@ async function loadAgenticData() {
     renderAgenticWorkflows();
     renderAgenticMetrics();
     renderAgenticPresetSelect();
+    if (state.agentic.mcpGovernance.selectedServerId) {
+      await loadMcpServerDetails(state.agentic.mcpGovernance.selectedServerId);
+    }
     byId("agentic-task-status").textContent = "Agentic workspace loaded.";
   } catch (error) {
     byId("agentic-task-status").textContent = `Failed to load agentic data: ${error.message}`;
@@ -8052,7 +8413,20 @@ function wireEvents() {
   byId("agentic-run-selected").addEventListener("click", runSelectedAgenticTask);
   byId("agentic-open-chat").addEventListener("click", openAgenticTaskInChat);
   byId("agentic-generate-report").addEventListener("click", generateAgenticReportForSelectedTask);
-  byId("agentic-mcp-tool-run").addEventListener("click", runSelectedMcpTool);
+  byId("agentic-mcp-view-servers").addEventListener("click", () => setMcpGovernanceView("servers"));
+  byId("agentic-mcp-view-approvals").addEventListener("click", () => setMcpGovernanceView("approvals"));
+  byId("agentic-mcp-view-audit").addEventListener("click", () => setMcpGovernanceView("audit"));
+  byId("agentic-mcp-approve-run").addEventListener("click", () => approveMcpApprovalId());
+  byId("agentic-mcp-audit-refresh").addEventListener("click", () => {
+    state.agentic.mcpGovernance.auditFilters.serverId = byId("agentic-mcp-audit-server").value.trim();
+    state.agentic.mcpGovernance.auditFilters.decision = byId("agentic-mcp-audit-decision").value || "";
+    state.agentic.mcpGovernance.auditFilters.limit = safeNumberInput(byId("agentic-mcp-audit-limit").value, 100, {
+      min: 1,
+      max: 1000,
+      integer: true
+    });
+    refreshMcpAudit();
+  });
   byId("agentic-watcher-create").addEventListener("click", createAgenticWatcherFromUi);
   byId("agentic-workflow-create").addEventListener("click", createAgenticWorkflowFromUi);
   byId("agentic-workflow-refresh").addEventListener("click", loadAgenticData);

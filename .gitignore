@@ -1,6 +1,7 @@
 node_modules/
 settings.local.json
 .local-dev/
+docs/reqs/
 
 # Local runtime data: keep folder structure only
 data/**

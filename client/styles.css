@@ -401,6 +401,24 @@ label {
   flex: 1 1 220px;
 }
 
+.mcp-server-row {
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.mcp-server-row.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#agentic-mcp-audit-list details summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 label.inline {
   display: inline-flex;
   align-items: center;

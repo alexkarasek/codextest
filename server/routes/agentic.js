@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import { getAgenticMetricsOverview } from "../../lib/agenticMetrics.js";
 import {
   deleteTaskTemplate,
@@ -19,7 +20,22 @@ import {
 } from "../../lib/agenticStorage.js";
 import { listTools } from "../../lib/agenticTools.js";
 import { chatCompletion } from "../../lib/llm.js";
-import { getMcpReadinessStatus, listResolvedMcpServers } from "../../lib/mcpStatus.js";
+import { getMcpApprovalMode } from "../../lib/config.js";
+import {
+  getMcpReadinessStatus,
+  listResolvedMcpServers,
+  resolveMcpToolPolicy,
+  updateMcpServerGovernance
+} from "../../lib/mcpStatus.js";
+import {
+  consumeMcpApprovalRequest,
+  createMcpApprovalRequest
+} from "../../lib/mcpApprovals.js";
+import {
+  appendMcpAuditRecord,
+  createMcpAuditRecord,
+  listMcpAuditRecords
+} from "../../lib/mcpAudit.js";
 import { runMcpTool } from "../../lib/mcpRegistry.js";
 import { listPersonas } from "../../lib/storage.js";
 import { applyApprovalDecision, createTaskDraft, runTask } from "../../lib/taskRunner.js";
@@ -48,6 +64,40 @@ import { sendError, sendOk } from "../response.js";
 import { sendMappedError } from "../errorMapper.js";
 
 const router = express.Router();
+
+function resolveAuditActorId(req) {
+  return (
+    req?.auth?.user?.username ||
+    req?.auth?.user?.id ||
+    req?.session?.id ||
+    req?.requestId ||
+    "unknown"
+  );
+}
+
+async function writeMcpAuditSafe(record) {
+  await appendMcpAuditRecord(record);
+}
+
+function mcpApprovalRequired(server) {
+  const mode = getMcpApprovalMode();
+  if (mode === "always") {
+    return {
+      required: true,
+      reason: "Approval required by MCP approval mode 'always'."
+    };
+  }
+  if (mode === "untrusted_only" && String(server?.trust_state || "").trim().toLowerCase() !== "trusted") {
+    return {
+      required: true,
+      reason: `Approval required because server trust_state is '${server?.trust_state || "untrusted"}'.`
+    };
+  }
+  return {
+    required: false,
+    reason: ""
+  };
+}
 
 function parsePlannerJson(text) {
   const raw = String(text || "").trim();
@@ -748,7 +798,21 @@ router.get("/mcp/servers/:serverId/tools", async (req, res) => {
       sendError(res, 404, "NOT_FOUND", `MCP server '${req.params.serverId}' not found.`);
       return;
     }
-    sendOk(res, { tools: server.tools || [] });
+    sendOk(res, {
+      server: {
+        id: server.id,
+        name: server.name,
+        trust_state: server.trust_state,
+        risk_tier: server.risk_tier,
+        allow_tools: server.allow_tools || [],
+        deny_tools: server.deny_tools || [],
+        owner: server.owner || "local",
+        notes: server.notes || "",
+        created_at: server.created_at,
+        updated_at: server.updated_at
+      },
+      tools: server.tools || []
+    });
   } catch (error) {
     sendMappedError(res, error, [], {
       status: 500,
@@ -758,14 +822,143 @@ router.get("/mcp/servers/:serverId/tools", async (req, res) => {
   }
 });
 
+router.patch("/mcp/servers/:serverId", async (req, res) => {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+
+  try {
+    const existing = await listResolvedMcpServers({ includeTools: false });
+    const server = existing.find((item) => item.id === req.params.serverId);
+    if (!server) {
+      sendError(res, 404, "NOT_FOUND", `MCP server '${req.params.serverId}' not found.`);
+      return;
+    }
+    const updated = await updateMcpServerGovernance(req.params.serverId, body);
+    sendOk(res, { server: { ...server, ...updated } });
+  } catch (error) {
+    sendMappedError(
+      res,
+      error,
+      [{ code: "VALIDATION_ERROR", status: 400 }],
+      {
+        status: 500,
+        code: "SERVER_ERROR",
+        message: (e) => `Failed to update MCP server: ${e.message}`
+      }
+    );
+  }
+});
+
+router.get("/mcp/audit", async (req, res) => {
+  const limit = Number(req.query?.limit);
+  const serverId = String(req.query?.server_id || "").trim();
+  const decision = String(req.query?.decision || "").trim();
+  try {
+    const records = await listMcpAuditRecords({
+      limit: Number.isFinite(limit) ? limit : 100,
+      serverId,
+      decision
+    });
+    sendOk(res, { records });
+  } catch (error) {
+    sendMappedError(res, error, [], {
+      status: 500,
+      code: "SERVER_ERROR",
+      message: (e) => `Failed to load MCP audit trail: ${e.message}`
+    });
+  }
+});
+
 router.post("/mcp/servers/:serverId/call", async (req, res) => {
+  const startedAt = new Date().toISOString();
+  const correlationId = req.requestId || crypto.randomUUID();
+  const actorId = resolveAuditActorId(req);
   const tool = String(req.body?.tool || "").trim();
   const input = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
+  let auditServer = { id: req.params.serverId };
   if (!tool) {
     sendError(res, 400, "VALIDATION_ERROR", "tool is required.");
     return;
   }
   try {
+    const servers = await listResolvedMcpServers({ includeTools: false });
+    const server = servers.find((item) => item.id === req.params.serverId);
+    if (!server) {
+      await writeMcpAuditSafe(
+        createMcpAuditRecord({
+          correlationId,
+          startedAt,
+          notExecutedAt: new Date().toISOString(),
+          actorId,
+          server: { id: req.params.serverId },
+          toolName: tool,
+          input,
+          error: { code: "MCP_SERVER_NOT_FOUND", message: `MCP server '${req.params.serverId}' not found.` },
+          decision: "denied",
+          status: "not_executed"
+        })
+      );
+      sendError(res, 404, "NOT_FOUND", `MCP server '${req.params.serverId}' not found.`);
+      return;
+    }
+    auditServer = server;
+    const policy = resolveMcpToolPolicy(server, tool);
+    if (!policy.allowed) {
+      await writeMcpAuditSafe(
+        createMcpAuditRecord({
+          correlationId,
+          startedAt,
+          notExecutedAt: new Date().toISOString(),
+          actorId,
+          server,
+          toolName: tool,
+          input,
+          error: { code: "MCP_POLICY_DENIED", message: policy.reason },
+          decision: "denied",
+          status: "not_executed"
+        })
+      );
+      sendError(res, 403, "MCP_POLICY_DENIED", policy.reason);
+      return;
+    }
+    const approval = mcpApprovalRequired(server);
+    if (approval.required) {
+      const pending = await createMcpApprovalRequest({
+        serverId: req.params.serverId,
+        toolName: tool,
+        input,
+        reason: approval.reason,
+        actor: req.auth?.user || null
+      });
+      await writeMcpAuditSafe(
+        createMcpAuditRecord({
+          correlationId,
+          startedAt,
+          notExecutedAt: new Date().toISOString(),
+          actorId,
+          server,
+          toolName: tool,
+          input,
+          decision: "approval_required",
+          status: "not_executed",
+          approvalId: pending.approval_id,
+          note: approval.reason
+        })
+      );
+      sendOk(
+        res,
+        {
+          approval_required: true,
+          approval_id: pending.approval_id,
+          server_id: pending.server_id,
+          tool_name: pending.tool_name,
+          reason: pending.reason,
+          requested_at: pending.requested_at,
+          expires_at: pending.expires_at
+        },
+        202
+      );
+      return;
+    }
     const started = Date.now();
     const output = await runMcpTool(req.params.serverId, tool, input, { user: req.user || null });
     await appendToolUsage({
@@ -779,8 +972,36 @@ router.post("/mcp/servers/:serverId/call", async (req, res) => {
         tool
       }
     });
+    await writeMcpAuditSafe(
+      createMcpAuditRecord({
+        correlationId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        actorId,
+        server,
+        toolName: tool,
+        input,
+        output,
+        decision: "allowed",
+        status: "success"
+      })
+    );
     sendOk(res, { output });
   } catch (error) {
+    await writeMcpAuditSafe(
+      createMcpAuditRecord({
+        correlationId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        actorId,
+        server: auditServer,
+        toolName: tool,
+        input,
+        error,
+        decision: "allowed",
+        status: "error"
+      })
+    );
     sendMappedError(
       res,
       error,
@@ -789,6 +1010,150 @@ router.post("/mcp/servers/:serverId/call", async (req, res) => {
         { code: "MCP_TOOL_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" }
       ],
       { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to run MCP tool: ${e.message}` }
+    );
+  }
+});
+
+router.post("/mcp/approve", async (req, res) => {
+  const startedAt = new Date().toISOString();
+  const correlationId = req.requestId || crypto.randomUUID();
+  const actorId = resolveAuditActorId(req);
+  const approvalId = String(req.body?.approval_id || "").trim();
+  const decision = String(req.body?.decision || "approve").trim().toLowerCase();
+  let auditServer = { id: "unknown" };
+  let auditToolName = "";
+  let auditInput = {};
+  if (!approvalId) {
+    sendError(res, 400, "VALIDATION_ERROR", "approval_id is required.");
+    return;
+  }
+  if (decision !== "approve") {
+    sendError(res, 400, "VALIDATION_ERROR", "Only approve is supported in this increment.");
+    return;
+  }
+
+  try {
+    const approval = await consumeMcpApprovalRequest(approvalId);
+    auditServer = { id: approval.server_id };
+    auditToolName = approval.tool_name;
+    auditInput = approval.input;
+    await writeMcpAuditSafe(
+      createMcpAuditRecord({
+        correlationId,
+        startedAt,
+        notExecutedAt: new Date().toISOString(),
+        actorId,
+        server: { id: approval.server_id },
+        toolName: approval.tool_name,
+        input: approval.input,
+        decision: "allowed",
+        status: "not_executed",
+        approvalId: approval.approval_id,
+        note: "Approval consumed; revalidating policy before execution."
+      })
+    );
+    const servers = await listResolvedMcpServers({ includeTools: false });
+    const server = servers.find((item) => item.id === approval.server_id);
+    if (!server) {
+      await writeMcpAuditSafe(
+        createMcpAuditRecord({
+          correlationId,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          actorId,
+          server: { id: approval.server_id },
+          toolName: approval.tool_name,
+          input: approval.input,
+          error: { code: "MCP_SERVER_NOT_FOUND", message: `MCP server '${approval.server_id}' not found.` },
+          decision: "denied",
+          status: "error",
+          approvalId: approval.approval_id
+        })
+      );
+      sendError(res, 404, "NOT_FOUND", `MCP server '${approval.server_id}' not found.`);
+      return;
+    }
+    auditServer = server;
+    const policy = resolveMcpToolPolicy(server, approval.tool_name);
+    if (!policy.allowed) {
+      await writeMcpAuditSafe(
+        createMcpAuditRecord({
+          correlationId,
+          startedAt,
+          notExecutedAt: new Date().toISOString(),
+          actorId,
+          server,
+          toolName: approval.tool_name,
+          input: approval.input,
+          error: { code: "MCP_POLICY_DENIED", message: policy.reason },
+          decision: "denied",
+          status: "not_executed",
+          approvalId: approval.approval_id
+        })
+      );
+      sendError(res, 403, "MCP_POLICY_DENIED", policy.reason);
+      return;
+    }
+    const started = Date.now();
+    const output = await runMcpTool(approval.server_id, approval.tool_name, approval.input, {
+      user: req.auth?.user || null
+    });
+    await appendToolUsage({
+      ts: new Date().toISOString(),
+      toolId: `mcp.${approval.server_id}.${approval.tool_name}`,
+      durationMs: Date.now() - started,
+      ok: true,
+      metadata: {
+        source: "mcp",
+        serverId: approval.server_id,
+        tool: approval.tool_name,
+        approvalId
+      }
+    });
+    await writeMcpAuditSafe(
+      createMcpAuditRecord({
+        correlationId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        actorId,
+        server,
+        toolName: approval.tool_name,
+        input: approval.input,
+        output,
+        decision: "allowed",
+        status: "success",
+        approvalId: approval.approval_id
+      })
+    );
+    sendOk(res, { output });
+  } catch (error) {
+    await writeMcpAuditSafe(
+      createMcpAuditRecord({
+        correlationId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        actorId,
+        server: auditServer,
+        toolName: auditToolName,
+        input: auditInput,
+        error,
+        decision: "denied",
+        status: "error",
+        approvalId: approvalId || null
+      })
+    );
+    sendMappedError(
+      res,
+      error,
+      [
+        { code: "VALIDATION_ERROR", status: 400 },
+        { code: "MCP_APPROVAL_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" },
+        { code: "MCP_APPROVAL_CONSUMED", status: 409 },
+        { code: "MCP_APPROVAL_EXPIRED", status: 410 },
+        { code: "MCP_SERVER_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" },
+        { code: "MCP_TOOL_NOT_FOUND", status: 404, responseCode: "NOT_FOUND" }
+      ],
+      { status: 500, code: "SERVER_ERROR", message: (e) => `Failed to approve MCP tool call: ${e.message}` }
     );
   }
 });
