@@ -52,6 +52,13 @@ test("/api/settings/agent-providers returns provider health and agent manifests"
   assert.equal(res.body?.ok, true);
   assert.ok(Array.isArray(res.body?.data?.providers));
   assert.ok(Array.isArray(res.body?.data?.agents));
+  assert.ok(Array.isArray(res.body?.data?.targets));
+  assert.equal(typeof res.body?.data?.routing?.configuredRouterAgentId, "string");
+  assert.equal(typeof res.body?.data?.routing?.configuredRouterAgentName, "string");
+  assert.equal(typeof res.body?.data?.routing?.configuredRouterAgentVersion, "string");
+  assert.equal(typeof res.body?.data?.routing?.configuredRouterApplicationName, "string");
+  assert.equal(typeof res.body?.data?.routing?.configuredRouterApplicationVersion, "string");
   assert.ok(res.body.data.providers.some((row) => row.id === "local"));
   assert.ok(res.body.data.agents.some((row) => row.id === "support-concierge"));
+  assert.ok(res.body.data.targets.some((row) => row.type === "model"));
 });

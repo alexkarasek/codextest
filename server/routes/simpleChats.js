@@ -21,8 +21,18 @@ import { generateAndStoreImage } from "../../lib/images.js";
 import { slugify, timestampForId, truncateText } from "../../lib/utils.js";
 import { getTextModelDefinitions } from "../../lib/modelCatalog.js";
 import { AUTO_ROUTER_MODEL_ID, routeModelSelection } from "../../src/agents/modelRouter.js";
+import { createAgentProviderRegistry } from "../../src/agents/agentProviderRegistry.js";
 
 const router = express.Router();
+
+function parseAgentTargetSelection(value = "") {
+  const match = String(value || "").trim().match(/^agent:([^:]+):(.+)$/);
+  if (!match) return null;
+  return {
+    providerId: String(match[1] || "").trim(),
+    targetId: String(match[2] || "").trim()
+  };
+}
 
 function tokenize(text) {
   return String(text || "")
@@ -364,6 +374,7 @@ router.post("/:chatId/messages", async (req, res) => {
 
   try {
     const requestedModel = session.settings?.model || "gpt-5-mini";
+    const selectedAgentTarget = parseAgentTargetSelection(requestedModel);
     const availableModelIds = getTextModelDefinitions().map((row) => row.id);
     const routedDecision =
       requestedModel === AUTO_ROUTER_MODEL_ID
@@ -383,11 +394,43 @@ router.post("/:chatId/messages", async (req, res) => {
       recentHistory,
       latestMessage: userEntry.content
     });
-    const completion = await chatCompletion({
-      model: primaryModel,
-      temperature: Number(session.settings?.temperature ?? 0.4),
-      messages: promptMessages
-    });
+    const completion = selectedAgentTarget
+      ? await (async () => {
+          const registry = createAgentProviderRegistry();
+          const provider = registry.getProvider(selectedAgentTarget.providerId);
+          if (!provider) {
+            const error = new Error(`Agent provider '${selectedAgentTarget.providerId}' is not available.`);
+            error.code = "AGENT_PROVIDER_UNAVAILABLE";
+            throw error;
+          }
+          const result = await provider.invoke(selectedAgentTarget.targetId, promptMessages, {
+            chatId: req.params.chatId,
+            chatTitle: session.title,
+            chatContext: session.context,
+            purpose: "simple-chat"
+          });
+          if (!result?.ok) {
+            const error = new Error(result?.error?.message || "Agent invocation failed.");
+            error.code = result?.error?.code || "AGENT_INVOKE_FAILED";
+            throw error;
+          }
+          return {
+            text: String(result.content || "").trim(),
+            raw: result.raw || null,
+            meta: {
+              model: selectedAgentTarget.targetId,
+              effectiveProvider: selectedAgentTarget.providerId,
+              providerLabel: selectedAgentTarget.providerId === "foundry" ? "Azure AI Foundry" : selectedAgentTarget.providerId,
+              deployment: null,
+              temperatureApplied: false
+            }
+          };
+        })()
+      : await chatCompletion({
+          model: primaryModel,
+          temperature: Number(session.settings?.temperature ?? 0.4),
+          messages: promptMessages
+        });
     const comparisons = [];
     for (const model of compareModels) {
       try {
@@ -417,7 +460,7 @@ router.post("/:chatId/messages", async (req, res) => {
       ts: new Date().toISOString(),
       role: "assistant",
       content: String(completion.text || "").trim(),
-      model: primaryModel,
+      model: selectedAgentTarget ? selectedAgentTarget.targetId : primaryModel,
       requestedModel,
       provider: completion.meta?.effectiveProvider || null,
       providerLabel: completion.meta?.providerLabel || null,
@@ -437,7 +480,14 @@ router.post("/:chatId/messages", async (req, res) => {
               warning: routedDecision.warning || ""
             }
           : null,
-      comparisons
+      comparisons,
+      agentTarget: selectedAgentTarget
+        ? {
+            providerId: selectedAgentTarget.providerId,
+            id: selectedAgentTarget.targetId,
+            displayName: selectedAgentTarget.targetId
+          }
+        : null
     };
     await appendSimpleChatMessage(req.params.chatId, assistantEntry);
     await updateSimpleChatSession(req.params.chatId, (current) => ({
@@ -456,6 +506,10 @@ router.post("/:chatId/messages", async (req, res) => {
   } catch (error) {
     if (error.code === "MISSING_API_KEY") {
       sendError(res, 400, "MISSING_API_KEY", "LLM provider credentials are not configured.");
+      return;
+    }
+    if (error.code === "AGENT_PROVIDER_UNAVAILABLE") {
+      sendError(res, 400, "AGENT_PROVIDER_UNAVAILABLE", error.message);
       return;
     }
     sendError(res, 502, "LLM_ERROR", `Simple chat failed: ${error.message}`);

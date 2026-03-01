@@ -66,38 +66,48 @@ Configuration workspace with subtabs:
 1. Go to `Chats` -> `Simple Chat`.
 2. Enter title/context (optional).
 3. Choose model/settings.
-4. Optional: choose **Auto (Router Agent)** as the model if you want Foundry to select the best model per turn.
-5. Optional: enable **Compare with additional models** to run the same prompt across multiple models side-by-side.
-6. Optionally select knowledge packs.
-7. Click create/start.
-8. Send messages in chat.
+4. Optional: choose **Auto (Foundry Router)** as the model if you want Foundry to select the best model per turn.
+5. Optional: choose a `Foundry App: ...` model if you want to chat directly with that configured Foundry application.
+6. Optional: enable **Compare with additional models** to run the same prompt across multiple models side-by-side.
+7. Optionally select knowledge packs.
+8. Click create/start.
+9. Send messages in chat.
 
 Tips:
 - Use history panel on the left to load previous sessions.
 - Start a new session from the create controls to avoid continuing old context.
 - The main assistant bubble shows the primary model used for that reply.
-- If `Auto (Router Agent)` is selected, the thread shows the routed model and the router rationale for that turn.
+- If `Auto (Foundry Router)` is selected, the thread shows the routed model and the router rationale for that turn.
 - The session setup panel also shows a live router status card so you can tell in advance whether Foundry routing is available or if the app will fall back.
+- Set `foundry.routerApplicationName` in `settings.local.json` to point `Auto (Foundry Router)` at the application you want the app to call directly.
+- For Azure AI Foundry application routing, set `foundry.authMode` to `entra`. The app will use `foundry.bearerToken` if you provide one, or the configured service principal values in `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`.
 - Comparison results open in a separate collapsible panel below the main answer.
 - Use `Force Image` only when you want to bypass image-intent detection and force the image path for the current prompt.
 
-## B) Start a Group Chat with Personas
+## B) Start a Group Chat with Participants
 1. Go to `Chats` -> `Group Chat` -> `Live Group Chat`.
 2. Create a session title/context.
-3. Optionally select knowledge packs to ground the session.
-4. Select one or more personas.
-5. Choose engagement mode:
+3. Choose a **Conversation Backbone**:
+- a standard model
+- `Auto (Foundry Router)` for dynamic model routing
+- or `Foundry App: ...` to use a configured Foundry application directly for persona/moderator completions
+4. Optionally select knowledge packs to ground the session.
+5. Select one or more participants.
+- The participant list can include saved personas and configured Foundry applications.
+6. Choose engagement mode:
 - `chat` (interactive, directed)
 - `panel` (moderated discussion)
 - `debate-work-order` (moderated convergence to outcome)
-6. Optional for panel mode: set `Panel Auto Rounds` to continue moderator-facilitated follow-up rounds after the initial user turn.
-7. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
-8. Optional: enable **Compare persona turns across additional models** if you want each persona reply shadowed by alternate prompt-only completions.
-9. Send message.
+7. Optional for panel mode: set `Panel Auto Rounds` to continue moderator-facilitated follow-up rounds after the initial user turn.
+8. Use the **Debate Mode Template** button if you want to transition into a structured debate-mode setup.
+9. Optional: enable **Compare persona turns across additional models** if you want each persona reply shadowed by alternate prompt-only completions.
+10. Send message.
 
 What to expect:
 - In `chat` mode, personas mainly reply when directly addressed (for example, `@persona-name`).
 - If no clear addressee is provided, moderator/orchestrator routes the turn and gives guidance.
+- If you add a Foundry application as a participant, it can speak as one of the participants in the room.
+- If you select a Foundry application as the **Conversation Backbone**, persona turns and moderator turns use that application as the completion backend.
 - Comparison runs are skipped automatically when a persona turn uses tools, so the app does not duplicate external tool side effects.
 - In `panel` mode, moderator facilitates discussion and asks one follow-up question (no winner).
 - In `debate-work-order` mode, moderator drives toward a practical outcome, open risks, and next actions.

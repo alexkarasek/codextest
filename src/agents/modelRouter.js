@@ -182,37 +182,15 @@ export async function routeModelSelection({
   }
 
   try {
-    const availableAgents = await provider.listAgents();
-    const routerAgent = (availableAgents || []).find(
-      (agent) => agent?.provider === "foundry" && agent?.capabilities?.routes_models === true && agent?.availability?.status === "available"
-    );
-    if (!routerAgent) {
-      return {
-        selectedModelId: baseDefault,
-        fallbackModelId: null,
-        rationale: "No available Foundry router agent was discovered. Using the default model.",
-        scores: null,
-        usedFallback: true,
-        source: "no-router-agent",
-        warning: "Router unavailable; used default model."
-      };
-    }
-
-    const response = await provider.invoke(
-      routerAgent.id,
-      [
-        {
-          role: "user",
-          content: String(userPrompt || "")
-        }
-      ],
-      {
-        user_prompt: String(userPrompt || ""),
-        intent: inferIntent(userPrompt, context),
-        constraints: inferConstraints(userPrompt, context),
-        available_models: availableModels
-      }
-    );
+    const response =
+      typeof provider.routeModels === "function"
+        ? await provider.routeModels({
+            user_prompt: String(userPrompt || ""),
+            intent: inferIntent(userPrompt, context),
+            constraints: inferConstraints(userPrompt, context),
+            available_models: availableModels
+          })
+        : null;
 
     if (!response?.ok) {
       return {
@@ -235,7 +213,8 @@ export async function routeModelSelection({
     return {
       ...normalized,
       source: normalized.usedFallback ? "invalid-router-output" : "foundry",
-      agentId: response.agentId || routerAgent.id
+      agentId: "foundry-router-application",
+      usedConfiguredAgent: true
     };
   } catch (error) {
     return {

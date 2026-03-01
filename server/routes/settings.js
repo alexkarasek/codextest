@@ -12,7 +12,12 @@ import { formatZodError, responsibleAiPolicySchema, webPolicySchema } from "../.
 import { getThemeSettings, saveThemeSettings } from "../../lib/themeSettings.js";
 import { IMAGES_DIR } from "../../lib/storage.js";
 import { getImageGenerationStatus, listModelCatalog } from "../../lib/modelCatalog.js";
+import {
+  getFoundryRouterApplicationName,
+  getFoundryRouterApplicationVersion
+} from "../../lib/config.js";
 import { createAgentProviderRegistry } from "../../src/agents/agentProviderRegistry.js";
+import { listProviderTargets } from "../../src/agents/providerService.js";
 
 const router = express.Router();
 const upload = multer({
@@ -109,7 +114,18 @@ router.get("/agent-providers", async (_req, res) => {
       registry.listProviderStatuses(),
       registry.listAgents()
     ]);
-    sendOk(res, { providers, agents });
+    sendOk(res, {
+      providers,
+      agents,
+      targets: listProviderTargets(),
+      routing: {
+        configuredRouterAgentId: "",
+        configuredRouterAgentName: "",
+        configuredRouterAgentVersion: "",
+        configuredRouterApplicationName: String(getFoundryRouterApplicationName() || "").trim(),
+        configuredRouterApplicationVersion: String(getFoundryRouterApplicationVersion() || "").trim()
+      }
+    });
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to load agent providers: ${error.message}`);
   }

@@ -66,6 +66,8 @@ A local-first web application to create/edit personas and run conversation modes
 - Persona Collaboration Chat
   - Create free-form chat sessions with one or more personas (no moderator rounds)
   - Engagement mode is configurable per group session: `chat` (directed), `panel` (moderated), `debate-work-order` (decision-oriented)
+  - Participant selectors can include saved personas and configured Foundry applications
+  - The conversation backbone can use a standard model, `Auto (Foundry Router)`, or a direct `Foundry App: ...` selection
   - Optional side-by-side model comparison per persona turn for prompt-only responses
   - Attach knowledge packs at the chat session level to ground all personas
   - Sends each user message through a transparent moderator/orchestrator that routes directed turns in chat mode and facilitates multi-agent turns in panel/debate modes
@@ -75,8 +77,10 @@ A local-first web application to create/edit personas and run conversation modes
   - Persists chat sessions and message history to `data/persona-chats/<chatId>/`
 - Simple Chat
   - Standard assistant chat with selectable model and optional knowledge pack grounding
-  - Optional `Auto (Router Agent)` selection attempts to use a Foundry-hosted model router and falls back safely if unavailable
-  - Simple Chat setup shows live router availability/fallback status when `Auto (Router Agent)` is selected
+  - Optional `Auto (Foundry Router)` selection attempts to use a configured Azure AI Foundry application and falls back safely if unavailable
+  - Direct `Foundry App: ...` selections let you chat directly with configured Foundry applications
+  - Simple Chat setup shows live router availability/fallback status when `Auto (Foundry Router)` is selected
+  - Foundry provider health and agent inventory are sourced from configured Foundry application settings
   - Optional side-by-side model comparison in the same session (primary response remains unchanged; alternate model outputs appear in a separate comparison panel)
   - Supports inline image generation (automatic intent detection, `Force Image`, or `/image ...`)
   - Persists chat sessions to `data/simple-chats/<chatId>/`
@@ -112,6 +116,7 @@ A local-first web application to create/edit personas and run conversation modes
 ## Tech Stack
 
 - Node.js + Express
+- Optional Azure AI Foundry application integration (direct from Node)
 - OpenAI Chat Completions (`openai` SDK with fetch fallback)
 - Zod validation
 - Plain HTML/CSS/JS frontend served from Express
@@ -201,8 +206,18 @@ Notes:
 - If using `newsapi`, set `newsApiKey`.
 - `openaiBaseUrl` is optional and reserved for future OpenAI-compatible endpoint routing; the current runtime still uses the standard OpenAI API base URL.
 - `azureInference.deployments` maps UI/runtime model labels to Azure deployment names. This is the recommended way to support Azure-hosted model comparisons.
-- Optional Foundry provider settings can be stored under `foundry.enabled`, `foundry.projectEndpoint`, and `foundry.apiKey`. If Foundry is disabled or misconfigured, the app continues running local-first with no hard dependency.
-- `GET /api/settings/agent-providers` returns registered providers plus normalized agent manifests. When Foundry is enabled and reachable, it now attempts remote agent discovery and normalizes the results.
+- Optional Foundry provider settings can be stored under `foundry.*`. The direct application path uses:
+  - `foundry.projectEndpoint`
+  - `foundry.authMode`
+  - `foundry.bearerToken` or service principal values (`tenantId`, `clientId`, `clientSecret`)
+  - `foundry.apiVersion`
+  - `foundry.routerApplicationName`
+  - `foundry.applications`
+- `GET /api/settings/agent-providers` returns registered providers, configured Foundry application manifests, and normalized provider targets.
+- Foundry auth:
+  - `entra` is the supported application path
+  - `AZURE_FOUNDRY_BEARER_TOKEN` / `foundry.bearerToken` can be used directly
+  - otherwise the app uses the configured `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`
 - Legacy top-level Azure fields (`azureOpenAIApiKey`, `azureOpenAIEndpoint`, `azureOpenAIDeployment`, `azureOpenAIApiVersion`) are still supported for backward compatibility.
 - Environment overrides still work:
   - `LLM_MODEL_ROUTING_JSON` (JSON object mapping model labels to `openai` or `azure`)
@@ -213,7 +228,7 @@ Notes:
   - `AZURE_OPENAI_DEPLOYMENTS_JSON` (JSON object mapping model labels to deployment names)
   - `FOUNDRY_ENABLED`
   - `FOUNDRY_PROJECT_ENDPOINT`
-  - `FOUNDRY_API_KEY`
+  - `AZURE_FOUNDRY_BEARER_TOKEN`
 
 ## Run
 

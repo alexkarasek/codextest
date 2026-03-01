@@ -191,9 +191,11 @@ Notes:
 - `compareModels` is optional. When present, the primary assistant response still uses `settings.model`, and comparison outputs are returned alongside it.
 - In hybrid routing setups, `modelRouting` can send selected comparison models to Azure while the rest remain on OpenAI.
 - The UI resolves available model labels and effective provider/deployment details from `GET /api/settings/models`.
-- Optional provider discovery for Azure AI Foundry Phase 1 is available from `GET /api/settings/agent-providers`.
-- When Foundry is enabled and reachable, `GET /api/settings/agent-providers` attempts remote agent discovery and returns normalized Foundry agent manifests.
-- For Simple Chat, `settings.model` may also be `auto-router`. In that mode, the app attempts to use a discovered Foundry Model Router agent and falls back to `gpt-5-mini` if unavailable.
+- Optional provider discovery for Azure AI Foundry is available from `GET /api/settings/agent-providers`.
+- When Foundry is enabled and configured, `GET /api/settings/agent-providers` returns normalized Foundry application manifests and direct router metadata (`routing.configuredRouterApplicationName`, `routing.configuredRouterApplicationVersion`).
+- For Simple Chat, `settings.model` may also be `auto-router` (`Auto (Foundry Router)` in the UI). In that mode, the app calls the configured Foundry router application (`foundry.routerApplicationName`) through the application responses endpoint and falls back to `gpt-5-mini` if unavailable.
+- For Simple Chat and Group Chat, `settings.model` can also be a direct Foundry application target using the encoded value `agent:foundry:<application-name>`. In the UI, these appear as `Foundry App: ...`.
+- For Azure AI Foundry application-backed routing, use `foundry.authMode: "entra"`. The app uses `AZURE_FOUNDRY_BEARER_TOKEN` / `foundry.bearerToken` first, then falls back to the configured service principal values in `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash
@@ -217,6 +219,12 @@ curl -X POST http://localhost:3000/api/persona-chats \
     "settings":{"model":"gpt-5-mini","compareModels":["gpt-4o"],"temperature":0.6,"maxWordsPerTurn":140,"engagementMode":"chat","panelAutoRounds":2}
   }'
 ```
+Notes:
+- `selectedPersonas` entries can be:
+  - saved personas: `{ "type": "saved", "id": "..." }`
+  - ad hoc personas: `{ "type": "adhoc", "persona": { ... } }`
+  - Foundry applications: `{ "type": "agent", "provider": "foundry", "id": "<application-name>" }`
+- `settings.model` can be a standard model id, `auto-router`, or a direct Foundry application target encoded as `agent:foundry:<application-name>`.
 Notes:
 - `knowledgePackIds` are optional and apply to all personas in the session.
 - `compareModels` is optional. When used, each persona turn can include alternate prompt-only completions from those models.

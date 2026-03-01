@@ -115,7 +115,9 @@ const state = {
   },
   agentProviders: {
     providers: [],
-    agents: []
+    agents: [],
+    targets: [],
+    routing: null
   }
 };
 
@@ -576,11 +578,77 @@ function getModelInfo(modelId = "") {
   return getTextModels().find((entry) => String(entry.id || "").trim().toLowerCase() === safeId) || null;
 }
 
-function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter = false } = {}) {
+function getAgentTargets() {
+  return Array.isArray(state.agentProviders.targets)
+    ? state.agentProviders.targets.filter((row) => row && row.type === "agent")
+    : [];
+}
+
+function getAgentTargetOptionValue(target) {
+  const provider = String(target?.provider || "foundry").trim();
+  const id = String(target?.id || "").trim();
+  return id ? `agent:${provider}:${id}` : "";
+}
+
+function parseAgentTargetOptionValue(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^agent:([^:]+):(.+)$/);
+  if (!match) return null;
+  return {
+    provider: String(match[1] || "").trim(),
+    id: String(match[2] || "").trim()
+  };
+}
+
+function getAgentTargetInfo(value = "") {
+  const parsed = parseAgentTargetOptionValue(value);
+  if (!parsed) return null;
+  return (
+    getAgentTargets().find(
+      (row) => String(row.provider || "").trim() === parsed.provider && String(row.id || "").trim() === parsed.id
+    ) || {
+      id: parsed.id,
+      provider: parsed.provider,
+      providerLabel: parsed.provider === "foundry" ? "Azure AI Foundry" : parsed.provider,
+      label: parsed.id,
+      applicationName: parsed.id
+    }
+  );
+}
+
+function toSelectedPersonaEntry(selectionKey = "") {
+  const agentTarget = getAgentTargetInfo(selectionKey);
+  if (agentTarget) {
+    return {
+      type: "agent",
+      provider: String(agentTarget.provider || "foundry"),
+      id: String(agentTarget.id || "").trim()
+    };
+  }
+  const id = String(selectionKey || "").trim();
+  return id ? { type: "saved", id } : null;
+}
+
+function toSelectedPersonaEntries(selectionKeys = []) {
+  return (Array.isArray(selectionKeys) ? selectionKeys : [])
+    .map((key) => toSelectedPersonaEntry(key))
+    .filter(Boolean);
+}
+
+function toPersonaSelectionKey(participant) {
+  if (participant?.participantType === "foundry-agent" || participant?.provider === "foundry") {
+    const appId = String(participant.applicationName || participant.sourceId || participant.id || "").trim();
+    return appId ? `agent:foundry:${appId}` : "";
+  }
+  return String(participant?.id || "").trim();
+}
+
+function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter = false, includeAgentTargets = false } = {}) {
   const select = byId(selectId);
   if (!select) return;
   const currentValue = String(select.value || "").trim();
   const models = getTextModels();
+  const agentTargets = includeAgentTargets ? getAgentTargets() : [];
   const fragment = document.createDocumentFragment();
   if (includeBlank) {
     const blank = document.createElement("option");
@@ -591,7 +659,7 @@ function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter
   if (includeAutoRouter) {
     const auto = document.createElement("option");
     auto.value = "auto-router";
-    auto.textContent = "Auto (Router Agent)";
+    auto.textContent = "Auto (Foundry Router)";
     fragment.appendChild(auto);
   }
   models.forEach((model) => {
@@ -600,7 +668,22 @@ function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter
     option.textContent = model.label || model.id;
     fragment.appendChild(option);
   });
-  if (currentValue && !models.some((model) => model.id === currentValue)) {
+  if (agentTargets.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Foundry Applications";
+    agentTargets.forEach((target) => {
+      const option = document.createElement("option");
+      option.value = getAgentTargetOptionValue(target);
+      option.textContent = `Foundry App: ${target.label || target.id}`;
+      group.appendChild(option);
+    });
+    fragment.appendChild(group);
+  }
+  const knownValues = new Set([
+    ...models.map((model) => model.id),
+    ...agentTargets.map((target) => getAgentTargetOptionValue(target))
+  ]);
+  if (currentValue && !knownValues.has(currentValue)) {
     const custom = document.createElement("option");
     custom.value = currentValue;
     custom.textContent = `${currentValue} (custom)`;
@@ -609,7 +692,8 @@ function populateModelSelect(selectId, { includeBlank = false, includeAutoRouter
   select.innerHTML = "";
   select.appendChild(fragment);
   const fallbackValue = currentValue || String(models[0]?.id || "gpt-5-mini");
-  select.value = getModelInfo(fallbackValue)?.id || fallbackValue;
+  const agentInfo = getAgentTargetInfo(fallbackValue);
+  select.value = agentInfo ? getAgentTargetOptionValue(agentInfo) : getModelInfo(fallbackValue)?.id || fallbackValue;
 }
 
 function populateModelDatalist(listId) {
@@ -634,6 +718,20 @@ function renderModelSelectionMeta(selectId, targetId, temperatureId) {
     if (tempInput) {
       tempInput.disabled = false;
       tempInput.title = "Temperature is applied after the router selects the actual model for the turn.";
+    }
+    if (selectId === "simple-chat-model") {
+      renderSimpleChatRouterStatus();
+    }
+    return;
+  }
+  const agentTarget = getAgentTargetInfo(select.value);
+  if (agentTarget) {
+    target.textContent =
+      `Provider: ${agentTarget.providerLabel || "Azure AI Foundry"} | Application: ${agentTarget.applicationName || agentTarget.id} | Temperature is not sent for the primary response.`;
+    const tempInput = byId(temperatureId);
+    if (tempInput) {
+      tempInput.disabled = true;
+      tempInput.title = "Foundry application targets do not use the primary temperature setting. Comparison models, if enabled, still use it.";
     }
     if (selectId === "simple-chat-model") {
       renderSimpleChatRouterStatus();
@@ -676,8 +774,9 @@ function renderAllModelSelectionMeta() {
 }
 
 function refreshModelSelectors() {
-  populateModelSelect("simple-chat-model", { includeAutoRouter: true });
-  ["persona-chat-model", "debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
+  populateModelSelect("simple-chat-model", { includeAutoRouter: true, includeAgentTargets: true });
+  populateModelSelect("persona-chat-model", { includeAgentTargets: true });
+  ["debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
   populateModelDatalist("llm-model-options");
   renderAllModelSelectionMeta();
   if (byId("simple-chat-compare-enabled")?.checked) {
@@ -727,6 +826,8 @@ function renderSimpleChatRouterStatus() {
 
   const providers = Array.isArray(state.agentProviders.providers) ? state.agentProviders.providers : [];
   const agents = Array.isArray(state.agentProviders.agents) ? state.agentProviders.agents : [];
+  const configuredRouterApplicationName = String(state.agentProviders.routing?.configuredRouterApplicationName || "").trim();
+  const configuredRouterApplicationVersion = String(state.agentProviders.routing?.configuredRouterApplicationVersion || "").trim();
   const foundryProvider = providers.find((row) => row.id === "foundry");
   const routerAgent = agents.find(
     (row) => row.provider === "foundry" && row.capabilities?.routes_models === true
@@ -741,9 +842,12 @@ function renderSimpleChatRouterStatus() {
   } else if (foundryProvider.health?.status !== "available") {
     tone = "warn";
     text = `Foundry is registered but unavailable${foundryProvider.health?.reason ? `: ${foundryProvider.health.reason}` : ""}. Auto Router will fall back to gpt-5-mini.`;
+  } else if (configuredRouterApplicationName) {
+    tone = "ok";
+    text = `Foundry router ready: using application ${configuredRouterApplicationName}${configuredRouterApplicationVersion ? ` v${configuredRouterApplicationVersion}` : ""}. The app will call the Foundry application responses endpoint directly each turn.`;
   } else if (!routerAgent) {
     tone = "warn";
-    text = "Foundry is reachable, but no router-capable agent was discovered. Auto Router will fall back to gpt-5-mini.";
+    text = "Foundry is reachable, but no router-capable application is configured. Auto Router will fall back to gpt-5-mini.";
   } else {
     tone = "ok";
     text = `Foundry router ready: ${routerAgent.displayName || routerAgent.id}. The app will choose a model each turn and show the rationale in the thread.`;
@@ -758,11 +862,18 @@ async function loadAgentProviderStatus() {
     const data = await apiGet("/api/settings/agent-providers");
     state.agentProviders.providers = Array.isArray(data.providers) ? data.providers : [];
     state.agentProviders.agents = Array.isArray(data.agents) ? data.agents : [];
+    state.agentProviders.targets = Array.isArray(data.targets) ? data.targets : [];
+    state.agentProviders.routing = data.routing && typeof data.routing === "object" ? data.routing : null;
   } catch (_error) {
     state.agentProviders.providers = [];
     state.agentProviders.agents = [];
+    state.agentProviders.targets = [];
+    state.agentProviders.routing = null;
   }
-  renderSimpleChatRouterStatus();
+  refreshModelSelectors();
+  renderAvailablePersonas();
+  renderPersonaChatPersonaList();
+  renderSelectedPersonas();
 }
 
 function showAuthGate(statusMessage = "") {
@@ -1674,31 +1785,43 @@ function renderPersonaChatPersonaList() {
     .trim()
     .toLowerCase();
 
-  if (!state.personas.length) {
-    container.textContent = "No personas available. Create personas first.";
+  const foundryAgents = getAgentTargets().filter((target) => String(target.provider || "") === "foundry");
+  if (!state.personas.length && !foundryAgents.length) {
+    container.textContent = "No personas or Foundry applications available. Configure one first.";
     return;
   }
 
-  const visible = state.personas.filter((persona) => {
+  const visible = [
+    ...state.personas.map((persona) => ({
+      key: persona.id,
+      label: persona.displayName,
+      sublabel: persona.id
+    })),
+    ...foundryAgents.map((target) => ({
+      key: getAgentTargetOptionValue(target),
+      label: `Foundry App: ${target.label || target.id}`,
+      sublabel: target.applicationName || target.id
+    }))
+  ].filter((row) => {
     if (!filter) return true;
     return (
-      String(persona.displayName || "").toLowerCase().includes(filter) ||
-      String(persona.id || "").toLowerCase().includes(filter)
+      String(row.label || "").toLowerCase().includes(filter) ||
+      String(row.sublabel || "").toLowerCase().includes(filter)
     );
   });
 
   if (!visible.length) {
-    container.textContent = "No personas match the current filter.";
+    container.textContent = "No personas or Foundry applications match the current filter.";
     return;
   }
 
-  visible.forEach((persona) => {
+  visible.forEach((item) => {
     const row = document.createElement("label");
     row.className = "inline";
-    const checked = state.personaChat.selectedPersonaIds.includes(persona.id);
+    const checked = state.personaChat.selectedPersonaIds.includes(item.key);
     row.innerHTML = `
-      <input type="checkbox" data-persona-chat-id="${persona.id}" ${checked ? "checked" : ""}>
-      ${persona.displayName} <span class="muted">(${persona.id})</span>
+      <input type="checkbox" data-persona-chat-id="${item.key}" ${checked ? "checked" : ""}>
+      ${item.label} <span class="muted">(${item.sublabel})</span>
     `;
     container.appendChild(row);
   });
@@ -1717,7 +1840,7 @@ function renderPersonaChatPersonaList() {
       if (state.personaChat.activeChatId) {
         state.personaChat.dirtyConfig = true;
         byId("persona-chat-status").textContent =
-          "Persona selection changed. Click Create Chat Session to start a fresh conversation.";
+          "Participant selection changed. Click Create Chat Session to start a fresh conversation.";
       }
       renderPersonaMentionStrip();
     });
@@ -1731,7 +1854,18 @@ function personaMentionCandidates() {
       ? state.personaChat.activeSessionPersonaIds
       : state.personaChat.selectedPersonaIds;
   const byIdMap = new Map(state.personas.map((p) => [p.id, p]));
-  return ids.map((id) => byIdMap.get(id)).filter(Boolean);
+  return ids
+    .map((id) => {
+      const saved = byIdMap.get(id);
+      if (saved) return saved;
+      const target = getAgentTargetInfo(id);
+      if (!target) return null;
+      return {
+        id: String(target.id || "").trim(),
+        displayName: String(target.label || target.id || "").trim()
+      };
+    })
+    .filter(Boolean);
 }
 
 function insertPersonaMention(displayName) {
@@ -1814,11 +1948,11 @@ function applyDebateTemplateFromPersonaChat() {
   const status = byId("persona-chat-status");
   const selected = state.personaChat.selectedPersonaIds.slice();
   if (!selected.length) {
-    status.textContent = "Select at least one persona before using the debate template.";
+    status.textContent = "Select at least one participant before using the debate template.";
     return;
   }
 
-  state.selectedPersonas = selected.map((id) => ({ type: "saved", id }));
+  state.selectedPersonas = toSelectedPersonaEntries(selected);
   state.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.slice();
   renderSelectedPersonas();
   renderKnowledgePacks();
@@ -1848,10 +1982,10 @@ function applyDebateTemplateFromPersonaChat() {
 function syncDebateParticipantsFromPersonaChat() {
   const selected = state.personaChat.selectedPersonaIds.slice();
   if (!selected.length) {
-    byId("debate-run-status").textContent = "Select one or more personas in Group Chat first.";
+    byId("debate-run-status").textContent = "Select one or more participants in Group Chat first.";
     return;
   }
-  state.selectedPersonas = selected.map((id) => ({ type: "saved", id }));
+  state.selectedPersonas = toSelectedPersonaEntries(selected);
   state.selectedKnowledgePackIds = state.personaChat.selectedKnowledgePackIds.slice();
   renderSelectedPersonas();
   renderKnowledgePacks();
@@ -1910,15 +2044,28 @@ function applyPersonaChatSelectionBulk(mode = "select") {
   const filter = String(byId("persona-chat-persona-filter")?.value || "")
     .trim()
     .toLowerCase();
-  const visibleIds = state.personas
-    .filter((persona) => {
+  const visibleIds = [
+    ...state.personas.map((persona) => ({
+      key: persona.id,
+      label: persona.displayName,
+      sublabel: persona.id
+    })),
+    ...getAgentTargets()
+      .filter((target) => String(target.provider || "") === "foundry")
+      .map((target) => ({
+        key: getAgentTargetOptionValue(target),
+        label: `Foundry App: ${target.label || target.id}`,
+        sublabel: target.applicationName || target.id
+      }))
+  ]
+    .filter((row) => {
       if (!filter) return true;
       return (
-        String(persona.displayName || "").toLowerCase().includes(filter) ||
-        String(persona.id || "").toLowerCase().includes(filter)
+        String(row.label || "").toLowerCase().includes(filter) ||
+        String(row.sublabel || "").toLowerCase().includes(filter)
       );
     })
-    .map((persona) => persona.id);
+    .map((row) => row.key);
 
   if (mode === "clear") {
     state.personaChat.selectedPersonaIds = state.personaChat.selectedPersonaIds.filter(
@@ -2077,7 +2224,7 @@ async function loadPersonaChatSession(chatId) {
     const data = await apiGet(`/api/persona-chats/${encodeURIComponent(chatId)}`);
     state.personaChat.activeChatId = chatId;
     state.personaChat.activeSessionPersonaIds = Array.isArray(data.session?.personas)
-      ? data.session.personas.map((p) => p.id).filter(Boolean)
+      ? data.session.personas.map((p) => toPersonaSelectionKey(p)).filter(Boolean)
       : [];
     state.personaChat.selectedPersonaIds = state.personaChat.activeSessionPersonaIds.slice();
     state.personaChat.selectedKnowledgePackIds = Array.isArray(data.session?.knowledgePackIds)
@@ -2109,7 +2256,7 @@ async function loadPersonaChatSession(chatId) {
       .forEach((el) => {
         el.checked = compareSet.has(el.value);
       });
-    togglePersonaChatCompareUi();
+    togglePersonaChatCompareUi({ markDirty: false });
     renderModelSelectionMeta("persona-chat-model", "persona-chat-model-meta", "persona-chat-temperature");
     updatePersonaChatModeHelp();
     renderPersonaChatPersonaList();
@@ -2129,14 +2276,14 @@ async function createPersonaChatSession() {
   const status = byId("persona-chat-create-status");
   const selected = state.personaChat.selectedPersonaIds.slice();
   if (!selected.length) {
-    status.textContent = "Select at least one persona.";
+    status.textContent = "Select at least one participant.";
     return;
   }
 
   const payload = {
     title: byId("persona-chat-title").value.trim() || "Persona Collaboration Chat",
     context: byId("persona-chat-context").value.trim(),
-    selectedPersonas: selected.map((id) => ({ type: "saved", id })),
+    selectedPersonas: toSelectedPersonaEntries(selected),
     knowledgePackIds: state.personaChat.selectedKnowledgePackIds.slice(),
     settings: {
       model: byId("persona-chat-model").value.trim() || "gpt-5-mini",
@@ -2405,7 +2552,7 @@ function renderPersonaChatCompareModelList() {
   }
 }
 
-function togglePersonaChatCompareUi() {
+function togglePersonaChatCompareUi({ markDirty = true } = {}) {
   const enabled = Boolean(byId("persona-chat-compare-enabled")?.checked);
   byId("persona-chat-compare-wrap")?.classList.toggle("hidden", !enabled);
   if (enabled) {
@@ -2413,7 +2560,7 @@ function togglePersonaChatCompareUi() {
   } else {
     updatePersonaChatCompareSummary();
   }
-  if (state.personaChat.activeChatId) {
+  if (markDirty && state.personaChat.activeChatId) {
     state.personaChat.dirtyConfig = true;
     byId("persona-chat-status").textContent =
       "Settings changed. Click Create Chat Session to start a new conversation.";
@@ -2527,7 +2674,7 @@ function renderSimpleChatHistory() {
 
   history.forEach((msg) => {
     const role = msg.role === "user" ? "user" : "assistant";
-    const title = msg.role === "user" ? "You" : "Assistant";
+    const title = msg.role === "user" ? "You" : String(msg.agentTarget?.displayName || "Assistant");
     const primaryModel =
       msg.role === "assistant"
         ? String(msg.model || state.simpleChat.currentSession?.settings?.model || "unknown")
@@ -3050,12 +3197,24 @@ function addSavedPersonaToSelection(personaId) {
   renderSelectedPersonas();
 }
 
+function addFoundryAgentToSelection(targetId) {
+  const id = String(targetId || "").trim();
+  if (!id) return;
+  const exists = state.selectedPersonas.some(
+    (entry) => entry.type === "agent" && String(entry.provider || "").trim() === "foundry" && entry.id === id
+  );
+  if (exists) return;
+  state.selectedPersonas.push({ type: "agent", provider: "foundry", id });
+  renderSelectedPersonas();
+}
+
 function renderAvailablePersonas() {
   const container = byId("available-personas");
   container.innerHTML = "";
 
-  if (!state.personas.length) {
-    container.textContent = "No personas found. Create one in Personas tab.";
+  const foundryAgents = getAgentTargets().filter((target) => String(target.provider || "") === "foundry");
+  if (!state.personas.length && !foundryAgents.length) {
+    container.textContent = "No personas or Foundry applications found. Configure one first.";
     return;
   }
 
@@ -3075,6 +3234,24 @@ function renderAvailablePersonas() {
     addBtn.type = "button";
     addBtn.textContent = "Add to Debate Participants";
     addBtn.addEventListener("click", () => addSavedPersonaToSelection(persona.id));
+
+    card.appendChild(addBtn);
+    container.appendChild(card);
+  });
+
+  foundryAgents.forEach((target) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-title">${target.label || target.id} <span class="muted">(foundry app)</span></div>
+      <div>Application: ${target.applicationName || target.id}</div>
+      <div>${target.routesModels ? "Routes or responds as a configured Foundry app." : "Direct Foundry application target."}</div>
+    `;
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Add to Debate Participants";
+    addBtn.addEventListener("click", () => addFoundryAgentToSelection(target.id));
 
     card.appendChild(addBtn);
     container.appendChild(card);
@@ -3179,6 +3356,11 @@ function selectedLabel(entry) {
     const packs = Array.isArray(persona.knowledgePackIds) ? persona.knowledgePackIds.length : 0;
     const tools = Array.isArray(persona.toolIds) ? persona.toolIds.length : 0;
     return `${persona.displayName} (${persona.id})${packs ? ` | persona packs: ${packs}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
+  }
+  if (entry.type === "agent") {
+    const target = getAgentTargetInfo(`agent:${entry.provider || "foundry"}:${entry.id}`);
+    const label = target?.label || target?.applicationName || entry.id;
+    return `Foundry App: ${label} (${entry.id})`;
   }
   const packs = Array.isArray(entry.persona?.knowledgePackIds)
     ? entry.persona.knowledgePackIds.length
@@ -4796,7 +4978,7 @@ async function loadPersonas() {
     renderAvailablePersonas();
     renderSelectedPersonas();
     state.personaChat.selectedPersonaIds = state.personaChat.selectedPersonaIds.filter((id) =>
-      state.personas.some((p) => p.id === id)
+      state.personas.some((p) => p.id === id) || Boolean(getAgentTargetInfo(id))
     );
     renderPersonaChatPersonaList();
   } catch (error) {

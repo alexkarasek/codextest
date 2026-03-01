@@ -5,9 +5,9 @@ function sortProviders(providers = []) {
   return [...providers].sort((a, b) => String(a.id || "").localeCompare(String(b.id || "")));
 }
 
-export function createAgentProviderRegistry({ fetchImpl } = {}) {
+export function createAgentProviderRegistry({ fetchImpl, credentialFactory } = {}) {
   const providers = [new LocalAgentProvider()];
-  const foundry = new FoundryAgentProvider({ fetchImpl });
+  const foundry = new FoundryAgentProvider({ fetchImpl, credentialFactory });
   if (foundry.isEnabled()) {
     providers.push(foundry);
   }

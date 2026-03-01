@@ -14,8 +14,25 @@
   "newsApiKey": "",
   "foundry": {
     "enabled": false,
-    "projectEndpoint": "",
-    "apiKey": ""
+    "projectEndpoint": "https://your-foundry-resource.services.ai.azure.com/api/projects/proj-default",
+    "authMode": "entra",
+    "bearerToken": "",
+    "tenantId": "",
+    "clientId": "",
+    "clientSecret": "",
+    "apiVersion": "2025-11-15-preview",
+    "routerApplicationName": "model-router",
+    "routerApplicationVersion": "2",
+    "applications": [
+      {
+        "id": "model-router",
+        "applicationName": "model-router",
+        "displayName": "Model Router",
+        "description": "Selects the best model for a request.",
+        "tags": ["router"],
+        "routesModels": true
+      }
+    ]
   },
   "toolPolicy": {
     "timeoutMs": 45000,
@@ -59,11 +76,25 @@
         }
       }
     },
-    "foundryPhase1Optional": {
+    "foundryDirectApplication": {
       "foundry": {
         "enabled": true,
-        "projectEndpoint": "https://your-project.eastus2.projects.ai.azure.com",
-        "apiKey": "your-foundry-key"
+        "projectEndpoint": "https://your-foundry-resource.services.ai.azure.com/api/projects/proj-default",
+        "authMode": "entra",
+        "bearerToken": "",
+        "tenantId": "your-tenant-id",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret",
+        "apiVersion": "2025-11-15-preview",
+        "routerApplicationName": "model-router",
+        "applications": [
+          {
+            "id": "model-router",
+            "applicationName": "model-router",
+            "displayName": "Model Router",
+            "routesModels": true
+          }
+        ]
       }
     }
   }
