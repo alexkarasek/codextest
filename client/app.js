@@ -775,7 +775,7 @@ function renderAllModelSelectionMeta() {
 
 function refreshModelSelectors() {
   populateModelSelect("simple-chat-model", { includeAutoRouter: true, includeAgentTargets: true });
-  populateModelSelect("persona-chat-model", { includeAgentTargets: true });
+  populateModelSelect("persona-chat-model");
   ["debate-model", "agentic-task-model"].forEach((id) => populateModelSelect(id));
   populateModelDatalist("llm-model-options");
   renderAllModelSelectionMeta();

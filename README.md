@@ -67,7 +67,7 @@ A local-first web application to create/edit personas and run conversation modes
   - Create free-form chat sessions with one or more personas (no moderator rounds)
   - Engagement mode is configurable per group session: `chat` (directed), `panel` (moderated), `debate-work-order` (decision-oriented)
   - Participant selectors can include saved personas and configured Foundry applications
-  - The conversation backbone can use a standard model, `Auto (Foundry Router)`, or a direct `Foundry App: ...` selection
+  - The conversation backbone can use a standard model or `Auto (Foundry Router)`
   - Optional side-by-side model comparison per persona turn for prompt-only responses
   - Attach knowledge packs at the chat session level to ground all personas
   - Sends each user message through a transparent moderator/orchestrator that routes directed turns in chat mode and facilitates multi-agent turns in panel/debate modes

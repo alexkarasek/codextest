@@ -89,8 +89,7 @@ Tips:
 2. Create a session title/context.
 3. Choose a **Conversation Backbone**:
 - a standard model
-- `Auto (Foundry Router)` for dynamic model routing
-- or `Foundry App: ...` to use a configured Foundry application directly for persona/moderator completions
+- or `Auto (Foundry Router)` for dynamic model routing
 4. Optionally select knowledge packs to ground the session.
 5. Select one or more participants.
 - The participant list can include saved personas and configured Foundry applications.
@@ -107,7 +106,6 @@ What to expect:
 - In `chat` mode, personas mainly reply when directly addressed (for example, `@persona-name`).
 - If no clear addressee is provided, moderator/orchestrator routes the turn and gives guidance.
 - If you add a Foundry application as a participant, it can speak as one of the participants in the room.
-- If you select a Foundry application as the **Conversation Backbone**, persona turns and moderator turns use that application as the completion backend.
 - Comparison runs are skipped automatically when a persona turn uses tools, so the app does not duplicate external tool side effects.
 - In `panel` mode, moderator facilitates discussion and asks one follow-up question (no winner).
 - In `debate-work-order` mode, moderator drives toward a practical outcome, open risks, and next actions.

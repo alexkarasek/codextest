@@ -194,7 +194,7 @@ Notes:
 - Optional provider discovery for Azure AI Foundry is available from `GET /api/settings/agent-providers`.
 - When Foundry is enabled and configured, `GET /api/settings/agent-providers` returns normalized Foundry application manifests and direct router metadata (`routing.configuredRouterApplicationName`, `routing.configuredRouterApplicationVersion`).
 - For Simple Chat, `settings.model` may also be `auto-router` (`Auto (Foundry Router)` in the UI). In that mode, the app calls the configured Foundry router application (`foundry.routerApplicationName`) through the application responses endpoint and falls back to `gpt-5-mini` if unavailable.
-- For Simple Chat and Group Chat, `settings.model` can also be a direct Foundry application target using the encoded value `agent:foundry:<application-name>`. In the UI, these appear as `Foundry App: ...`.
+- For Simple Chat, `settings.model` can also be a direct Foundry application target using the encoded value `agent:foundry:<application-name>`. In the UI, these appear as `Foundry App: ...`.
 - For Azure AI Foundry application-backed routing, use `foundry.authMode: "entra"`. The app uses `AZURE_FOUNDRY_BEARER_TOKEN` / `foundry.bearerToken` first, then falls back to the configured service principal values in `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`.
 
 Send message (note payload is `{ "message": "..." }`):
@@ -224,7 +224,7 @@ Notes:
   - saved personas: `{ "type": "saved", "id": "..." }`
   - ad hoc personas: `{ "type": "adhoc", "persona": { ... } }`
   - Foundry applications: `{ "type": "agent", "provider": "foundry", "id": "<application-name>" }`
-- `settings.model` can be a standard model id, `auto-router`, or a direct Foundry application target encoded as `agent:foundry:<application-name>`.
+- `settings.model` can be a standard model id or `auto-router`. Direct Foundry applications belong in `selectedPersonas` as `{ "type": "agent", "provider": "foundry", "id": "<application-name>" }`.
 Notes:
 - `knowledgePackIds` are optional and apply to all personas in the session.
 - `compareModels` is optional. When used, each persona turn can include alternate prompt-only completions from those models.
