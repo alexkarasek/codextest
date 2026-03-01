@@ -72,6 +72,26 @@ function knowledgePromptBlock(packs, maxChars = 3000) {
   return body.length > maxChars ? `${body.slice(0, maxChars)}...` : body;
 }
 
+function buildSimpleChatImagePrompt({ session, recentHistory, imagePrompt, citations = [] }) {
+  const historyBlock = String(recentHistory || "").trim() || "(none)";
+  const citationBlock = Array.isArray(citations) && citations.length
+    ? citations
+        .slice(0, 4)
+        .map((row, index) => `[Pack ${index + 1}] ${row.id || row.title || "pack"}: ${truncateText(row.excerpt || "", 260)}`)
+        .join("\n")
+    : "(none)";
+  return [
+    "You are Image Concierge, a hidden image-generation specialist for a local GenAI workbench.",
+    `Chat title: ${session?.title || "Simple Chat"}`,
+    `Shared context: ${session?.context || "(none)"}`,
+    `Latest generated image artifact:\n${String(session?.latestImageContext || "(none)")}`,
+    `Recent conversation:\n${historyBlock}`,
+    `Relevant knowledge excerpts:\n${citationBlock}`,
+    `Image request: ${String(imagePrompt || "").trim()}`,
+    "Generate an image that reflects the request in context, not just the final line in isolation."
+  ].join("\n\n");
+}
+
 function buildSimpleChatMessages({ session, knowledgePacks, recentHistory, latestMessage }) {
   const hasKnowledge = Array.isArray(knowledgePacks) && knowledgePacks.length > 0;
   return [
@@ -345,7 +365,12 @@ router.post("/:chatId/messages", async (req, res) => {
   if (imageIntent.mode === "clear") {
     try {
       const image = await generateAndStoreImage({
-        prompt: imageIntent.prompt,
+        prompt: buildSimpleChatImagePrompt({
+          session,
+          recentHistory,
+          imagePrompt: imageIntent.prompt,
+          citations
+        }),
         user: req.auth?.user || null,
         contextType: "simple-chat",
         contextId: req.params.chatId
@@ -357,13 +382,21 @@ router.post("/:chatId/messages", async (req, res) => {
         content: `Generated image for: ${imageIntent.prompt}`,
         usage: null,
         citations: [],
-        image
+        image,
+        imageContext: {
+          prompt: image.prompt || "",
+          revisedPrompt: image.revisedPrompt || ""
+        }
       };
       await appendSimpleChatMessage(req.params.chatId, assistantEntry);
       await updateSimpleChatSession(req.params.chatId, (current) => ({
         ...current,
         updatedAt: new Date().toISOString(),
-        messageCount: Number(current.messageCount || 0) + 2
+        messageCount: Number(current.messageCount || 0) + 2,
+        latestImageContext: [
+          image.prompt ? `Prompt: ${image.prompt}` : "",
+          image.revisedPrompt ? `Revised prompt: ${image.revisedPrompt}` : ""
+        ].filter(Boolean).join("\n") || ""
       }));
       sendOk(res, {
         user: userEntry,
