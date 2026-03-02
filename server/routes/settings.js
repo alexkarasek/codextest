@@ -8,10 +8,12 @@ import {
   saveResponsibleAiPolicy
 } from "../../lib/responsibleAi.js";
 import { getWebPolicy, saveWebPolicy } from "../../lib/webPolicy.js";
-import { formatZodError, responsibleAiPolicySchema, webPolicySchema } from "../../lib/validators.js";
+import { formatZodError, responsibleAiPolicySchema, webPolicySchema, foundryApplicationsSchema } from "../../lib/validators.js";
 import { getThemeSettings, saveThemeSettings } from "../../lib/themeSettings.js";
 import { IMAGES_DIR } from "../../lib/storage.js";
 import { getImageGenerationStatus, listModelCatalog } from "../../lib/modelCatalog.js";
+import { getFoundryApplications, getFoundryApplicationsOverrideSync, saveFoundryApplications } from "../../lib/foundryApplications.js";
+import { getFoundryApplications as getFoundryApplicationsFromConfig } from "../../lib/config.js";
 import {
   getFoundryRouterApplicationName,
   getFoundryRouterApplicationVersion
@@ -84,6 +86,34 @@ router.put("/web", async (req, res) => {
     sendOk(res, { policy: saved });
   } catch (error) {
     sendError(res, 500, "SERVER_ERROR", `Failed to save web policy: ${error.message}`);
+  }
+});
+
+router.get("/foundry-applications", async (_req, res) => {
+  try {
+    const override = getFoundryApplicationsOverrideSync();
+    const applications = override.found ? await getFoundryApplications() : getFoundryApplicationsFromConfig();
+    sendOk(res, { applications, source: override.found ? "override" : "settings" });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load Foundry applications: ${error.message}`);
+  }
+});
+
+router.put("/foundry-applications", async (req, res) => {
+  const parsed = foundryApplicationsSchema.safeParse(req.body?.applications ?? req.body);
+  if (!parsed.success) {
+    sendError(res, 400, "VALIDATION_ERROR", "Invalid Foundry applications payload.", formatZodError(parsed.error));
+    return;
+  }
+  try {
+    const saved = await saveFoundryApplications(parsed.data);
+    sendOk(res, { applications: saved });
+  } catch (error) {
+    if (error?.code === "VALIDATION_ERROR") {
+      sendError(res, 400, "VALIDATION_ERROR", error.message, formatZodError(error.details));
+      return;
+    }
+    sendError(res, 500, "SERVER_ERROR", `Failed to save Foundry applications: ${error.message}`);
   }
 });
 

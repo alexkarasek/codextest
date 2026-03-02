@@ -82,6 +82,8 @@ const state = {
     citations: []
   },
   theme: null,
+  foundryApplications: [],
+  foundryApplicationsEditingIndex: null,
   webPolicy: null,
   agentic: {
     tools: [],
@@ -3349,6 +3351,9 @@ function setConfigView(view) {
   byId("tab-theme").classList.toggle("active", state.mainTab === "config" && state.configView === "theme");
   byId("tab-security").classList.toggle("active", state.mainTab === "config" && state.configView === "security");
   setSubtabActive("config", state.configView);
+  if (state.mainTab === "config" && state.configView === "personas") {
+    loadFoundryApplications();
+  }
   if (state.mainTab === "config" && state.configView === "knowledge") {
     loadKnowledgePacks();
     loadWebPolicy();
@@ -5431,6 +5436,108 @@ async function loadThemeSettings() {
     }
   } catch {
     // ignore if not authenticated or unavailable
+  }
+}
+
+function renderFoundryApplicationsList() {
+  const container = byId("foundry-apps-list");
+  if (!container) return;
+  const apps = Array.isArray(state.foundryApplications) ? state.foundryApplications : [];
+  if (!apps.length) {
+    container.textContent = "No Foundry applications configured.";
+    return;
+  }
+
+  container.innerHTML = "";
+  apps.forEach((app, index) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    row.innerHTML = `
+      <div class="card-title">${app.displayName || app.applicationName || app.id}</div>
+      <div class="muted">id: ${app.id || "n/a"} | name: ${app.applicationName || "n/a"} | routesModels: ${app.routesModels ? "true" : "false"}</div>
+      <div class="row">
+        <button type="button" data-action="edit" data-index="${index}">Edit</button>
+        <button type="button" data-action="remove" data-index="${index}">Remove</button>
+      </div>
+    `;
+    row.querySelector('[data-action="edit"]').addEventListener("click", () => {
+      state.foundryApplicationsEditingIndex = index;
+      byId("foundry-apps-id").value = app.id || "";
+      byId("foundry-apps-application-name").value = app.applicationName || "";
+      byId("foundry-apps-display-name").value = app.displayName || "";
+      byId("foundry-apps-routes-models").checked = Boolean(app.routesModels);
+    });
+    row.querySelector('[data-action="remove"]').addEventListener("click", () => {
+      state.foundryApplications.splice(index, 1);
+      if (state.foundryApplicationsEditingIndex === index) {
+        clearFoundryApplicationForm();
+      }
+      renderFoundryApplicationsList();
+    });
+    container.appendChild(row);
+  });
+}
+
+function clearFoundryApplicationForm() {
+  state.foundryApplicationsEditingIndex = null;
+  byId("foundry-apps-id").value = "";
+  byId("foundry-apps-application-name").value = "";
+  byId("foundry-apps-display-name").value = "";
+  byId("foundry-apps-routes-models").checked = false;
+}
+
+function collectFoundryApplicationFromForm() {
+  return {
+    id: String(byId("foundry-apps-id").value || "").trim(),
+    applicationName: String(byId("foundry-apps-application-name").value || "").trim(),
+    displayName: String(byId("foundry-apps-display-name").value || "").trim(),
+    routesModels: Boolean(byId("foundry-apps-routes-models").checked)
+  };
+}
+
+function upsertFoundryApplication() {
+  const status = byId("foundry-apps-status");
+  const entry = collectFoundryApplicationFromForm();
+  if (!entry.id || !entry.applicationName) {
+    if (status) status.textContent = "Id and Application Name are required.";
+    return;
+  }
+  if (!entry.displayName) entry.displayName = entry.applicationName;
+  const index = state.foundryApplicationsEditingIndex;
+  if (Number.isInteger(index) && index >= 0 && index < state.foundryApplications.length) {
+    state.foundryApplications[index] = entry;
+  } else {
+    state.foundryApplications.push(entry);
+  }
+  clearFoundryApplicationForm();
+  renderFoundryApplicationsList();
+  if (status) status.textContent = "Draft updated. Click Save All to persist.";
+}
+
+async function loadFoundryApplications() {
+  const status = byId("foundry-apps-status");
+  if (status) status.textContent = "Loading Foundry applications...";
+  try {
+    const data = await apiGet("/api/settings/foundry-applications");
+    state.foundryApplications = Array.isArray(data.applications) ? data.applications : [];
+    renderFoundryApplicationsList();
+    if (status) status.textContent = "Foundry applications loaded.";
+  } catch (error) {
+    if (status) status.textContent = `Failed to load Foundry applications: ${error.message}`;
+  }
+}
+
+async function saveFoundryApplications() {
+  const status = byId("foundry-apps-status");
+  if (!status) return;
+  status.textContent = "Saving Foundry applications...";
+  try {
+    const data = await apiSend("/api/settings/foundry-applications", "PUT", { applications: state.foundryApplications });
+    state.foundryApplications = Array.isArray(data.applications) ? data.applications : [];
+    renderFoundryApplicationsList();
+    status.textContent = "Foundry applications saved.";
+  } catch (error) {
+    status.textContent = `Failed to save Foundry applications: ${error.message}`;
   }
 }
 
@@ -8651,6 +8758,10 @@ function wireEvents() {
   byId("knowledge-refresh").addEventListener("click", loadKnowledgePacks);
   byId("theme-save").addEventListener("click", saveThemeEditor);
   byId("theme-reset").addEventListener("click", resetThemeEditor);
+  byId("foundry-apps-save").addEventListener("click", saveFoundryApplications);
+  byId("foundry-apps-reload").addEventListener("click", loadFoundryApplications);
+  byId("foundry-apps-add").addEventListener("click", upsertFoundryApplication);
+  byId("foundry-apps-clear").addEventListener("click", clearFoundryApplicationForm);
   byId("persona-chat-create").addEventListener("click", createPersonaChatSession);
   byId("persona-chat-new-draft").addEventListener("click", startNewPersonaChatDraft);
   byId("persona-chat-new-draft-main").addEventListener("click", startNewPersonaChatDraft);

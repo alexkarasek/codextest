@@ -154,6 +154,31 @@
           <div id="persona-status" class="status"></div>
         </div>
       </div>
+
+      <div class="grid two">
+        <div class="panel stack">
+          <h2>Foundry Applications</h2>
+          <div class="hint">These show up alongside personas as participants. Stored in `data/settings/foundry-applications.json` and override `foundry.applications` in `settings.local.json`.</div>
+          <label>Id<input id="foundry-apps-id" type="text" placeholder="mslearn-support"></label>
+          <label>Application Name<input id="foundry-apps-application-name" type="text" placeholder="mslearn-support"></label>
+          <label>Display Name<input id="foundry-apps-display-name" type="text" placeholder="Microsoft Learn Support"></label>
+          <label class="inline"><input id="foundry-apps-routes-models" type="checkbox"> Routes models (router app)</label>
+          <div class="row">
+            <button id="foundry-apps-add" type="button">Add / Update</button>
+            <button id="foundry-apps-clear" type="button">Clear</button>
+          </div>
+          <div class="row">
+            <button id="foundry-apps-save" type="button">Save All</button>
+            <button id="foundry-apps-reload" type="button">Reload</button>
+          </div>
+          <div id="foundry-apps-status" class="status"></div>
+        </div>
+        <div class="panel stack">
+          <h2>Current Foundry Apps</h2>
+          <div class="hint">Use Edit to load into the form. Use Remove, then Save All.</div>
+          <div id="foundry-apps-list" class="list"></div>
+        </div>
+      </div>
     </section>
 
     <section id="tab-knowledge" class="tab-section">
