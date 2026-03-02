@@ -5863,7 +5863,7 @@ async function runSystemReset() {
       loadViewerHistory(byId("viewer-conversation-type").value || "debate"),
       loadKnowledgePacks(),
       loadPersonas(),
-      loadAdminOverview(),
+      loadAdminData(),
       loadSecurityData()
     ]);
     renderSimpleChatHistory();
