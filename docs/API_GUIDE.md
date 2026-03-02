@@ -196,6 +196,7 @@ Notes:
 - For Simple Chat, `settings.model` may also be `auto-router` (`Auto (Foundry Router)` in the UI). In that mode, the app calls the configured Foundry router application (`foundry.routerApplicationName`) through the application responses endpoint and falls back to `gpt-5-mini` if unavailable.
 - For Simple Chat, `settings.model` can also be a direct Foundry application target using the encoded value `agent:foundry:<application-name>`. In the UI, these appear as `Foundry App: ...`.
 - For Azure AI Foundry application-backed routing, use `foundry.authMode: "entra"`. The app uses `AZURE_FOUNDRY_BEARER_TOKEN` / `foundry.bearerToken` first, then falls back to the configured service principal values in `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`.
+- Foundry application target inventory is sourced from `data/settings/foundry-applications.json`, not from inline `foundry.applications` in `settings.local.json`.
 
 Send message (note payload is `{ "message": "..." }`):
 ```bash

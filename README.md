@@ -7,7 +7,6 @@ A local-first web application to create/edit personas and run conversation modes
 - User Guide: `docs/USER_GUIDE.md`
 - First 10 Minutes: `docs/FIRST_10_MINUTES.md`
 - UI Navigation Map: `docs/UI_NAVIGATION.md`
-- Refactor Blueprint: `docs/REFACTOR_BLUEPRINT.md`
 - Current Architecture: `docs/architecture/current.md`
 - Current Data Model: `docs/data/current-data-model.md`
 - Current Execution Model: `docs/execution/current-execution.md`
@@ -20,7 +19,6 @@ A local-first web application to create/edit personas and run conversation modes
 - API Guide: `docs/API_GUIDE.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - FAQ: `docs/FAQ.md`
-- Production Checklist: `docs/PRODUCTION_CHECKLIST.md`
 - OpenAPI spec: `docs/openapi.yaml`
 - Browser API docs: `http://localhost:3000/docs/api`
 - Documentation module (rendered guides): `http://localhost:3000/documentation`
@@ -212,7 +210,9 @@ Notes:
   - `foundry.bearerToken` or service principal values (`tenantId`, `clientId`, `clientSecret`)
   - `foundry.apiVersion`
   - `foundry.routerApplicationName`
-  - `foundry.applications`
+- Foundry application targets should be stored in:
+  - `data/settings/foundry-applications.json`
+- The runtime reads `data/settings/foundry-applications.json` first and uses it to populate direct Foundry app targets and router inventory.
 - `GET /api/settings/agent-providers` returns registered providers, configured Foundry application manifests, and normalized provider targets.
 - Foundry auth:
   - `entra` is the supported application path

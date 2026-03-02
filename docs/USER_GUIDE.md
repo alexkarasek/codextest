@@ -80,6 +80,7 @@ Tips:
 - If `Auto (Foundry Router)` is selected, the thread shows the routed model and the router rationale for that turn.
 - The session setup panel also shows a live router status card so you can tell in advance whether Foundry routing is available or if the app will fall back.
 - Set `foundry.routerApplicationName` in `settings.local.json` to point `Auto (Foundry Router)` at the application you want the app to call directly.
+- Store Foundry application targets in `data/settings/foundry-applications.json`. That file controls which `Foundry App: ...` options and Foundry participants appear in the UI.
 - For Azure AI Foundry application routing, set `foundry.authMode` to `entra`. The app will use `foundry.bearerToken` if you provide one, or the configured service principal values in `foundry.tenantId`, `foundry.clientId`, and `foundry.clientSecret`.
 - Comparison results open in a separate collapsible panel below the main answer.
 - Use `Force Image` only when you want to bypass image-intent detection and force the image path for the current prompt.
