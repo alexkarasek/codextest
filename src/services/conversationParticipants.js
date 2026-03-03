@@ -14,7 +14,7 @@ import { slugify } from "../../lib/utils.js";
 import { selectPersonasForDebate } from "../../lib/personaSelector.js";
 import { getProviderTargetById } from "../agents/providerService.js";
 
-function buildFoundryParticipant(target) {
+export function buildFoundryParticipant(target) {
   const targetId = String(target?.id || "").trim();
   const displayName = String(target?.label || target?.displayName || targetId).trim() || targetId;
   const applicationName = String(target?.applicationName || targetId).trim() || targetId;
