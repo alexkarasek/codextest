@@ -961,8 +961,25 @@ async function loadAgentProviderStatus() {
   } catch (_error) {
     state.agentProviders.providers = [];
     state.agentProviders.agents = [];
-    state.agentProviders.targets = [];
     state.agentProviders.routing = null;
+    try {
+      const fallback = await apiGet("/api/settings/foundry-applications");
+      const apps = Array.isArray(fallback.applications) ? fallback.applications : [];
+      state.agentProviders.targets = apps
+        .map((app) => ({
+          id: String(app.id || "").trim(),
+          type: "agent",
+          provider: "foundry",
+          providerLabel: "Azure AI Foundry",
+          label: String(app.displayName || app.applicationName || app.id || "").trim(),
+          applicationName: String(app.applicationName || app.id || "").trim(),
+          version: String(app.version || "").trim() || null,
+          routesModels: Boolean(app.routesModels)
+        }))
+        .filter((row) => row.id);
+    } catch {
+      state.agentProviders.targets = [];
+    }
   }
   refreshModelSelectors();
   renderAvailablePersonas();
@@ -5521,6 +5538,7 @@ async function loadFoundryApplications() {
     const data = await apiGet("/api/settings/foundry-applications");
     state.foundryApplications = Array.isArray(data.applications) ? data.applications : [];
     renderFoundryApplicationsList();
+    await loadAgentProviderStatus();
     if (status) status.textContent = "Foundry applications loaded.";
   } catch (error) {
     if (status) status.textContent = `Failed to load Foundry applications: ${error.message}`;
@@ -5535,6 +5553,7 @@ async function saveFoundryApplications() {
     const data = await apiSend("/api/settings/foundry-applications", "PUT", { applications: state.foundryApplications });
     state.foundryApplications = Array.isArray(data.applications) ? data.applications : [];
     renderFoundryApplicationsList();
+    await loadAgentProviderStatus();
     status.textContent = "Foundry applications saved.";
   } catch (error) {
     status.textContent = `Failed to save Foundry applications: ${error.message}`;
