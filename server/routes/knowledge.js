@@ -21,6 +21,35 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }
 });
+const ingestUpload = upload.fields([
+  { name: "file", maxCount: 1 },
+  { name: "files", maxCount: 25 }
+]);
+
+function normalizeIngestMode(value) {
+  return String(value || "create").trim().toLowerCase();
+}
+
+function getUploadedFiles(req) {
+  const single = Array.isArray(req.files?.file) ? req.files.file : [];
+  const multiple = Array.isArray(req.files?.files) ? req.files.files : [];
+  return [...single, ...multiple].filter(Boolean);
+}
+
+function mergeKnowledgePacks(basePack, incomingPack, { appendContent = true } = {}) {
+  const baseTags = Array.isArray(basePack?.tags) ? basePack.tags : [];
+  const incomingTags = Array.isArray(incomingPack?.tags) ? incomingPack.tags : [];
+  return {
+    ...basePack,
+    ...incomingPack,
+    tags: Array.from(new Set([...baseTags, ...incomingTags])),
+    content: appendContent
+      ? [basePack?.content, incomingPack?.content].filter(Boolean).join("\n\n")
+      : String(incomingPack?.content || ""),
+    createdAt: basePack?.createdAt || incomingPack?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
 
 router.get("/", async (_req, res) => {
   const data = await listKnowledgePacks();
@@ -137,15 +166,51 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.post("/ingest", upload.single("file"), async (req, res) => {
+router.post("/ingest", ingestUpload, async (req, res) => {
+  const mode = normalizeIngestMode(req.body?.mode);
+  if (!["create", "append", "overwrite"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'create', 'append', or 'overwrite'.");
+    return;
+  }
+
+  const requestedId = String(req.body?.id || "").trim();
+  if ((mode === "append" || mode === "overwrite") && !requestedId) {
+    sendError(res, 400, "VALIDATION_ERROR", "id is required when mode is append or overwrite.");
+    return;
+  }
+
   try {
-    const { pack, ingestMeta } = await ingestFileToKnowledgePack({
-      file: req.file,
-      id: req.body?.id,
-      title: req.body?.title,
-      description: req.body?.description,
-      tags: req.body?.tags
-    });
+    const files = getUploadedFiles(req);
+    if (!files.length) {
+      const err = new Error("No file uploaded.");
+      err.code = "UPLOAD_REQUIRED";
+      throw err;
+    }
+
+    let aggregatePack = null;
+    const ingestMeta = [];
+    const requestedTitle = String(req.body?.title || "").trim();
+    const requestedDescription = String(req.body?.description || "").trim();
+
+    for (const file of files) {
+      const { pack, ingestMeta: meta } = await ingestFileToKnowledgePack({
+        file,
+        id: requestedId || aggregatePack?.id || undefined,
+        title: requestedTitle || aggregatePack?.title || undefined,
+        description: requestedDescription || aggregatePack?.description || undefined,
+        tags: req.body?.tags
+      });
+      aggregatePack = aggregatePack ? mergeKnowledgePacks(aggregatePack, pack, { appendContent: true }) : pack;
+      ingestMeta.push(meta);
+    }
+
+    const pack = {
+      ...aggregatePack,
+      id: requestedId || aggregatePack.id,
+      title: requestedTitle || aggregatePack.title,
+      description: requestedDescription || aggregatePack.description,
+      updatedAt: new Date().toISOString()
+    };
 
     const parsed = knowledgePackSchema.safeParse(pack);
     if (!parsed.success) {
@@ -159,6 +224,43 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
       return;
     }
 
+    if (mode === "append") {
+      let existing;
+      try {
+        existing = await getKnowledgePack(pack.id);
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          sendError(res, 404, "NOT_FOUND", `Knowledge pack '${pack.id}' not found.`);
+          return;
+        }
+        throw error;
+      }
+      if (existing?.isHidden || existing?.isArchived) {
+        sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
+        return;
+      }
+      const merged = mergeKnowledgePacks(existing, pack, { appendContent: true });
+      await saveKnowledgePack(merged);
+      sendOk(res, { pack: merged, ingestMeta: files.length === 1 ? ingestMeta[0] : ingestMeta, fileCount: files.length }, 200);
+      return;
+    }
+
+    if (mode === "overwrite") {
+      try {
+        const existing = await getKnowledgePack(pack.id);
+        if (existing?.isHidden || existing?.isArchived) {
+          sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
+          return;
+        }
+        const replaced = mergeKnowledgePacks(existing, pack, { appendContent: false });
+        await saveKnowledgePack(replaced);
+        sendOk(res, { pack: replaced, ingestMeta: files.length === 1 ? ingestMeta[0] : ingestMeta, fileCount: files.length }, 200);
+        return;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+
     try {
       await fs.access(knowledgePackPath(pack.id));
       sendError(res, 409, "DUPLICATE_ID", `Knowledge pack id '${pack.id}' already exists.`);
@@ -168,7 +270,7 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
     }
 
     await saveKnowledgePack(pack);
-    sendOk(res, { pack, ingestMeta }, 201);
+    sendOk(res, { pack, ingestMeta: files.length === 1 ? ingestMeta[0] : ingestMeta, fileCount: files.length }, 201);
   } catch (error) {
     sendMappedError(
       res,
@@ -185,11 +287,19 @@ router.post("/ingest", upload.single("file"), async (req, res) => {
 
 router.post("/ingest-url", async (req, res) => {
   const url = String(req.body?.url || "").trim();
-  const mode = String(req.body?.mode || "create").trim();
+  const mode = normalizeIngestMode(req.body?.mode);
   const summarize = req.body?.summarize !== false;
 
   if (!url) {
     sendError(res, 400, "VALIDATION_ERROR", "url is required.");
+    return;
+  }
+  if (!["create", "append", "overwrite"].includes(mode)) {
+    sendError(res, 400, "VALIDATION_ERROR", "mode must be 'create', 'append', or 'overwrite'.");
+    return;
+  }
+  if ((mode === "append" || mode === "overwrite") && !String(req.body?.id || "").trim()) {
+    sendError(res, 400, "VALIDATION_ERROR", "id is required when mode is append or overwrite.");
     return;
   }
 
@@ -204,7 +314,16 @@ router.post("/ingest-url", async (req, res) => {
     });
 
     if (mode === "append") {
-      const existing = await getKnowledgePack(pack.id);
+      let existing;
+      try {
+        existing = await getKnowledgePack(pack.id);
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          sendError(res, 404, "NOT_FOUND", `Knowledge pack '${pack.id}' not found.`);
+          return;
+        }
+        throw error;
+      }
       if (existing?.isHidden || existing?.isArchived) {
         sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
         return;
@@ -222,6 +341,27 @@ router.post("/ingest-url", async (req, res) => {
       await saveKnowledgePack(merged);
       sendOk(res, { pack: merged, ingestMeta }, 200);
       return;
+    }
+
+    if (mode === "overwrite") {
+      try {
+        const existing = await getKnowledgePack(pack.id);
+        if (existing?.isHidden || existing?.isArchived) {
+          sendError(res, 403, "FORBIDDEN", "Hidden knowledge packs cannot be modified via this endpoint.");
+          return;
+        }
+        const replaced = {
+          ...existing,
+          ...pack,
+          createdAt: existing.createdAt || pack.createdAt,
+          updatedAt: new Date().toISOString()
+        };
+        await saveKnowledgePack(replaced);
+        sendOk(res, { pack: replaced, ingestMeta }, 200);
+        return;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
     }
 
     try {

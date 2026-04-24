@@ -87,7 +87,8 @@ A local-first web application to create/edit personas and run conversation modes
   - Generate topic-appropriate persona drafts and add/save them directly to debates
   - Persona generation also works from manually entered topic/context (without discovery results)
 - Knowledge Studio (Upload + Web Ingest -> Knowledge Pack)
-  - Upload `.txt`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, or `.docx`
+  - Upload one or more `.txt`, `.md`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, or `.docx` files
+  - File upload mode supports create/append/overwrite for a target pack id
   - Ingest web pages into knowledge packs (create/append/overwrite)
   - Convert extracted content into structured knowledge pack format
   - Manage knowledge pack library from dedicated tab
@@ -485,7 +486,7 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `POST /api/knowledge`
 - `PUT /api/knowledge/:id`
 - `DELETE /api/knowledge/:id`
-- `POST /api/knowledge/ingest` (multipart file upload + conversion)
+- `POST /api/knowledge/ingest` (multipart single/multi-file upload + create/append/overwrite conversion)
 - `POST /api/knowledge/ingest-url` (web URL ingest)
 - `POST /api/knowledge/preview-url` (web URL preview)
 
@@ -573,7 +574,8 @@ docker push <dockerhub-username>/persona-debate-app:v1
    - Delete the duplicate.
    - Confirm files appear/remove in `data/personas/`.
 4. In **Knowledge Studio**:
-   - Upload a small `.txt` file.
+   - Upload one or more `.txt`/`.md` files in create mode.
+   - Re-upload another file in append mode using the same pack id.
    - Use **Web Ingest** with a public URL.
    - Confirm both packs appear in the library.
 5. In **Agentic**:

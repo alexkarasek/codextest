@@ -1271,7 +1271,7 @@ function currentHelpGuide() {
       return {
         title: "Knowledge Studio Guide",
         points: [
-          "Upload txt/pdf/image/doc files to create reusable knowledge packs.",
+          "Upload one or more txt/md/pdf/image/doc files and create/append/overwrite a knowledge pack.",
           "Attach packs globally in debates or persona chats, or per-persona in profile settings.",
           "Use tags and descriptions to keep packs searchable."
         ]
@@ -6416,12 +6416,17 @@ function validateAgenticSteps(steps) {
   const ids = new Set();
   const toolRegistry = new Set((state.agentic.tools || []).map((t) => String(t.id || "").trim()).filter(Boolean));
   const requiredFieldsByTool = {
+    policy_gates: ["intake_obj"],
     "filesystem.read_text": ["path"],
     "filesystem.write_text": ["path", "content"],
+    read_json: ["path"],
+    write_json: ["path", "object"],
+    write_text: ["path", "text"],
     "http.request": ["url"],
     "web.fetch": ["url"],
     "knowledge.ingest_url": ["url"],
     "openai.generate_image": ["prompt"],
+    ensure_dirs: [],
     "persona.autonomous_image_brainstorm": ["prompt"],
     "jobs.enqueue": ["name"]
   };
@@ -6688,6 +6693,35 @@ function renderAgenticApprovals() {
         `path: ${input.path || "(missing)"}`,
         `maxChars: ${input.maxChars || "(default)"}`
       ].join("\n");
+    }
+    if (toolId === "policy_gates") {
+      return [
+        `toolId: ${toolId}`,
+        `intake_obj: ${truncateForChat(JSON.stringify(input.intake_obj || {}), 700)}`
+      ].join("\n");
+    }
+    if (toolId === "read_json") {
+      return [
+        `toolId: ${toolId}`,
+        `path: ${input.path || "(missing)"}`
+      ].join("\n");
+    }
+    if (toolId === "write_json") {
+      return [
+        `toolId: ${toolId}`,
+        `path: ${input.path || "(missing)"}`,
+        `object: ${truncateForChat(JSON.stringify(input.object || {}), 700)}`
+      ].join("\n");
+    }
+    if (toolId === "write_text") {
+      return [
+        `toolId: ${toolId}`,
+        `path: ${input.path || "(missing)"}`,
+        `text: ${truncateForChat(input.text || "", 700)}`
+      ].join("\n");
+    }
+    if (toolId === "ensure_dirs") {
+      return `toolId: ${toolId}`;
     }
     if (toolId === "http.request") {
       return [
@@ -7846,25 +7880,36 @@ async function uploadKnowledgeFile(event) {
   event.preventDefault();
   const status = byId("knowledge-upload-status");
   const fileInput = byId("knowledge-upload-file");
-  const file = fileInput.files?.[0];
+  const files = Array.from(fileInput.files || []);
 
-  if (!file) {
-    status.textContent = "Select a file first.";
+  if (!files.length) {
+    status.textContent = "Select at least one file first.";
+    return;
+  }
+
+  const mode = byId("knowledge-upload-mode").value || "create";
+  const id = byId("knowledge-upload-id").value.trim();
+  if ((mode === "append" || mode === "overwrite") && !id) {
+    status.textContent = "Knowledge pack id is required for append/overwrite mode.";
     return;
   }
 
   const formData = new FormData();
-  formData.append("file", file);
+  if (files.length === 1) {
+    formData.append("file", files[0]);
+  } else {
+    for (const file of files) formData.append("files", file);
+  }
   const title = byId("knowledge-upload-title").value.trim();
-  const id = byId("knowledge-upload-id").value.trim();
   const tags = byId("knowledge-upload-tags").value.trim();
   const description = byId("knowledge-upload-description").value.trim();
+  formData.append("mode", mode);
   if (title) formData.append("title", title);
   if (id) formData.append("id", id);
   if (tags) formData.append("tags", tags);
   if (description) formData.append("description", description);
 
-  status.textContent = "Uploading and converting file...";
+  status.textContent = `Uploading and converting ${files.length} file${files.length === 1 ? "" : "s"}...`;
   try {
     const res = await fetch("/api/knowledge/ingest", {
       method: "POST",
@@ -7875,8 +7920,11 @@ async function uploadKnowledgeFile(event) {
       throw new Error(apiErrorMessage(payload, "Knowledge upload failed"));
     }
 
-    status.textContent = `Created pack '${payload.data.pack.id}' from ${payload.data.ingestMeta.fileName} via ${payload.data.ingestMeta.extractionMethod}.`;
+    const fileCount = Number(payload.data.fileCount || files.length || 1);
+    const verb = mode === "append" ? "Appended to" : mode === "overwrite" ? "Overwrote" : "Created";
+    status.textContent = `${verb} pack '${payload.data.pack.id}' using ${fileCount} file${fileCount === 1 ? "" : "s"}.`;
     byId("knowledge-upload-form").reset();
+    byId("knowledge-upload-mode").value = "create";
     await loadKnowledgePacks();
   } catch (error) {
     status.textContent = `Upload failed: ${error.message}`;

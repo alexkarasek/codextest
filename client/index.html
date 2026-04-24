@@ -185,11 +185,18 @@
       <div class="grid two">
         <div class="panel stack">
           <h2>Knowledge Studio</h2>
-          <div class="hint">Upload source files and convert them into reusable knowledge packs. Supported: .txt, .pdf, .jpg/.jpeg/.png, .doc, .docx</div>
+          <div class="hint">Upload one or more source files and convert them into a reusable knowledge pack. Supported: .txt, .md, .pdf, .jpg/.jpeg/.png, .doc, .docx</div>
           <form id="knowledge-upload-form" class="stack">
-            <label>File<input id="knowledge-upload-file" type="file" accept=".txt,.pdf,.jpg,.jpeg,.png,.doc,.docx" required></label>
+            <label>Files<input id="knowledge-upload-file" type="file" accept=".txt,.md,.pdf,.jpg,.jpeg,.png,.doc,.docx" multiple required></label>
             <label>Title (optional)<input id="knowledge-upload-title" type="text" placeholder="Auto-derived from filename if empty"></label>
-            <label>Id (optional slug)<input id="knowledge-upload-id" type="text" placeholder="Auto-generated if empty"></label>
+            <label>Mode
+              <select id="knowledge-upload-mode">
+                <option value="create" selected>Create new</option>
+                <option value="append">Append to existing</option>
+                <option value="overwrite">Overwrite existing</option>
+              </select>
+            </label>
+            <label>Id (slug)<input id="knowledge-upload-id" type="text" placeholder="Required for append/overwrite; optional for create"></label>
             <label>Tags (comma-separated)<input id="knowledge-upload-tags" type="text" placeholder="policy, economics, technology"></label>
             <label>Description (optional)<textarea id="knowledge-upload-description" rows="3" placeholder="Optional description for this pack"></textarea></label>
             <div class="row">

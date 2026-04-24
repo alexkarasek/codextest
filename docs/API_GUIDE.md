@@ -49,7 +49,7 @@ Response envelope:
 - `POST /`
 - `PUT /:id`
 - `DELETE /:id`
-- `POST /ingest` (multipart upload)
+- `POST /ingest` (multipart upload; supports single file `file` or multi-file `files`, plus `mode=create|append|overwrite`)
 - `POST /ingest-url`
 - `POST /preview-url`
 
@@ -280,4 +280,5 @@ curl -X POST http://localhost:3000/api/support/messages \
 - Header `x-api-key` at collection level, or
 - Auth/login requests with cookie handling.
 3. Use raw JSON bodies exactly matching schemas above.
-4. For ingest route use `form-data` with `file` + optional `id/title/description/tags`.
+4. For ingest route use `form-data` with either `file` (single) or repeated `files` (multi), plus optional `id/title/description/tags/mode`.
+5. Supported upload extensions for `/api/knowledge/ingest`: `.txt`, `.md`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, `.docx`.

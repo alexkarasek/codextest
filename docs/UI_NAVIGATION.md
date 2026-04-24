@@ -55,7 +55,7 @@ Main areas:
 - Preview panel
 
 ### Knowledge Studio
-- Upload -> convert into knowledge pack
+- Upload one/many files -> create/append/overwrite a knowledge pack
 - Web ingest -> preview URL and convert into knowledge pack
 - Web access policy -> allowlist/denylist domains
 - Knowledge pack library list

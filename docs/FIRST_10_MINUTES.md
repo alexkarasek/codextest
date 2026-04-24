@@ -20,7 +20,7 @@ Tip: keep the prompt simple for first test, then iterate.
 
 ## 3:00-5:00 Create one knowledge pack
 1. Go to `Admin & Config -> Knowledge Studio`.
-2. Upload a `.txt` or `.pdf`, or use **Web Ingest** with a URL.
+2. Upload one or more `.txt`, `.md`, or `.pdf` files (create mode), or use **Web Ingest** with a URL.
 3. Confirm it appears in the library.
 
 ## 5:00-7:00 Run a quick group chat

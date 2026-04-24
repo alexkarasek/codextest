@@ -165,7 +165,7 @@ Notes:
 ## F) Build knowledge packs
 1. Go to `Admin & Config` -> `Knowledge Studio`.
 2. Use either:
-- **Upload**: `.txt`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, `.docx`
+- **Upload**: select one or more files (`.txt`, `.md`, `.pdf`, `.jpg/.jpeg/.png`, `.doc`, `.docx`) and choose mode (`create`, `append`, `overwrite`)
 - **Web Ingest**: paste a URL, preview the extracted text, and choose create/append/overwrite
 3. Optionally set a web allowlist/denylist to control which domains can be fetched.
 4. Save and reuse packs in chats/debates/personas.

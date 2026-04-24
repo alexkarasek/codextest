@@ -519,17 +519,26 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
               properties:
                 file:
                   type: string
                   format: binary
+                  description: Optional single upload. Supported extensions are .txt, .md, .pdf, .jpg/.jpeg/.png, .doc, .docx
+                files:
+                  type: array
+                  description: Optional multi-upload; provide repeated files to combine into one knowledge pack operation.
+                  items:
+                    type: string
+                    format: binary
                 id: { type: string }
                 title: { type: string }
                 description: { type: string }
                 tags:
                   description: Optional comma-separated tags
                   type: string
+                mode:
+                  type: string
+                  description: create, append, or overwrite
       responses:
         '201':
           description: Ingested
