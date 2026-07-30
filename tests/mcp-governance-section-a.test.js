@@ -266,3 +266,58 @@ test("POST /mcp/servers/:serverId/call denies tool execution when trust policy b
     assert.equal(callRes.body?.error?.code, "MCP_POLICY_DENIED");
   });
 });
+
+test("POST /mcp/servers/:serverId/call executes configured remote MCP server", async () => {
+  await withTempMcpSettings(async (settingsPath) => {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          enabled: true,
+          transport: "mixed",
+          servers: [
+            {
+              id: "remote-governance",
+              name: "Remote Governance",
+              endpoint: "https://mcp.example.test/run",
+              trust_state: "trusted",
+              allow_tools: ["governance.chat"]
+            }
+          ]
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      ({
+        ok: true,
+        json: async () => ({ output: { answer: "Remote governance reply." } })
+      });
+    try {
+      const callHandler = getRouteHandler(agenticRouter, "/mcp/servers/:serverId/call", "post");
+      const res = createMockRes();
+      await callHandler(
+        {
+          method: "POST",
+          path: "/mcp/servers/remote-governance/call",
+          params: { serverId: "remote-governance" },
+          body: {
+            tool: "governance.chat",
+            input: { message: "status?" }
+          }
+        },
+        res
+      );
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body?.ok, true);
+      assert.equal(res.body?.data?.output?.answer, "Remote governance reply.");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

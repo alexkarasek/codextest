@@ -536,6 +536,21 @@ docker push <dockerhub-username>/persona-debate-app:v1
 - `GET /api/agentic/mcp/servers/:serverId/tools`
 - `POST /api/agentic/mcp/servers/:serverId/call`
 
+Remote MCP server support:
+- Add a server entry to MCP settings (`settings/mcp.json` or `MCP_SETTINGS_PATH`) with:
+  - `id`: server id used in `/api/agentic/mcp/servers/:serverId/call`
+  - `endpoint` (or `url`): HTTP endpoint that accepts `{ tool, input, context }`
+  - optional `apiKeyEnv`: env var name for bearer token injection
+  - optional `timeoutMs`
+- Response can be either raw JSON or `{ output: ... }`.
+
+Governance chat remote MCP option:
+- `POST /api/admin/governance-chat/session` accepts `settings.remoteMcpServerId` and optional `settings.remoteMcpToolName` (default `governance.chat`).
+- If configured, governance chat will try remote MCP first, then fallback to local LLM response.
+- You can set defaults with env vars:
+  - `GOVERNANCE_MCP_SERVER_ID` (example: `ai_coe_local`)
+  - `GOVERNANCE_MCP_TOOL_NAME` (example: `governance.query_current_model_posture`)
+
 ### Images
 
 - `POST /api/images/generate`
