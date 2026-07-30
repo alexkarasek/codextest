@@ -141,6 +141,13 @@
             <label>Debate Behavior<textarea name="debateBehavior" rows="3" placeholder="Steelman first, ask one clarifying question."></textarea></label>
             <label>Tool IDs (comma-separated)<input name="toolIds" placeholder="http.request, web.fetch"></label>
             <div class="stack">
+              <div class="row">
+                <div>Accessible MCP Servers <span class="tip" tabindex="0">?<span class="tip-flyout">Optional local MCP servers this persona can call. Selecting a server enables mcp.call for that persona.</span></span></div>
+                <button id="persona-mcp-refresh" type="button">Refresh MCP</button>
+              </div>
+              <div id="persona-mcp-server-list" class="list"></div>
+            </div>
+            <div class="stack">
               <div>Persona Knowledge Packs <span class="tip" tabindex="0">?<span class="tip-flyout">Optional specialized knowledge this persona can access in every debate turn.</span></span></div>
               <div id="persona-knowledge-pack-list" class="list"></div>
             </div>

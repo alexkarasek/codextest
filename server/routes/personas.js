@@ -13,6 +13,7 @@ import { formatZodError, personaSchema, topicSourceSchema } from "../../lib/vali
 import { sendError, sendOk } from "../response.js";
 import { optimizePersonaForDebate } from "../../lib/personaOptimizer.js";
 import { generatePersonasFromTopic } from "../../lib/personaGenerator.js";
+import { listResolvedMcpServers } from "../../lib/mcpStatus.js";
 
 const router = express.Router();
 const generateFromTopicSchema = z.object({
@@ -94,6 +95,32 @@ router.get("/", async (req, res) => {
   });
 
   sendOk(res, { personas: filtered, errors });
+});
+
+router.get("/mcp-servers", async (_req, res) => {
+  try {
+    const servers = await listResolvedMcpServers({ includeTools: true });
+    sendOk(res, {
+      servers: servers.map((server) => ({
+        id: server.id,
+        name: server.name,
+        description: server.description || "",
+        transport: server.transport || "local",
+        source: server.source || "embedded",
+        status: server.status || "ok",
+        toolCount: server.toolCount || 0,
+        tools: Array.isArray(server.tools)
+          ? server.tools.map((tool) => ({
+              name: tool.name,
+              description: tool.description || "",
+              inputSchema: tool.inputSchema || {}
+            }))
+          : []
+      }))
+    });
+  } catch (error) {
+    sendError(res, 500, "SERVER_ERROR", `Failed to load MCP servers: ${error.message}`);
+  }
 });
 
 router.get("/:id", async (req, res) => {

@@ -36,7 +36,7 @@ import {
   createMcpAuditRecord,
   listMcpAuditRecords
 } from "../../lib/mcpAudit.js";
-import { runMcpTool } from "../../lib/mcpRegistry.js";
+import { runResolvedMcpTool } from "../../lib/mcpRuntime.js";
 import { listPersonas } from "../../lib/storage.js";
 import { applyApprovalDecision, createTaskDraft, runTask } from "../../lib/taskRunner.js";
 import { createWatcher, runWatcher } from "../../lib/agenticWatchers.js";
@@ -960,7 +960,7 @@ router.post("/mcp/servers/:serverId/call", async (req, res) => {
       return;
     }
     const started = Date.now();
-    const output = await runMcpTool(req.params.serverId, tool, input, { user: req.user || null });
+    const output = await runResolvedMcpTool(req.params.serverId, tool, input, { user: req.user || null });
     await appendToolUsage({
       ts: new Date().toISOString(),
       toolId: `mcp.${req.params.serverId}.${tool}`,
@@ -1095,7 +1095,7 @@ router.post("/mcp/approve", async (req, res) => {
       return;
     }
     const started = Date.now();
-    const output = await runMcpTool(approval.server_id, approval.tool_name, approval.input, {
+    const output = await runResolvedMcpTool(approval.server_id, approval.tool_name, approval.input, {
       user: req.auth?.user || null
     });
     await appendToolUsage({

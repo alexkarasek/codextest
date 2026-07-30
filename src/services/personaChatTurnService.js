@@ -135,7 +135,7 @@ export async function maybeGeneratePanelFollowUp({
       {
         role: "system",
         content: [
-          personaSystemPrompt(candidate, session.settings || {}, personaPacks, session),
+          await personaSystemPrompt(candidate, session.settings || {}, personaPacks, session),
           "Panel follow-up mode: provide a concise synthesis reaction to the other panelists.",
           "Do not call tools in this follow-up.",
           "Keep under 80 words."
@@ -293,10 +293,11 @@ export async function executePersonaChatTurn({
         newTurnMessages.push(personaEntry);
         continue;
       }
+      const systemPrompt = await personaSystemPrompt(persona, session.settings || {}, personaPacks, session);
       const messages = [
         {
           role: "system",
-          content: personaSystemPrompt(persona, session.settings || {}, personaPacks, session)
+          content: systemPrompt
         },
         {
           role: "user",
@@ -321,9 +322,15 @@ export async function executePersonaChatTurn({
         input: userPromptText
       });
 
-      const allowedToolIds = Array.isArray(persona.toolIds)
+      const personaToolIds = Array.isArray(persona.toolIds)
         ? [...new Set(persona.toolIds.map((id) => String(id).trim()).filter(Boolean))]
         : [];
+      const allowedMcpServerIds = Array.isArray(persona.mcpServerIds)
+        ? [...new Set(persona.mcpServerIds.map((id) => String(id).trim()).filter(Boolean))]
+        : [];
+      const allowedToolIds = allowedMcpServerIds.length && !personaToolIds.includes("mcp.call")
+        ? [...personaToolIds, "mcp.call"]
+        : personaToolIds;
       let toolCall = extractToolCall(firstCompletion.text);
       let content = stripToolCallMarkup(firstCompletion.text);
       let toolExecution = null;
@@ -439,8 +446,14 @@ export async function executePersonaChatTurn({
 
       if (toolCall && persona?.participantType !== "foundry-agent") {
         const requestedUrl = toolCall?.input?.url ? String(toolCall.input.url) : "";
-        if (!allowedToolIds.includes(toolCall.toolId)) {
+        const requestedMcpServerId = toolCall.toolId === "mcp.call" ? String(toolCall.input?.serverId || "").trim() : "";
+        const mcpServerAllowed =
+          toolCall.toolId !== "mcp.call" || allowedMcpServerIds.includes(requestedMcpServerId);
+        if (!allowedToolIds.includes(toolCall.toolId) || !mcpServerAllowed) {
           content = `I cannot use tool '${toolCall.toolId}' because it is not enabled for my persona.`;
+          if (toolCall.toolId === "mcp.call" && !mcpServerAllowed) {
+            content = `I cannot use MCP server '${requestedMcpServerId || "(missing)"}' because it is not enabled for my persona.`;
+          }
           toolExecution = {
             requested: toolCall,
             status: "forbidden",
@@ -457,7 +470,7 @@ export async function executePersonaChatTurn({
             toolId: toolCall.toolId,
             requestedUrl,
             ok: false,
-            error: "TOOL_NOT_ALLOWED",
+            error: mcpServerAllowed ? "TOOL_NOT_ALLOWED" : "MCP_SERVER_NOT_ALLOWED",
             durationMs: 0,
             createdBy: authUser?.id || null,
             createdByUsername: authUser?.username || null
@@ -524,7 +537,7 @@ export async function executePersonaChatTurn({
                 messages: [
                   {
                     role: "system",
-                    content: personaSystemPrompt(persona, session.settings || {}, personaPacks, session)
+                    content: systemPrompt
                   },
                   {
                     role: "user",

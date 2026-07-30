@@ -10,6 +10,34 @@
   "mcp": {
     "approvalMode": "off"
   },
+  "_mcpSettingsExample": {
+    "path": "data/settings/mcp.json",
+    "value": {
+      "enabled": true,
+      "transport": "local",
+      "servers": [
+        {
+          "id": "other-local",
+          "name": "Other Local MCP",
+          "transport": "http",
+          "endpoint": "http://127.0.0.1:3333/mcp",
+          "trust_state": "trusted",
+          "allow_tools": ["*"]
+        },
+        {
+          "id": "ai_coe",
+          "name": "AI CoE Governance",
+          "transport": "stdio",
+          "command": "/Users/alex/Documents/Projects/CoEHack/scripts/run-mcp-server.sh",
+          "trust_state": "trusted",
+          "allow_tools": [
+            "governance.query_current_model_posture",
+            "pilot_to_scale.score_use_cases"
+          ]
+        }
+      ]
+    }
+  },
   "foundry": {
     "enabled": false,
     "projectEndpoint": "https://your-foundry-resource.services.ai.azure.com/api/projects/proj-default",

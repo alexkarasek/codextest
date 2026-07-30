@@ -1,8 +1,21 @@
 import { truncateText } from "../../lib/utils.js";
 import { listTools } from "../../lib/agenticTools.js";
+import { listResolvedMcpServers } from "../../lib/mcpStatus.js";
+
+let cachedMcpServers = [];
+let cachedMcpServersAt = 0;
 
 function toolCatalogById() {
   return new Map(listTools().map((tool) => [String(tool.id), tool]));
+}
+
+async function mcpServerCatalogById() {
+  const now = Date.now();
+  if (!cachedMcpServers.length || now - cachedMcpServersAt > 30000) {
+    cachedMcpServers = await listResolvedMcpServers({ includeTools: true });
+    cachedMcpServersAt = now;
+  }
+  return new Map(cachedMcpServers.map((server) => [String(server.id), server]));
 }
 
 export function recentHistoryText(messages, limit = 14) {
@@ -16,7 +29,7 @@ export function recentHistoryText(messages, limit = 14) {
     .join("\n");
 }
 
-export function personaSystemPrompt(persona, settings, personaPacks, session) {
+export async function personaSystemPrompt(persona, settings, personaPacks, session) {
   const style = persona.speakingStyle || {};
   const bias = Array.isArray(persona.biasValues)
     ? persona.biasValues.join(", ")
@@ -35,9 +48,15 @@ export function personaSystemPrompt(persona, settings, personaPacks, session) {
   const allowedToolIds = Array.isArray(persona.toolIds)
     ? [...new Set(persona.toolIds.map((id) => String(id).trim()).filter(Boolean))]
     : [];
+  const allowedMcpServerIds = Array.isArray(persona.mcpServerIds)
+    ? [...new Set(persona.mcpServerIds.map((id) => String(id).trim()).filter(Boolean))]
+    : [];
+  const effectiveAllowedToolIds = allowedMcpServerIds.length && !allowedToolIds.includes("mcp.call")
+    ? [...allowedToolIds, "mcp.call"]
+    : allowedToolIds;
   const toolById = toolCatalogById();
-  const allowedToolsText = allowedToolIds.length
-    ? allowedToolIds
+  const allowedToolsText = effectiveAllowedToolIds.length
+    ? effectiveAllowedToolIds
         .map((id) => {
           const tool = toolById.get(id);
           if (!tool) return `- ${id}: Unknown tool id (cannot execute).`;
@@ -45,6 +64,23 @@ export function personaSystemPrompt(persona, settings, personaPacks, session) {
         })
         .join("\n")
     : "(none)";
+  const mcpById = allowedMcpServerIds.length ? await mcpServerCatalogById() : new Map();
+  const allowedMcpText = allowedMcpServerIds.length
+    ? [
+        "Allowed MCP servers and tools:",
+        ...allowedMcpServerIds.map((serverId) => {
+          const server = mcpById.get(serverId);
+          const tools = Array.isArray(server?.tools) ? server.tools : [];
+          const toolLines = tools.length
+            ? tools.map((tool) => `  - ${tool.name}: ${tool.description || "No description"} | input: ${JSON.stringify(tool.inputSchema || {})}`).join("\n")
+            : "  - No tools loaded for this server.";
+          return `- ${server?.name || serverId} (${serverId})\n${toolLines}`;
+        }),
+        "Use the exact MCP tool name shown above. Do not invent aliases such as model_inventory.",
+        "To call one, emit ONLY:",
+        "<tool_call>{\"toolId\":\"mcp.call\",\"input\":{\"serverId\":\"SERVER_ID\",\"tool\":\"EXACT_TOOL_NAME\",\"input\":{}}}</tool_call>"
+      ].join("\n")
+    : "Allowed MCP servers: (none)";
 
   return [
     persona.systemPrompt,
@@ -58,6 +94,7 @@ export function personaSystemPrompt(persona, settings, personaPacks, session) {
     `Bias/Values: ${bias}`,
     `Knowledge available (persona + chat):\n${knowledge}`,
     `Allowed tools for this persona:\n${allowedToolsText}`,
+    allowedMcpText,
     `Keep your response under ${settings.maxWordsPerTurn} words.`,
     "This is a collaborative chat with a user and other personas.",
     `Engagement mode: ${mode}.`,

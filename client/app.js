@@ -42,6 +42,8 @@ const state = {
   },
   knowledgePacks: [],
   personaFormKnowledgePackIds: [],
+  accessibleMcpServers: [],
+  personaFormMcpServerIds: [],
   selectedKnowledgePackIds: [],
   topicDiscovery: {
     query: "",
@@ -626,7 +628,7 @@ function handleUnauthorized(payload = null) {
 }
 
 async function apiGet(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok || !payload.ok) {
     if (res.status === 401) handleUnauthorized(payload);
@@ -1186,6 +1188,7 @@ async function refreshAfterAuth() {
   await loadAgentProviderStatus();
   renderSimpleChatQuickStrip();
   await loadPersonas();
+  await loadAccessibleMcpServers();
   await loadKnowledgePacks();
   await loadResponsibleAiPolicy();
   await loadPersonaChatSessions();
@@ -3370,6 +3373,7 @@ function setConfigView(view) {
   setSubtabActive("config", state.configView);
   if (state.mainTab === "config" && state.configView === "personas") {
     loadFoundryApplications();
+    loadAccessibleMcpServers();
   }
   if (state.mainTab === "config" && state.configView === "knowledge") {
     loadKnowledgePacks();
@@ -3443,8 +3447,49 @@ function personaFromForm() {
     biasValues: parseCsv(fd.get("biasValues")),
     debateBehavior: String(fd.get("debateBehavior") || "").trim(),
     toolIds: parseCsv(fd.get("toolIds")),
+    mcpServerIds: state.personaFormMcpServerIds.slice(),
     knowledgePackIds: state.personaFormKnowledgePackIds.slice()
   };
+}
+
+function renderPersonaMcpServerList() {
+  const container = byId("persona-mcp-server-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!state.accessibleMcpServers.length) {
+    container.textContent = state.auth.authenticated
+      ? "No accessible MCP servers loaded. Click Refresh MCP."
+      : "Log in to load accessible MCP servers.";
+    return;
+  }
+
+  state.accessibleMcpServers.forEach((server) => {
+    const row = document.createElement("label");
+    row.className = "inline";
+    const checked = state.personaFormMcpServerIds.includes(server.id);
+    const toolNames = (server.tools || []).map((tool) => tool.name).filter(Boolean).join(", ");
+    row.innerHTML = `
+      <input type="checkbox" data-mcp-server-id="${server.id}" ${checked ? "checked" : ""}>
+      ${server.name || server.id} <span class="muted">(${server.id}${server.status === "unreachable" ? " | unreachable" : ""}${toolNames ? ` | ${toolNames}` : ""})</span>
+    `;
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll("input[type='checkbox'][data-mcp-server-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const serverId = input.getAttribute("data-mcp-server-id");
+      if (!serverId) return;
+      if (input.checked) {
+        if (!state.personaFormMcpServerIds.includes(serverId)) {
+          state.personaFormMcpServerIds.push(serverId);
+        }
+      } else {
+        state.personaFormMcpServerIds = state.personaFormMcpServerIds.filter((id) => id !== serverId);
+      }
+      renderPersonaPreview();
+    });
+  });
 }
 
 function renderPersonaKnowledgePackList() {
@@ -3503,9 +3548,13 @@ function fillPersonaForm(persona) {
     : String(persona.biasValues || "");
   form.elements.debateBehavior.value = persona.debateBehavior || "";
   form.elements.toolIds.value = (persona.toolIds || []).join(", ");
+  state.personaFormMcpServerIds = Array.isArray(persona.mcpServerIds)
+    ? persona.mcpServerIds.slice()
+    : [];
   state.personaFormKnowledgePackIds = Array.isArray(persona.knowledgePackIds)
     ? persona.knowledgePackIds.slice()
     : [];
+  renderPersonaMcpServerList();
   renderPersonaKnowledgePackList();
   renderPersonaPreview();
 }
@@ -3517,7 +3566,9 @@ function resetPersonaForm() {
   form.reset();
   form.elements.id.readOnly = false;
   form.elements.id.title = "";
+  state.personaFormMcpServerIds = [];
   state.personaFormKnowledgePackIds = [];
+  renderPersonaMcpServerList();
   renderPersonaKnowledgePackList();
   renderPersonaPreview();
 }
@@ -3566,6 +3617,7 @@ function renderAvailablePersonas() {
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
       <div>Knowledge: ${(persona.knowledgePackIds || []).join(", ") || "none"}</div>
+      <div>MCP: ${(persona.mcpServerIds || []).join(", ") || "none"}</div>
       <div>Tools: ${(persona.toolIds || []).join(", ") || "none"}</div>
     `;
 
@@ -3628,6 +3680,7 @@ function renderPersonaList() {
       <div>Avatar: ${persona.avatar || fallbackAvatarForName(persona.displayName, persona.role)}</div>
       <div>${persona.description}</div>
       <div>Tags: ${(persona.expertiseTags || []).join(", ") || "none"}</div>
+      <div>MCP: ${(persona.mcpServerIds || []).join(", ") || "none"}</div>
       <div>Tools: ${(persona.toolIds || []).join(", ") || "none"}</div>
     `;
 
@@ -3694,7 +3747,8 @@ function selectedLabel(entry) {
     if (!persona) return `Saved (${entry.id})`;
     const packs = Array.isArray(persona.knowledgePackIds) ? persona.knowledgePackIds.length : 0;
     const tools = Array.isArray(persona.toolIds) ? persona.toolIds.length : 0;
-    return `${persona.displayName} (${persona.id})${packs ? ` | persona packs: ${packs}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
+    const mcp = Array.isArray(persona.mcpServerIds) ? persona.mcpServerIds.length : 0;
+    return `${persona.displayName} (${persona.id})${packs ? ` | persona packs: ${packs}` : ""}${mcp ? ` | MCP: ${mcp}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
   }
   if (entry.type === "agent") {
     const target = getAgentTargetInfo(`agent:${entry.provider || "foundry"}:${entry.id}`);
@@ -3705,7 +3759,8 @@ function selectedLabel(entry) {
     ? entry.persona.knowledgePackIds.length
     : 0;
   const tools = Array.isArray(entry.persona?.toolIds) ? entry.persona.toolIds.length : 0;
-  return `Ad-hoc: ${entry.persona.displayName}${packs ? ` | persona packs: ${packs}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
+  const mcp = Array.isArray(entry.persona?.mcpServerIds) ? entry.persona.mcpServerIds.length : 0;
+  return `Ad-hoc: ${entry.persona.displayName}${packs ? ` | persona packs: ${packs}` : ""}${mcp ? ` | MCP: ${mcp}` : ""}${tools ? ` | tools: ${tools}` : ""}`;
 }
 
 function renderSelectedPersonas() {
@@ -5357,6 +5412,38 @@ async function loadKnowledgePacks() {
     renderPersonaKnowledgePackList();
     renderPersonaChatKnowledgeList();
     renderSimpleChatKnowledgeList();
+  }
+}
+
+async function loadAccessibleMcpServers() {
+  const container = byId("persona-mcp-server-list");
+  if (container) container.textContent = "Loading MCP servers...";
+  try {
+    const res = await fetch("/api/personas/mcp-servers", { cache: "no-store", credentials: "same-origin" });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.ok) {
+      if (res.status === 401) {
+        state.accessibleMcpServers = [];
+        state.personaFormMcpServerIds = [];
+        if (container) container.textContent = "Log in to load accessible MCP servers.";
+        return;
+      }
+      throw new Error(apiErrorMessage(payload, "Failed to load MCP servers."));
+    }
+    const data = payload.data || {};
+    state.accessibleMcpServers = Array.isArray(data.servers) ? data.servers : [];
+    state.personaFormMcpServerIds = state.personaFormMcpServerIds.filter((id) =>
+      state.accessibleMcpServers.some((server) => server.id === id)
+    );
+    renderPersonaMcpServerList();
+    renderPersonaList();
+    renderAvailablePersonas();
+    renderSelectedPersonas();
+  } catch {
+    state.accessibleMcpServers = [];
+    state.personaFormMcpServerIds = [];
+    if (container) container.textContent = "Failed to load MCP servers. Click Refresh MCP.";
+    else renderPersonaMcpServerList();
   }
 }
 
@@ -8670,6 +8757,7 @@ function wireEvents() {
   byId("persona-form").addEventListener("input", renderPersonaPreview);
   byId("persona-reset").addEventListener("click", resetPersonaForm);
   byId("refresh-personas").addEventListener("click", loadPersonas);
+  byId("persona-mcp-refresh").addEventListener("click", loadAccessibleMcpServers);
   byId("persona-search").addEventListener("input", renderPersonaList);
   byId("persona-tag-filter").addEventListener("input", renderPersonaList);
 
